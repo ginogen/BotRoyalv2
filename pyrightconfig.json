@@ -1,0 +1,21 @@
+{
+    "include": [
+        "royal_agents",
+        "*.py"
+    ],
+    "exclude": [
+        ".venv",
+        "**/__pycache__"
+    ],
+    "reportMissingImports": "warning",
+    "reportMissingTypeStubs": false,
+    "reportCallIssue": "warning",
+    "reportGeneralTypeIssues": "warning",
+    "reportUnknownArgumentType": "warning",
+    "pythonVersion": "3.11",
+    "typeCheckingMode": "basic",
+    "stubPath": "./typings",
+    "extraPaths": [
+        "./royal_agents"
+    ]
+} 

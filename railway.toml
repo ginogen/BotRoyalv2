@@ -1,0 +1,17 @@
+[build]
+builder = "NIXPACKS"
+
+[deploy]
+startCommand = "streamlit run bot_testing_app.py --server.port $PORT --server.address 0.0.0.0 --server.headless true"
+healthcheckPath = "/"
+healthcheckTimeout = 300
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 10
+
+[env]
+PORT = 8501
+HOST = "0.0.0.0"
+ENVIRONMENT = "production"
+
+[[services]]
+name = "royal-bot-testing-interface" 
