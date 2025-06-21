@@ -26,10 +26,18 @@ class DatabaseManager:
         """Detecta qué tipo de base de datos usar"""
         
         # PostgreSQL si hay URL de conexión
-        if os.getenv('DATABASE_URL') or os.getenv('POSTGRES_URL'):
+        database_url = os.getenv('DATABASE_URL')
+        postgres_url = os.getenv('POSTGRES_URL')
+        
+        logger.info(f"🔍 DETECTANDO TIPO DE BASE DE DATOS:")
+        logger.info(f"   DATABASE_URL: {'✅ Configurado' if database_url else '❌ No encontrado'}")
+        logger.info(f"   POSTGRES_URL: {'✅ Configurado' if postgres_url else '❌ No encontrado'}")
+        
+        if database_url or postgres_url:
+            logger.info(f"✅ Usando PostgreSQL")
             return 'postgresql'
         
-        # SQLite como fallback
+        logger.info(f"⚠️ Fallback a SQLite")
         return 'sqlite'
     
     def _init_database(self):
@@ -47,22 +55,32 @@ class DatabaseManager:
             # Railway/Heroku usan DATABASE_URL
             db_url = os.getenv('DATABASE_URL') or os.getenv('POSTGRES_URL')
             
+            logger.info(f"🔧 CONFIGURANDO POSTGRESQL:")
+            logger.info(f"   URL encontrada: {'✅ Sí' if db_url else '❌ No'}")
+            
             if not db_url:
                 logger.error("❌ No DATABASE_URL para PostgreSQL")
                 self._fallback_to_sqlite()
                 return
             
+            # Mostrar URL de conexión (censurada)
+            safe_url = db_url[:20] + "***" + db_url[-10:] if len(db_url) > 30 else "***"
+            logger.info(f"   Conectando a: {safe_url}")
+            
             # Conectar a PostgreSQL
             self.connection = psycopg2.connect(db_url)
             self.connection.autocommit = True
             
+            logger.info("✅ Conexión a PostgreSQL establecida")
+            
             # Crear tablas si no existen
             self._create_postgresql_tables()
             
-            logger.info("✅ PostgreSQL conectado correctamente")
+            logger.info("✅ PostgreSQL configurado completamente")
             
         except Exception as e:
             logger.error(f"❌ Error PostgreSQL: {e}")
+            logger.error(f"   Detalles del error: {type(e).__name__}")
             self._fallback_to_sqlite()
     
     def _init_sqlite(self):

@@ -5,7 +5,6 @@ Interfaz visual para que el cliente pruebe, evalúe y mejore el bot
 """
 
 import streamlit as st
-import sqlite3
 import json
 import pandas as pd
 import plotly.express as px
@@ -16,6 +15,7 @@ import os
 from typing import List, Dict, Any
 import uuid
 import nest_asyncio  # Para manejar event loops anidados
+import logging
 
 # Configurar página
 st.set_page_config(
@@ -25,119 +25,106 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
+# Configurar logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
 # Imports del bot
 try:
     from royal_agents import run_contextual_conversation_sync
     from royal_agents.conversation_context import context_manager
     
+    # NUEVO: Importar DatabaseManager
+    from database_persistent import DatabaseManager
+    
     # Permitir event loops anidados para compatibilidad con Streamlit
     nest_asyncio.apply()
     
     BOT_AVAILABLE = True
-except ImportError:
+    logger.info("✅ Bot y DatabaseManager importados correctamente")
+except ImportError as e:
     BOT_AVAILABLE = False
+    logger.error(f"❌ Error importando bot: {e}")
     st.error("⚠️ Bot no disponible. Verificar instalación.")
 except Exception as e:
     BOT_AVAILABLE = False
+    logger.error(f"❌ Error configurando bot: {e}")
     st.error(f"⚠️ Error configurando bot: {e}")
 
-# Base de datos para feedback
-def init_database():
-    """Inicializa la base de datos de feedback"""
-    conn = sqlite3.connect('bot_feedback.db')
-    cursor = conn.cursor()
-    
-    # Tabla de conversaciones
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS conversations (
-            id TEXT PRIMARY KEY,
-            user_id TEXT,
-            message TEXT,
-            bot_response TEXT,
-            timestamp DATETIME,
-            session_id TEXT,
-            rating INTEGER,
-            feedback_text TEXT,
-            category TEXT
-        )
-    ''')
-    
-    # Tabla de feedback general
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS general_feedback (
-            id TEXT PRIMARY KEY,
-            user_id TEXT,
-            feedback_type TEXT,
-            title TEXT,
-            description TEXT,
-            priority TEXT,
-            status TEXT,
-            timestamp DATETIME,
-            session_id TEXT
-        )
-    ''')
-    
-    conn.commit()
-    conn.close()
+# Inicializar DatabaseManager global
+try:
+    db_manager = DatabaseManager()
+    logger.info(f"✅ DatabaseManager inicializado: {db_manager.db_type}")
+    st.sidebar.success(f"🗄️ BD: {db_manager.db_type.upper()}")
+except Exception as e:
+    logger.error(f"❌ Error inicializando DatabaseManager: {e}")
+    st.sidebar.error(f"❌ Error BD: {e}")
+    db_manager = None
 
+# Funciones de base de datos actualizadas
 def save_conversation(user_id: str, message: str, bot_response: str, session_id: str):
-    """Guarda una conversación en la BD"""
-    conn = sqlite3.connect('bot_feedback.db')
-    cursor = conn.cursor()
-    
-    conversation_id = str(uuid.uuid4())
-    cursor.execute('''
-        INSERT INTO conversations 
-        (id, user_id, message, bot_response, timestamp, session_id)
-        VALUES (?, ?, ?, ?, ?, ?)
-    ''', (conversation_id, user_id, message, bot_response, datetime.now(), session_id))
-    
-    conn.commit()
-    conn.close()
-    return conversation_id
+    """Guarda una conversación usando DatabaseManager"""
+    try:
+        if db_manager:
+            conversation_id = db_manager.save_conversation(user_id, message, bot_response, session_id)
+            logger.info(f"💾 Conversación guardada: {conversation_id} (usuario: {user_id})")
+            return conversation_id
+        else:
+            logger.error("❌ DatabaseManager no disponible")
+            return None
+    except Exception as e:
+        logger.error(f"❌ Error guardando conversación: {e}")
+        return None
 
 def save_feedback(conversation_id: str, rating: int, feedback_text: str, category: str):
-    """Guarda feedback de una conversación"""
-    conn = sqlite3.connect('bot_feedback.db')
-    cursor = conn.cursor()
-    
-    cursor.execute('''
-        UPDATE conversations 
-        SET rating = ?, feedback_text = ?, category = ?
-        WHERE id = ?
-    ''', (rating, feedback_text, category, conversation_id))
-    
-    conn.commit()
-    conn.close()
+    """Guarda feedback usando DatabaseManager"""
+    try:
+        if db_manager:
+            result = db_manager.save_feedback(conversation_id, rating, feedback_text, category)
+            logger.info(f"⭐ Feedback guardado: rating={rating}, conversación={conversation_id}")
+            return result
+        else:
+            logger.error("❌ DatabaseManager no disponible para feedback")
+            return None
+    except Exception as e:
+        logger.error(f"❌ Error guardando feedback: {e}")
+        return None
 
 def save_general_feedback(user_id: str, feedback_type: str, title: str, description: str, priority: str, session_id: str):
-    """Guarda feedback general"""
-    conn = sqlite3.connect('bot_feedback.db')
-    cursor = conn.cursor()
-    
-    feedback_id = str(uuid.uuid4())
-    cursor.execute('''
-        INSERT INTO general_feedback 
-        (id, user_id, feedback_type, title, description, priority, status, timestamp, session_id)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    ''', (feedback_id, user_id, feedback_type, title, description, priority, 'pendiente', datetime.now(), session_id))
-    
-    conn.commit()
-    conn.close()
+    """Guarda feedback general usando DatabaseManager"""
+    try:
+        if db_manager:
+            # Como DatabaseManager no tiene save_general_feedback, usamos save_conversation con formato especial
+            special_message = f"FEEDBACK_GENERAL|{feedback_type}|{title}|{priority}"
+            conversation_id = db_manager.save_conversation(user_id, special_message, description, session_id)
+            logger.info(f"📝 Feedback general guardado: {conversation_id} (tipo: {feedback_type})")
+            return conversation_id
+        else:
+            logger.error("❌ DatabaseManager no disponible para feedback general")
+            return None
+    except Exception as e:
+        logger.error(f"❌ Error guardando feedback general: {e}")
+        return None
 
 def get_conversations_data():
-    """Obtiene datos de conversaciones para análisis"""
-    conn = sqlite3.connect('bot_feedback.db')
-    df = pd.read_sql_query('SELECT * FROM conversations', conn)
-    conn.close()
-    return df
+    """Obtiene datos de conversaciones usando DatabaseManager"""
+    try:
+        if db_manager:
+            data = db_manager.get_conversations_data()
+            logger.info(f"📊 Datos de conversaciones obtenidos: {len(data)} registros")
+            return data
+        else:
+            logger.error("❌ DatabaseManager no disponible para obtener datos")
+            return pd.DataFrame()
+    except Exception as e:
+        logger.error(f"❌ Error obteniendo datos de conversaciones: {e}")
+        return pd.DataFrame()
 
 def get_feedback_data():
-    """Obtiene datos de feedback general"""
-    conn = sqlite3.connect('bot_feedback.db')
-    df = pd.read_sql_query('SELECT * FROM general_feedback', conn)
-    conn.close()
-    return df
+    """Obtiene datos de feedback - placeholder"""
+    # TODO: Implementar en DatabaseManager
+    logger.info("📊 Datos de feedback solicitados (no implementado)")
+    return pd.DataFrame()
 
 # Función helper para ejecutar conversaciones en Streamlit
 def run_bot_conversation_safe(user_id: str, user_input: str) -> str:
@@ -172,8 +159,8 @@ def run_bot_conversation_safe(user_id: str, user_input: str) -> str:
 def main():
     """Función principal de la interfaz"""
     
-    # Inicializar BD
-    init_database()
+    # DatabaseManager ya está inicializado globalmente
+    pass
     
     # Inicializar session state
     if 'session_id' not in st.session_state:
