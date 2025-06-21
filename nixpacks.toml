@@ -1,0 +1,12 @@
+[variables]
+PYTHON_VERSION = "3.11"
+
+[build]
+ignoreDirs = [".venv", "__pycache__", ".git"]
+
+[install]
+# Use pip to install dependencies
+cmd = "pip install --upgrade pip && pip install -r requirements.txt"
+
+[start]
+cmd = "streamlit run bot_testing_app.py --server.port=$PORT --server.headless=true" 
