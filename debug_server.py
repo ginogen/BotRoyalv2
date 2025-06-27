@@ -5,7 +5,8 @@ Para verificar que Railway funciona sin dependencias complejas
 """
 
 import os
-from fastapi import FastAPI
+import json
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI(title="Royal Bot Debug", version="1.0.0")
@@ -47,6 +48,39 @@ async def test_simple():
         "message": "Servidor debug respondiendo correctamente",
         "test": "✅ OK"
     }
+
+@app.post("/webhook/evolution")
+async def evolution_webhook(request: Request):
+    """Webhook para recibir mensajes de Evolution API"""
+    try:
+        data = await request.json()
+        
+        # Log del webhook recibido
+        print(f"📨 Webhook Evolution recibido: {json.dumps(data, indent=2)}")
+        
+        # Extraer información básica
+        message_data_raw = data.get("data", {})
+        message_content = message_data_raw.get("message", {}).get("conversation", "").strip()
+        from_number = message_data_raw.get("key", {}).get("remoteJid", "").replace("@s.whatsapp.net", "")
+        
+        print(f"📱 Mensaje de {from_number}: {message_content}")
+        
+        # Por ahora, solo responder que se recibió
+        # En producción, aquí procesarías el mensaje con el bot
+        
+        return {
+            "status": "received",
+            "message": "Webhook recibido correctamente",
+            "from": from_number,
+            "content": message_content[:50] + "..." if len(message_content) > 50 else message_content
+        }
+        
+    except Exception as e:
+        print(f"❌ Error en webhook Evolution: {e}")
+        return {
+            "status": "error",
+            "message": f"Error procesando webhook: {str(e)}"
+        }
 
 if __name__ == "__main__":
     import uvicorn
