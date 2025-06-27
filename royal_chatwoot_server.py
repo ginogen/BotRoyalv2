@@ -258,6 +258,24 @@ async def root():
             "✅ Integration WhatsApp via Evolution"
         ]
     }
+@app.get("/health")
+async def health_check():
+    """Chequeo de salud del servicio"""
+    return {
+        "status": "healthy",
+        "service": "Royal Bot Chatwoot",
+        "version": "2.0.0",
+        "timestamp": datetime.now().isoformat(),
+        "workers": {
+            "active": worker_pool.active_workers,
+            "total": WORKER_POOL_SIZE
+        },
+        "queue": {
+            "pending": message_queue.queue.qsize() if hasattr(message_queue.queue, 'qsize') else 0
+        }
+    }
+
+
 
 @app.post("/webhook/chatwoot")
 async def chatwoot_webhook(request: Request):
