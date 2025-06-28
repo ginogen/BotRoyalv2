@@ -258,6 +258,7 @@ async def root():
             "✅ Integration WhatsApp via Evolution"
         ]
     }
+
 @app.get("/health")
 async def health_check():
     """Chequeo de salud del servicio"""
