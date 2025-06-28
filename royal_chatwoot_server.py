@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-🤖 ROYAL BOT - SERVIDOR OPTIMIZADO PARA CHATWOOT
-Implementación simplificada pero robusta basada en el sistema Node.js
+🤖 ROYAL BOT - SERVIDOR COMPLETO Y OPTIMIZADO PARA CHATWOOT
+Implementación completa con todas las funcionalidades y correcciones
 """
 
 import asyncio
@@ -46,6 +46,41 @@ INSTANCE_NAME = os.getenv("INSTANCE_NAME", "F1_Retencion")
 WORKER_POOL_SIZE = int(os.getenv("WORKER_POOL_SIZE", 3))
 MAX_CONCURRENT_USERS = int(os.getenv("MAX_CONCURRENT_USERS", 5))
 
+def extract_message_content(message_data: dict) -> str:
+    """Extrae el contenido del mensaje de diferentes tipos de mensaje de WhatsApp"""
+    message = message_data.get("message", {})
+    
+    # Tipo 1: Mensaje simple
+    if "conversation" in message:
+        return message["conversation"]
+    
+    # Tipo 2: Mensaje de texto extendido
+    if "extendedTextMessage" in message:
+        return message["extendedTextMessage"].get("text", "")
+    
+    # Tipo 3: Mensaje citado
+    if "quotedMessage" in message:
+        quoted = message["quotedMessage"]
+        if "conversation" in quoted:
+            return quoted["conversation"]
+        elif "extendedTextMessage" in quoted:
+            return quoted["extendedTextMessage"].get("text", "")
+    
+    # Tipo 4: Otros tipos comunes
+    if "imageMessage" in message:
+        return message["imageMessage"].get("caption", "[Imagen]")
+    
+    if "videoMessage" in message:
+        return message["videoMessage"].get("caption", "[Video]")
+    
+    if "documentMessage" in message:
+        return message["documentMessage"].get("caption", "[Documento]")
+    
+    if "audioMessage" in message:
+        return "[Audio]"
+    
+    return ""
+
 @dataclass
 class MessageData:
     user_id: str
@@ -67,6 +102,7 @@ class MessageQueue:
             message_key = f"{hash(message_data.message)}-{message_data.user_id}"
             
             if message_key in self.processed_messages[message_data.user_id]:
+                logger.info(f"🔄 Mensaje duplicado ignorado: {message_data.user_id}")
                 return False
                 
             self.processed_messages[message_data.user_id].add(message_key)
@@ -111,22 +147,23 @@ class WorkerPool:
     
     def _process_sync(self, message_data: MessageData) -> Dict[str, Any]:
         try:
-            logger.info(f"🤖 Procesando: {message_data.user_id}")
+            logger.info(f"🤖 Procesando con IA: {message_data.user_id}")
             
             response = run_contextual_conversation_sync(
                 message_data.user_id, 
                 message_data.message
             )
             
+            logger.info(f"✅ IA respondió para {message_data.user_id}")
             return {
                 "success": True,
                 "response": response
             }
         except Exception as e:
-            logger.error(f"❌ Error procesando: {e}")
+            logger.error(f"❌ Error procesando {message_data.user_id}: {e}")
             return {
                 "success": False,
-                "response": "Hubo un problema técnico. Un agente te contactará pronto."
+                "response": "Hubo un problema procesando tu mensaje. Por favor, intenta de nuevo."
             }
 
 class ChatwootService:
@@ -138,6 +175,7 @@ class ChatwootService:
     
     async def send_message(self, conversation_id: str, message: str) -> bool:
         if not all([CHATWOOT_API_URL, CHATWOOT_API_TOKEN, CHATWOOT_ACCOUNT_ID]) or not self.session:
+            logger.warning("⚠️ Chatwoot no configurado")
             return False
             
         try:
@@ -157,7 +195,13 @@ class ChatwootService:
                 json=payload
             )
             
-            return response.status_code in [200, 201]
+            success = response.status_code in [200, 201]
+            if success:
+                logger.info(f"📤 Mensaje enviado a Chatwoot: {conversation_id}")
+            else:
+                logger.error(f"❌ Error enviando a Chatwoot: {response.status_code}")
+            
+            return success
         except Exception as e:
             logger.error(f"❌ Error enviando a Chatwoot: {e}")
             return False
@@ -171,6 +215,7 @@ class EvolutionService:
     
     async def send_message(self, phone: str, message: str) -> bool:
         if not all([EVOLUTION_API_URL, EVOLUTION_API_TOKEN]) or not self.session:
+            logger.warning("⚠️ Evolution API no configurada")
             return False
             
         try:
@@ -190,7 +235,13 @@ class EvolutionService:
                 json=payload
             )
             
-            return response.status_code == 200
+            success = response.status_code == 200
+            if success:
+                logger.info(f"📤 Respuesta enviada a WhatsApp: {phone}")
+            else:
+                logger.error(f"❌ Error enviando via Evolution: {response.status_code}")
+            
+            return success
         except Exception as e:
             logger.error(f"❌ Error enviando via Evolution: {e}")
             return False
@@ -221,7 +272,7 @@ async def message_processor():
             result = await worker_pool.process_message(message_data)
             
             if result["success"]:
-                # Enviar respuesta
+                # Enviar respuesta según el origen
                 if message_data.source == "chatwoot" and message_data.conversation_id:
                     await chatwoot_service.send_message(
                         message_data.conversation_id,
@@ -233,7 +284,9 @@ async def message_processor():
                         result["response"]
                     )
                 
-                logger.info(f"✅ Mensaje procesado: {message_data.user_id}")
+                logger.info(f"✅ Mensaje completado: {message_data.user_id}")
+            else:
+                logger.error(f"❌ Fallo procesando: {message_data.user_id}")
             
         except Exception as e:
             logger.error(f"❌ Error en procesador: {e}")
@@ -255,8 +308,15 @@ async def root():
             "✅ Conexión con Chatwoot",
             "✅ Sistema de workers paralelos", 
             "✅ Cola de mensajes optimizada",
-            "✅ Integration WhatsApp via Evolution"
-        ]
+            "✅ Integration WhatsApp via Evolution",
+            "✅ Extracción mejorada de mensajes",
+            "✅ Filtrado de mensajes del bot"
+        ],
+        "workers": {
+            "active": worker_pool.active_workers,
+            "total": WORKER_POOL_SIZE
+        },
+        "queue_size": message_queue.queue.qsize() if hasattr(message_queue.queue, 'qsize') else 0
     }
 
 @app.get("/health")
@@ -273,15 +333,18 @@ async def health_check():
         },
         "queue": {
             "pending": message_queue.queue.qsize() if hasattr(message_queue.queue, 'qsize') else 0
+        },
+        "services": {
+            "chatwoot": "configured" if all([CHATWOOT_API_URL, CHATWOOT_API_TOKEN]) else "not_configured",
+            "evolution": "configured" if all([EVOLUTION_API_URL, EVOLUTION_API_TOKEN]) else "not_configured"
         }
     }
-
-
 
 @app.post("/webhook/chatwoot")
 async def chatwoot_webhook(request: Request):
     try:
         data = await request.json()
+        logger.info(f"📨 Webhook Chatwoot recibido: {json.dumps(data, indent=2)}")
         
         if (data.get("event") == "message_created" and 
             data.get("message_type") == "incoming" and
@@ -303,6 +366,8 @@ async def chatwoot_webhook(request: Request):
                     
                     if message_queue.add_message(message_data):
                         logger.info(f"📥 Mensaje Chatwoot agregado: {contact_id}")
+                    else:
+                        logger.info(f"🔄 Mensaje Chatwoot duplicado: {contact_id}")
         
         return {"status": "received"}
         
@@ -314,10 +379,21 @@ async def chatwoot_webhook(request: Request):
 async def evolution_webhook(request: Request):
     try:
         data = await request.json()
+        logger.info(f"�� Webhook Evolution recibido: {json.dumps(data, indent=2)}")
         
         message_data_raw = data.get("data", {})
-        message_content = message_data_raw.get("message", {}).get("conversation", "").strip()
-        from_number = message_data_raw.get("key", {}).get("remoteJid", "").replace("@s.whatsapp.net", "")
+        key_data = message_data_raw.get("key", {})
+        
+        # Verificar que no sea un mensaje del bot (fromMe: true)
+        if key_data.get("fromMe", False):
+            logger.info("🤖 Mensaje del bot ignorado (fromMe: true)")
+            return {"status": "ignored", "reason": "bot_message"}
+        
+        # Extraer contenido del mensaje usando la función mejorada
+        message_content = extract_message_content(message_data_raw).strip()
+        from_number = key_data.get("remoteJid", "").replace("@s.whatsapp.net", "")
+        
+        logger.info(f"📱 Mensaje de {from_number}: {message_content}")
         
         if message_content and from_number:
             message_data = MessageData(
@@ -329,6 +405,10 @@ async def evolution_webhook(request: Request):
             
             if message_queue.add_message(message_data):
                 logger.info(f"📥 Mensaje WhatsApp agregado: {from_number}")
+            else:
+                logger.info(f"🔄 Mensaje WhatsApp duplicado: {from_number}")
+        else:
+            logger.warning(f"⚠️ Mensaje vacío o sin número: content='{message_content}', from='{from_number}'")
         
         return {"status": "received"}
         
@@ -351,7 +431,8 @@ async def test_message(test_msg: TestMessage):
         return {
             "status": "success" if result["success"] else "error",
             "response": result["response"],
-            "user_id": test_msg.user_id
+            "user_id": test_msg.user_id,
+            "timestamp": datetime.now().isoformat()
         }
         
     except Exception as e:
@@ -379,7 +460,9 @@ async def shutdown_event():
         await chatwoot_service.session.aclose()
     if evolution_service.session:
         await evolution_service.session.aclose()
+    
+    logger.info("🔄 Servidor detenido")
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("royal_chatwoot_server:app", host="0.0.0.0", port=PORT, log_level="info") 
+    uvicorn.run("royal_chatwoot_server:app", host="0.0.0.0", port=PORT, log_level="info")
