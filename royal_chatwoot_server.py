@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-🤖 ROYAL BOT - SERVIDOR COMPLETO Y OPTIMIZADO PARA CHATWOOT
-Implementación completa con todas las funcionalidades y correcciones
+🤖 ROYAL BOT - SERVIDOR COMPLETO Y ROBUSTO PARA CHATWOOT
+Implementación completa con manejo robusto de errores y dependencias
 """
 
 import asyncio
@@ -24,9 +24,6 @@ from pydantic import BaseModel
 import httpx
 from dotenv import load_dotenv
 
-# Imports del bot
-from royal_agents import run_contextual_conversation_sync
-
 # Configuración
 load_dotenv()
 
@@ -45,6 +42,18 @@ INSTANCE_NAME = os.getenv("INSTANCE_NAME", "F1_Retencion")
 # Configuración del sistema
 WORKER_POOL_SIZE = int(os.getenv("WORKER_POOL_SIZE", 3))
 MAX_CONCURRENT_USERS = int(os.getenv("MAX_CONCURRENT_USERS", 5))
+
+# Importación robusta de royal_agents
+try:
+    from royal_agents import run_contextual_conversation_sync
+    ROYAL_AGENTS_AVAILABLE = True
+    logger.info("✅ royal_agents importado correctamente")
+except ImportError as e:
+    ROYAL_AGENTS_AVAILABLE = False
+    logger.warning(f"⚠️ royal_agents no disponible: {e}")
+    # Función de fallback
+    def run_contextual_conversation_sync(user_id: str, message: str) -> str:
+        return f"Respuesta automática para {user_id}: {message} (modo fallback)"
 
 def extract_message_content(message_data: dict) -> str:
     """Extrae el contenido del mensaje de diferentes tipos de mensaje de WhatsApp"""
@@ -149,10 +158,13 @@ class WorkerPool:
         try:
             logger.info(f"🤖 Procesando con IA: {message_data.user_id}")
             
-            response = run_contextual_conversation_sync(
-                message_data.user_id, 
-                message_data.message
-            )
+            if ROYAL_AGENTS_AVAILABLE:
+                response = run_contextual_conversation_sync(
+                    message_data.user_id, 
+                    message_data.message
+                )
+            else:
+                response = f"Respuesta automática: {message_data.message}"
             
             logger.info(f"✅ IA respondió para {message_data.user_id}")
             return {
@@ -171,7 +183,11 @@ class ChatwootService:
         self.session = None
     
     async def initialize(self):
-        self.session = httpx.AsyncClient(timeout=30.0)
+        try:
+            self.session = httpx.AsyncClient(timeout=30.0)
+            logger.info("✅ ChatwootService inicializado")
+        except Exception as e:
+            logger.error(f"❌ Error inicializando ChatwootService: {e}")
     
     async def send_message(self, conversation_id: str, message: str) -> bool:
         if not all([CHATWOOT_API_URL, CHATWOOT_API_TOKEN, CHATWOOT_ACCOUNT_ID]) or not self.session:
@@ -211,7 +227,11 @@ class EvolutionService:
         self.session = None
     
     async def initialize(self):
-        self.session = httpx.AsyncClient(timeout=30.0)
+        try:
+            self.session = httpx.AsyncClient(timeout=30.0)
+            logger.info("✅ EvolutionService inicializado")
+        except Exception as e:
+            logger.error(f"❌ Error inicializando EvolutionService: {e}")
     
     async def send_message(self, phone: str, message: str) -> bool:
         if not all([EVOLUTION_API_URL, EVOLUTION_API_TOKEN]) or not self.session:
@@ -310,13 +330,15 @@ async def root():
             "✅ Cola de mensajes optimizada",
             "✅ Integration WhatsApp via Evolution",
             "✅ Extracción mejorada de mensajes",
-            "✅ Filtrado de mensajes del bot"
+            "✅ Filtrado de mensajes del bot",
+            "✅ Manejo robusto de dependencias"
         ],
         "workers": {
             "active": worker_pool.active_workers,
             "total": WORKER_POOL_SIZE
         },
-        "queue_size": message_queue.queue.qsize() if hasattr(message_queue.queue, 'qsize') else 0
+        "queue_size": message_queue.queue.qsize() if hasattr(message_queue.queue, 'qsize') else 0,
+        "royal_agents": "available" if ROYAL_AGENTS_AVAILABLE else "fallback_mode"
     }
 
 @app.get("/health")
@@ -336,7 +358,8 @@ async def health_check():
         },
         "services": {
             "chatwoot": "configured" if all([CHATWOOT_API_URL, CHATWOOT_API_TOKEN]) else "not_configured",
-            "evolution": "configured" if all([EVOLUTION_API_URL, EVOLUTION_API_TOKEN]) else "not_configured"
+            "evolution": "configured" if all([EVOLUTION_API_URL, EVOLUTION_API_TOKEN]) else "not_configured",
+            "royal_agents": "available" if ROYAL_AGENTS_AVAILABLE else "fallback_mode"
         }
     }
 
@@ -379,14 +402,14 @@ async def chatwoot_webhook(request: Request):
 async def evolution_webhook(request: Request):
     try:
         data = await request.json()
-        logger.info(f"�� Webhook Evolution recibido: {json.dumps(data, indent=2)}")
+        logger.info(f"📨 Webhook Evolution recibido: {json.dumps(data, indent=2)}")
         
         message_data_raw = data.get("data", {})
         key_data = message_data_raw.get("key", {})
         
         # Verificar que no sea un mensaje del bot (fromMe: true)
         if key_data.get("fromMe", False):
-            logger.info("🤖 Mensaje del bot ignorado (fromMe: true)")
+            logger.info("�� Mensaje del bot ignorado (fromMe: true)")
             return {"status": "ignored", "reason": "bot_message"}
         
         # Extraer contenido del mensaje usando la función mejorada
@@ -432,7 +455,8 @@ async def test_message(test_msg: TestMessage):
             "status": "success" if result["success"] else "error",
             "response": result["response"],
             "user_id": test_msg.user_id,
-            "timestamp": datetime.now().isoformat()
+            "timestamp": datetime.now().isoformat(),
+            "royal_agents": "available" if ROYAL_AGENTS_AVAILABLE else "fallback_mode"
         }
         
     except Exception as e:
@@ -443,26 +467,33 @@ async def test_message(test_msg: TestMessage):
 async def startup_event():
     logger.info("🚀 Iniciando Royal Bot Chatwoot...")
     
-    await chatwoot_service.initialize()
-    await evolution_service.initialize()
-    
-    # Iniciar procesador
-    asyncio.create_task(message_processor())
-    
-    logger.info("✅ Servidor inicializado")
+    try:
+        await chatwoot_service.initialize()
+        await evolution_service.initialize()
+        
+        # Iniciar procesador
+        asyncio.create_task(message_processor())
+        
+        logger.info("✅ Servidor inicializado")
+    except Exception as e:
+        logger.error(f"❌ Error en startup: {e}")
+        # Continuar aunque haya errores
 
 @app.on_event("shutdown")
 async def shutdown_event():
     global processing_active
     processing_active = False
     
-    if chatwoot_service.session:
-        await chatwoot_service.session.aclose()
-    if evolution_service.session:
-        await evolution_service.session.aclose()
-    
-    logger.info("🔄 Servidor detenido")
+    try:
+        if chatwoot_service.session:
+            await chatwoot_service.session.aclose()
+        if evolution_service.session:
+            await evolution_service.session.aclose()
+        
+        logger.info("🔄 Servidor detenido")
+    except Exception as e:
+        logger.error(f"❌ Error en shutdown: {e}")
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("royal_chatwoot_server:app", host="0.0.0.0", port=PORT, log_level="info")
+    uvicorn.run("royal_chatwoot_server_robust:app", host="0.0.0.0", port=PORT, log_level="info")
