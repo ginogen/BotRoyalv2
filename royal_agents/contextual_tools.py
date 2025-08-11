@@ -823,13 +823,13 @@ def create_contextual_tools():
     """Crea todas las herramientas contextuales"""
     
     tools = [
-        # Herramientas HITL (NUEVAS)
-        detect_user_frustration,
-        handle_missing_information_hitl,
-        check_mcp_connectivity_and_fallback,
-        escalate_to_human_support,
+        # HITL DESHABILITADO TEMPORALMENTE
+        # detect_user_frustration,
+        # handle_missing_information_hitl,
+        # check_mcp_connectivity_and_fallback,
+        # escalate_to_human_support,
         
-        # Herramientas existentes mejoradas con HITL
+        # Herramientas contextuales principales
         get_context_summary,
         get_product_info_with_context,
         get_combos_with_context,
@@ -839,5 +839,5 @@ def create_contextual_tools():
         clear_conversation_context
     ]
     
-    logger.info(f"✅ Contextual Tools creadas: {len(tools)} herramientas disponibles (incluyendo HITL)")
+    logger.info(f"✅ Contextual Tools creadas: {len(tools)} herramientas disponibles (HITL deshabilitado)")
     return tools 

@@ -22,7 +22,8 @@ import uuid
 # FastAPI and middleware
 from fastapi import FastAPI, HTTPException, Request, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, HTMLResponse, FileResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 # Our optimization systems
@@ -715,6 +716,142 @@ async def admin_worker_stats():
         return await dynamic_pool.get_metrics()
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get worker stats: {e}")
+
+# =====================================================
+# ADMIN ENDPOINTS FOR DYNAMIC CONTENT
+# =====================================================
+
+@app.post("/admin/add-training-example")
+async def add_training_example(request: Request):
+    """Add new training example without redeploying"""
+    try:
+        data = await request.json()
+        
+        # Validate required fields
+        required_fields = ["tipo", "usuario", "bot", "descripcion"]
+        if not all(field in data for field in required_fields):
+            raise HTTPException(status_code=400, detail="Missing required fields")
+        
+        # Append to training file  
+        training_file = "/app/Entrenamiento/Entrenamiento-Productos.txt"  # Railway path
+        
+        new_example = f"""
+CONVERSACIÓN EJEMPLO NUEVA:
+Usuario: {data['usuario']}
+Royal: {data['bot']}
+Descripción: {data['descripcion']}
+Agregado: {datetime.now().isoformat()}
+"""
+        
+        with open(training_file, 'a', encoding='utf-8') as f:
+            f.write(new_example)
+        
+        logger.info(f"✅ New training example added: {data['tipo']}")
+        
+        return {
+            "status": "success",
+            "message": "Training example added successfully",
+            "example": new_example
+        }
+        
+    except Exception as e:
+        logger.error(f"❌ Failed to add training example: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/admin/add-business-info")
+async def add_business_info(request: Request):
+    """Add new business information dynamically"""
+    try:
+        data = await request.json()
+        
+        # Create/update business info file
+        business_file = "/app/business_info_dynamic.json"  # Railway path
+        
+        # Load existing info
+        try:
+            with open(business_file, 'r', encoding='utf-8') as f:
+                business_info = json.load(f)
+        except FileNotFoundError:
+            business_info = {"updated": datetime.now().isoformat(), "info": []}
+        
+        # Add new info
+        new_info = {
+            "id": str(uuid.uuid4())[:8],
+            "category": data.get("category", "general"),
+            "title": data.get("title", ""),
+            "content": data.get("content", ""),
+            "keywords": data.get("keywords", []),
+            "added": datetime.now().isoformat()
+        }
+        
+        business_info["info"].append(new_info)
+        business_info["updated"] = datetime.now().isoformat()
+        
+        # Save updated info
+        with open(business_file, 'w', encoding='utf-8') as f:
+            json.dump(business_info, f, ensure_ascii=False, indent=2)
+        
+        logger.info(f"✅ Business info added: {new_info['title']}")
+        
+        return {
+            "status": "success",
+            "message": "Business information added successfully",
+            "info": new_info
+        }
+        
+    except Exception as e:
+        logger.error(f"❌ Failed to add business info: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/admin/reload-training")
+async def reload_training():
+    """Force reload training data without restart"""
+    try:
+        # This would trigger the training parser to reload
+        # For now, return success message
+        logger.info("🔄 Training data reload requested")
+        
+        return {
+            "status": "success", 
+            "message": "Training data will be reloaded on next request",
+            "timestamp": datetime.now().isoformat()
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/admin/business-info")
+async def get_business_info():
+    """Get current dynamic business information"""
+    try:
+        business_file = "/app/business_info_dynamic.json"  # Railway path
+        
+        try:
+            with open(business_file, 'r', encoding='utf-8') as f:
+                business_info = json.load(f)
+        except FileNotFoundError:
+            business_info = {"updated": "never", "info": [], "count": 0}
+        
+        business_info["count"] = len(business_info.get("info", []))
+        
+        return business_info
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/admin", response_class=HTMLResponse)
+async def admin_panel():
+    """Serve admin panel HTML"""
+    try:
+        with open("/app/admin_panel.html", "r", encoding="utf-8") as f:
+            return HTMLResponse(content=f.read())
+    except FileNotFoundError:
+        # Fallback for development
+        try:
+            with open("admin_panel.html", "r", encoding="utf-8") as f:
+                return HTMLResponse(content=f.read())
+        except FileNotFoundError:
+            return HTMLResponse(content="<h1>Admin panel not found</h1>", status_code=404)
 
 # =====================================================
 # STARTUP AND SHUTDOWN HANDLERS

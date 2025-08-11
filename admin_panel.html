@@ -1,0 +1,788 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Panel Admin - Royal Bot</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 10px;
+        }
+        
+        .container {
+            max-width: 100%;
+            margin: 0 auto;
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            overflow: hidden;
+        }
+        
+        @media (min-width: 768px) {
+            .container { max-width: 1200px; padding: 0; }
+            body { padding: 20px; }
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #2c3e50, #3498db);
+            color: white;
+            padding: 20px 15px;
+            text-align: center;
+        }
+        
+        .header h1 {
+            font-size: 1.8em;
+            margin-bottom: 8px;
+        }
+        
+        @media (min-width: 768px) {
+            .header h1 { font-size: 2.5em; }
+            .header { padding: 30px; }
+        }
+        
+        .header p {
+            opacity: 0.9;
+            font-size: 0.95em;
+        }
+        
+        .tabs {
+            display: flex;
+            background: #f8f9fa;
+            border-bottom: 1px solid #ddd;
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+        }
+        
+        .tab {
+            flex: none;
+            min-width: 120px;
+            padding: 15px 10px;
+            text-align: center;
+            cursor: pointer;
+            background: #f8f9fa;
+            border: none;
+            font-size: 0.9em;
+            font-weight: 600;
+            transition: all 0.3s;
+            white-space: nowrap;
+        }
+        
+        @media (min-width: 768px) {
+            .tab {
+                flex: 1;
+                min-width: auto;
+                padding: 20px;
+                font-size: 1.1em;
+            }
+        }
+        
+        .tab.active {
+            background: white;
+            color: #3498db;
+            border-bottom: 3px solid #3498db;
+        }
+        
+        .tab:hover {
+            background: #e9ecef;
+        }
+        
+        .content {
+            padding: 20px 15px;
+        }
+        
+        @media (min-width: 768px) {
+            .content { padding: 30px; }
+        }
+        
+        .tab-content {
+            display: none;
+        }
+        
+        .tab-content.active {
+            display: block;
+        }
+        
+        .tab-content h2 {
+            font-size: 1.5em;
+            margin-bottom: 20px;
+            color: #2c3e50;
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #2c3e50;
+            font-size: 0.95em;
+        }
+        
+        input, textarea, select {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            font-size: 1em;
+            transition: border-color 0.3s;
+            -webkit-appearance: none;
+            background: white;
+        }
+        
+        input:focus, textarea:focus, select:focus {
+            outline: none;
+            border-color: #3498db;
+            box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.1);
+        }
+        
+        textarea {
+            min-height: 100px;
+            resize: vertical;
+        }
+        
+        @media (min-width: 768px) {
+            textarea { min-height: 120px; }
+        }
+        
+        .btn {
+            background: linear-gradient(135deg, #3498db, #2980b9);
+            color: white;
+            padding: 15px 25px;
+            border: none;
+            border-radius: 8px;
+            font-size: 1em;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            width: 100%;
+            touch-action: manipulation;
+        }
+        
+        .btn:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 5px 15px rgba(52, 152, 219, 0.4);
+        }
+        
+        .btn:active {
+            transform: translateY(0);
+        }
+        
+        .success {
+            background: linear-gradient(135deg, #27ae60, #219a52);
+            color: white;
+            padding: 12px;
+            border-radius: 8px;
+            margin: 15px 0;
+            display: none;
+            font-size: 0.95em;
+        }
+        
+        .error {
+            background: linear-gradient(135deg, #e74c3c, #c0392b);
+            color: white;
+            padding: 12px;
+            border-radius: 8px;
+            margin: 15px 0;
+            display: none;
+            font-size: 0.95em;
+        }
+        
+        .info-card {
+            background: #f8f9fa;
+            border-left: 4px solid #3498db;
+            padding: 15px;
+            margin: 15px 0;
+            border-radius: 0 8px 8px 0;
+            font-size: 0.9em;
+        }
+        
+        .example {
+            background: #e8f5e8;
+            border: 1px solid #c3e6c3;
+            padding: 12px;
+            border-radius: 8px;
+            margin: 15px 0;
+            font-family: 'Courier New', monospace;
+            font-size: 0.85em;
+            overflow-x: auto;
+        }
+        
+        .constraint-item {
+            background: #fff5f5;
+            border: 1px solid #fed7d7;
+            padding: 12px;
+            border-radius: 8px;
+            margin: 10px 0;
+            font-size: 0.9em;
+        }
+        
+        .constraint-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 10px;
+        }
+        
+        .delete-btn {
+            background: #e74c3c;
+            color: white;
+            border: none;
+            padding: 6px 10px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 0.8em;
+            flex-shrink: 0;
+        }
+        
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 15px;
+            margin: 20px 0;
+        }
+        
+        @media (min-width: 768px) {
+            .stats {
+                grid-template-columns: repeat(4, 1fr);
+                gap: 20px;
+            }
+        }
+        
+        .stat-card {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+            padding: 20px 15px;
+            border-radius: 12px;
+            text-align: center;
+        }
+        
+        .stat-number {
+            font-size: 2em;
+            font-weight: bold;
+            margin-bottom: 8px;
+            line-height: 1;
+        }
+        
+        @media (min-width: 768px) {
+            .stat-number { font-size: 2.5em; }
+        }
+        
+        .stat-label {
+            opacity: 0.9;
+            font-size: 0.9em;
+        }
+        
+        .reload-section {
+            margin-top: 25px;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 12px;
+            text-align: center;
+        }
+        
+        .reload-btn {
+            width: auto;
+            display: inline-block;
+            min-width: 200px;
+            margin-top: 15px;
+        }
+        
+        /* Loading states */
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 20px;
+            color: #666;
+        }
+        
+        /* Mobile specific adjustments */
+        @media (max-width: 767px) {
+            .tabs {
+                position: sticky;
+                top: 0;
+                z-index: 100;
+                background: #f8f9fa;
+                box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            }
+            
+            input, textarea, select {
+                font-size: 16px; /* Prevents zoom on iOS */
+            }
+            
+            .constraint-item {
+                padding: 10px;
+            }
+            
+            .info-card {
+                padding: 12px;
+                margin: 12px 0;
+            }
+        }
+        
+        /* Better touch targets */
+        .tab, .btn, .delete-btn {
+            min-height: 44px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        /* Smooth scrolling for tabs */
+        .tabs {
+            scroll-behavior: smooth;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🤖 Royal Bot Admin</h1>
+            <p>Gestiona el conocimiento del bot</p>
+        </div>
+        
+        <div class="tabs">
+            <button class="tab active" onclick="showTab('knowledge')">📚 Info</button>
+            <button class="tab" onclick="showTab('examples')">💬 Ejemplos</button>
+            <button class="tab" onclick="showTab('constraints')">🚫 Límites</button>
+            <button class="tab" onclick="showTab('stats')">📊 Stats</button>
+        </div>
+        
+        <div class="content">
+            <!-- Tab: Conocimiento -->
+            <div id="knowledge" class="tab-content active">
+                <h2>📚 Agregar Información</h2>
+                <div class="info-card">
+                    <strong>💡 Tip:</strong> Agrega información sobre Royal Company: productos, promociones, políticas, etc.
+                </div>
+                
+                <form id="knowledgeForm">
+                    <div class="form-group">
+                        <label for="category">📂 Categoría:</label>
+                        <select id="category" required>
+                            <option value="">Selecciona una categoría</option>
+                            <option value="productos">🛍️ Productos</option>
+                            <option value="promociones">🎯 Promociones</option>
+                            <option value="politicas">📋 Políticas</option>
+                            <option value="precios">💰 Precios</option>
+                            <option value="envios">📦 Envíos</option>
+                            <option value="pagos">💳 Pagos</option>
+                            <option value="contacto">📞 Contacto</option>
+                            <option value="general">ℹ️ General</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="title">📝 Título:</label>
+                        <input type="text" id="title" placeholder="Ej: Nueva promoción día de la madre" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="content">📄 Información:</label>
+                        <textarea id="content" placeholder="Escribe toda la información que el bot debe saber..." required></textarea>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="keywords">🏷️ Palabras clave:</label>
+                        <input type="text" id="keywords" placeholder="promocion, descuento, dia madre (separadas por comas)">
+                    </div>
+                    
+                    <button type="submit" class="btn" id="knowledgeBtn">✅ Agregar Información</button>
+                </form>
+                
+                <div id="knowledgeSuccess" class="success"></div>
+                <div id="knowledgeError" class="error"></div>
+            </div>
+            
+            <!-- Tab: Ejemplos -->
+            <div id="examples" class="tab-content">
+                <h2>💬 Ejemplos de Respuesta</h2>
+                <div class="info-card">
+                    <strong>💡 Tip:</strong> Enseña al bot cómo responder en situaciones específicas.
+                </div>
+                
+                <form id="exampleForm">
+                    <div class="form-group">
+                        <label for="exampleType">🎯 Situación:</label>
+                        <select id="exampleType" required>
+                            <option value="">Selecciona una situación</option>
+                            <option value="saludo">👋 Saludo inicial</option>
+                            <option value="consulta_producto">🛍️ Consulta producto</option>
+                            <option value="precio">💰 Pregunta precio</option>
+                            <option value="envio">📦 Consulta envío</option>
+                            <option value="pago">💳 Consulta pago</option>
+                            <option value="emprendedor">🚀 Nuevo emprendedor</option>
+                            <option value="objecion">❓ Objeción/duda</option>
+                            <option value="despedida">👋 Despedida</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="userMessage">👤 Usuario dice:</label>
+                        <textarea id="userMessage" placeholder="Ej: Hola, quiero información sobre productos para revender" required></textarea>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="botResponse">🤖 Bot responde:</label>
+                        <textarea id="botResponse" placeholder="Ej: ¡Hola! Te ayudo con productos para reventa. ¿Ya tenés experiencia o recién arrancás?" required></textarea>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="description">📋 Notas:</label>
+                        <input type="text" id="description" placeholder="Cuándo usar este ejemplo (opcional)">
+                    </div>
+                    
+                    <button type="submit" class="btn" id="exampleBtn">✅ Guardar Ejemplo</button>
+                </form>
+                
+                <div id="exampleSuccess" class="success"></div>
+                <div id="exampleError" class="error"></div>
+            </div>
+            
+            <!-- Tab: Restricciones -->
+            <div id="constraints" class="tab-content">
+                <h2>🚫 Restricciones</h2>
+                <div class="info-card">
+                    <strong>⚠️ Importante:</strong> Define qué NUNCA debe decir o hacer el bot.
+                </div>
+                
+                <form id="constraintForm">
+                    <div class="form-group">
+                        <label for="constraintType">⚠️ Tipo:</label>
+                        <select id="constraintType" required>
+                            <option value="">Selecciona un tipo</option>
+                            <option value="never_say">🚫 Nunca decir</option>
+                            <option value="never_offer">⛔ Nunca ofrecer</option>
+                            <option value="never_mention">🤐 Nunca mencionar</option>
+                            <option value="redirect">↩️ Cambiar tema</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="constraintRule">📝 Regla:</label>
+                        <textarea id="constraintRule" placeholder="Ej: Nunca mencionar precios de competidores" required></textarea>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="alternativeResponse">💬 En su lugar decir:</label>
+                        <textarea id="alternativeResponse" placeholder="¿Qué debe decir en su lugar? (opcional)"></textarea>
+                    </div>
+                    
+                    <button type="submit" class="btn" id="constraintBtn">✅ Agregar Restricción</button>
+                </form>
+                
+                <div id="constraintSuccess" class="success"></div>
+                <div id="constraintError" class="error"></div>
+                
+                <div id="constraintsList" style="margin-top: 30px;">
+                    <h3>Restricciones Activas:</h3>
+                    <div id="constraintsContainer"></div>
+                </div>
+            </div>
+            
+            <!-- Tab: Estadísticas -->
+            <div id="stats" class="tab-content">
+                <h2>📊 Estadísticas</h2>
+                
+                <div class="stats">
+                    <div class="stat-card">
+                        <div class="stat-number" id="totalKnowledge">-</div>
+                        <div class="stat-label">Datos</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-number" id="totalExamples">-</div>
+                        <div class="stat-label">Ejemplos</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-number" id="totalConstraints">-</div>
+                        <div class="stat-label">Límites</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-number" id="lastUpdate">-</div>
+                        <div class="stat-label">Actualizado</div>
+                    </div>
+                </div>
+                
+                <div class="reload-section">
+                    <strong>🔄 Recarga Manual</strong>
+                    <p>Si agregaste información y no se refleja, fuerza la recarga.</p>
+                    <button class="btn reload-btn" onclick="reloadTraining()" id="reloadBtn">
+                        🔄 Recargar Bot
+                    </button>
+                </div>
+                
+                <div id="reloadSuccess" class="success"></div>
+                <div id="reloadError" class="error"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // API Base URL - cambiar según el entorno
+        const API_BASE = 'https://botroyalv2-production.up.railway.app';
+        
+        // Tab functionality
+        function showTab(tabName) {
+            // Hide all tabs
+            document.querySelectorAll('.tab-content').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            document.querySelectorAll('.tab').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            
+            // Show selected tab
+            document.getElementById(tabName).classList.add('active');
+            event.target.classList.add('active');
+            
+            // Load data for specific tabs
+            if (tabName === 'stats') {
+                loadStats();
+            } else if (tabName === 'constraints') {
+                loadConstraints();
+            }
+        }
+        
+        // Helper function to disable/enable button
+        function setButtonState(buttonId, loading = false) {
+            const btn = document.getElementById(buttonId);
+            if (loading) {
+                btn.disabled = true;
+                btn.innerHTML = '⏳ Procesando...';
+            } else {
+                btn.disabled = false;
+                btn.innerHTML = btn.getAttribute('data-original') || btn.innerHTML;
+            }
+        }
+        
+        // Knowledge Form
+        document.getElementById('knowledgeForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            setButtonState('knowledgeBtn', true);
+            
+            const formData = {
+                category: document.getElementById('category').value,
+                title: document.getElementById('title').value,
+                content: document.getElementById('content').value,
+                keywords: document.getElementById('keywords').value.split(',').map(k => k.trim()).filter(k => k)
+            };
+            
+            try {
+                const response = await fetch(`${API_BASE}/admin/add-business-info`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(formData)
+                });
+                
+                const result = await response.json();
+                
+                if (response.ok) {
+                    showMessage('knowledgeSuccess', '✅ Información agregada correctamente');
+                    document.getElementById('knowledgeForm').reset();
+                } else {
+                    showMessage('knowledgeError', '❌ Error: ' + result.detail);
+                }
+            } catch (error) {
+                showMessage('knowledgeError', '❌ Error de conexión');
+            } finally {
+                setButtonState('knowledgeBtn', false);
+            }
+        });
+        
+        // Example Form
+        document.getElementById('exampleForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            setButtonState('exampleBtn', true);
+            
+            const formData = {
+                tipo: document.getElementById('exampleType').value,
+                usuario: document.getElementById('userMessage').value,
+                bot: document.getElementById('botResponse').value,
+                descripcion: document.getElementById('description').value || 'Panel admin'
+            };
+            
+            try {
+                const response = await fetch(`${API_BASE}/admin/add-training-example`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(formData)
+                });
+                
+                const result = await response.json();
+                
+                if (response.ok) {
+                    showMessage('exampleSuccess', '✅ Ejemplo guardado correctamente');
+                    document.getElementById('exampleForm').reset();
+                } else {
+                    showMessage('exampleError', '❌ Error: ' + result.detail);
+                }
+            } catch (error) {
+                showMessage('exampleError', '❌ Error de conexión');
+            } finally {
+                setButtonState('exampleBtn', false);
+            }
+        });
+        
+        // Constraint Form
+        document.getElementById('constraintForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            setButtonState('constraintBtn', true);
+            
+            const formData = {
+                category: 'constraints',
+                title: document.getElementById('constraintType').value,
+                content: document.getElementById('constraintRule').value,
+                keywords: ['constraint', 'restriction', document.getElementById('constraintType').value],
+                alternative_response: document.getElementById('alternativeResponse').value
+            };
+            
+            try {
+                const response = await fetch(`${API_BASE}/admin/add-business-info`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(formData)
+                });
+                
+                const result = await response.json();
+                
+                if (response.ok) {
+                    showMessage('constraintSuccess', '✅ Restricción agregada');
+                    document.getElementById('constraintForm').reset();
+                    loadConstraints();
+                } else {
+                    showMessage('constraintError', '❌ Error: ' + result.detail);
+                }
+            } catch (error) {
+                showMessage('constraintError', '❌ Error de conexión');
+            } finally {
+                setButtonState('constraintBtn', false);
+            }
+        });
+        
+        // Load Stats
+        async function loadStats() {
+            try {
+                const response = await fetch(`${API_BASE}/admin/business-info`);
+                const data = await response.json();
+                
+                if (response.ok) {
+                    document.getElementById('totalKnowledge').textContent = data.count || 0;
+                    document.getElementById('lastUpdate').textContent = 
+                        data.updated !== 'never' ? new Date(data.updated).toLocaleDateString('es-ES') : 'Nunca';
+                    
+                    // Count examples and constraints
+                    let examples = 0, constraints = 0;
+                    if (data.info) {
+                        examples = data.info.filter(i => i.category !== 'constraints').length;
+                        constraints = data.info.filter(i => i.category === 'constraints').length;
+                    }
+                    
+                    document.getElementById('totalExamples').textContent = examples;
+                    document.getElementById('totalConstraints').textContent = constraints;
+                }
+            } catch (error) {
+                console.error('Error loading stats:', error);
+            }
+        }
+        
+        // Load Constraints
+        async function loadConstraints() {
+            try {
+                const response = await fetch(`${API_BASE}/admin/business-info`);
+                const data = await response.json();
+                
+                if (response.ok && data.info) {
+                    const constraints = data.info.filter(i => i.category === 'constraints');
+                    const container = document.getElementById('constraintsContainer');
+                    
+                    container.innerHTML = constraints.map(constraint => `
+                        <div class="constraint-item">
+                            <div class="constraint-header">
+                                <div style="flex: 1;">
+                                    <strong>${constraint.title}:</strong><br>
+                                    ${constraint.content}
+                                    ${constraint.alternative_response ? `<br><em style="color: #666;">→ ${constraint.alternative_response}</em>` : ''}
+                                </div>
+                                <button class="delete-btn" onclick="deleteConstraint('${constraint.id}')">🗑️</button>
+                            </div>
+                        </div>
+                    `).join('') || '<p style="text-align: center; color: #666; padding: 20px;">No hay restricciones configuradas</p>';
+                }
+            } catch (error) {
+                console.error('Error loading constraints:', error);
+            }
+        }
+        
+        // Reload Training
+        async function reloadTraining() {
+            setButtonState('reloadBtn', true);
+            
+            try {
+                const response = await fetch(`${API_BASE}/admin/reload-training`);
+                const result = await response.json();
+                
+                if (response.ok) {
+                    showMessage('reloadSuccess', '✅ Bot recargado correctamente');
+                    loadStats(); // Refresh stats
+                } else {
+                    showMessage('reloadError', '❌ Error al recargar');
+                }
+            } catch (error) {
+                showMessage('reloadError', '❌ Error de conexión');
+            } finally {
+                setButtonState('reloadBtn', false);
+            }
+        }
+        
+        // Helper function to show messages
+        function showMessage(elementId, message) {
+            const element = document.getElementById(elementId);
+            element.textContent = message;
+            element.style.display = 'block';
+            
+            // Auto-hide after 4 seconds
+            setTimeout(() => {
+                element.style.display = 'none';
+            }, 4000);
+            
+            // Scroll to message on mobile
+            if (window.innerWidth <= 767) {
+                element.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            }
+        }
+        
+        // Store original button text
+        document.addEventListener('DOMContentLoaded', () => {
+            document.querySelectorAll('.btn').forEach(btn => {
+                btn.setAttribute('data-original', btn.innerHTML);
+            });
+            
+            // Load initial stats
+            loadStats();
+        });
+        
+        // Prevent form submission on Enter in text inputs (mobile optimization)
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && e.target.tagName === 'INPUT') {
+                e.preventDefault();
+                e.target.blur(); // Hide mobile keyboard
+            }
+        });
+    </script>
+</body>
+</html>
