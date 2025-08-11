@@ -263,7 +263,7 @@ async def send_evolution_message(phone: str, message: str) -> bool:
             
             payload = {
                 "number": formatted_phone,
-                "textMessage": {"text": message}
+                "text": message
             }
             
             response = await client.post(
