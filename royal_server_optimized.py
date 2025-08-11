@@ -760,42 +760,68 @@ Agregado: {datetime.now().isoformat()}
 
 @app.post("/admin/add-business-info")
 async def add_business_info(request: Request):
-    """Add new business information dynamically"""
+    """Add new business information dynamically - PERSISTENT in PostgreSQL"""
     try:
         data = await request.json()
         
-        # Create/update business info file
-        business_file = "/app/business_info_dynamic.json"  # Railway path
+        # Generate unique ID
+        info_id = str(uuid.uuid4())[:8]
         
-        # Load existing info
-        try:
-            with open(business_file, 'r', encoding='utf-8') as f:
-                business_info = json.load(f)
-        except FileNotFoundError:
-            business_info = {"updated": datetime.now().isoformat(), "info": []}
-        
-        # Add new info
+        # Prepare data for database
         new_info = {
-            "id": str(uuid.uuid4())[:8],
+            "id": info_id,
             "category": data.get("category", "general"),
             "title": data.get("title", ""),
             "content": data.get("content", ""),
             "keywords": data.get("keywords", []),
+            "alternative_response": data.get("alternative_response", ""),
             "added": datetime.now().isoformat()
         }
         
-        business_info["info"].append(new_info)
-        business_info["updated"] = datetime.now().isoformat()
-        
-        # Save updated info
-        with open(business_file, 'w', encoding='utf-8') as f:
-            json.dump(business_info, f, ensure_ascii=False, indent=2)
-        
-        logger.info(f"✅ Business info added: {new_info['title']}")
+        # Store in PostgreSQL for persistence
+        if advanced_queue.pg_pool:
+            conn = advanced_queue.pg_pool.getconn()
+            try:
+                cursor = conn.cursor()
+                
+                # Create table if not exists
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS bot_knowledge (
+                        id VARCHAR(10) PRIMARY KEY,
+                        category VARCHAR(50),
+                        title TEXT,
+                        content TEXT,
+                        keywords TEXT,
+                        alternative_response TEXT,
+                        added TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        active BOOLEAN DEFAULT true
+                    )
+                """)
+                
+                # Insert new knowledge
+                cursor.execute("""
+                    INSERT INTO bot_knowledge 
+                    (id, category, title, content, keywords, alternative_response, added)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s)
+                """, (
+                    info_id,
+                    new_info["category"],
+                    new_info["title"], 
+                    new_info["content"],
+                    ','.join(new_info["keywords"]) if isinstance(new_info["keywords"], list) else str(new_info["keywords"]),
+                    new_info["alternative_response"],
+                    datetime.now()
+                ))
+                
+                conn.commit()
+                logger.info(f"✅ Business info stored in DB: {new_info['title']}")
+                
+            finally:
+                advanced_queue.pg_pool.putconn(conn)
         
         return {
             "status": "success",
-            "message": "Business information added successfully",
+            "message": "Information saved permanently in database",
             "info": new_info
         }
         
@@ -822,21 +848,54 @@ async def reload_training():
 
 @app.get("/admin/business-info")
 async def get_business_info():
-    """Get current dynamic business information"""
+    """Get current dynamic business information from PostgreSQL"""
     try:
-        business_file = "/app/business_info_dynamic.json"  # Railway path
+        if not advanced_queue.pg_pool:
+            return {"updated": "never", "info": [], "count": 0, "source": "no_db"}
         
+        conn = advanced_queue.pg_pool.getconn()
         try:
-            with open(business_file, 'r', encoding='utf-8') as f:
-                business_info = json.load(f)
-        except FileNotFoundError:
-            business_info = {"updated": "never", "info": [], "count": 0}
-        
-        business_info["count"] = len(business_info.get("info", []))
-        
-        return business_info
+            cursor = conn.cursor()
+            
+            # Get all active knowledge
+            cursor.execute("""
+                SELECT id, category, title, content, keywords, alternative_response, added
+                FROM bot_knowledge 
+                WHERE active = true 
+                ORDER BY added DESC
+            """)
+            
+            rows = cursor.fetchall()
+            info_list = []
+            
+            for row in rows:
+                info_item = {
+                    "id": row[0],
+                    "category": row[1],
+                    "title": row[2],
+                    "content": row[3],
+                    "keywords": row[4].split(',') if row[4] else [],
+                    "alternative_response": row[5] or "",
+                    "added": row[6].isoformat() if row[6] else ""
+                }
+                info_list.append(info_item)
+            
+            # Get latest update time
+            cursor.execute("SELECT MAX(added) FROM bot_knowledge WHERE active = true")
+            latest_update = cursor.fetchone()[0]
+            
+            return {
+                "updated": latest_update.isoformat() if latest_update else "never",
+                "info": info_list,
+                "count": len(info_list),
+                "source": "postgresql"
+            }
+            
+        finally:
+            advanced_queue.pg_pool.putconn(conn)
         
     except Exception as e:
+        logger.error(f"❌ Failed to get business info: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/admin", response_class=HTMLResponse)
@@ -852,6 +911,91 @@ async def admin_panel():
                 return HTMLResponse(content=f.read())
         except FileNotFoundError:
             return HTMLResponse(content="<h1>Admin panel not found</h1>", status_code=404)
+
+@app.delete("/admin/delete-info/{info_id}")
+async def delete_business_info(info_id: str):
+    """Delete/deactivate business information"""
+    try:
+        if not advanced_queue.pg_pool:
+            raise HTTPException(status_code=500, detail="Database not available")
+        
+        conn = advanced_queue.pg_pool.getconn()
+        try:
+            cursor = conn.cursor()
+            
+            # Soft delete - mark as inactive
+            cursor.execute("""
+                UPDATE bot_knowledge 
+                SET active = false 
+                WHERE id = %s
+            """, (info_id,))
+            
+            if cursor.rowcount > 0:
+                conn.commit()
+                logger.info(f"✅ Knowledge deleted: {info_id}")
+                return {"status": "success", "message": "Information deleted"}
+            else:
+                raise HTTPException(status_code=404, detail="Information not found")
+                
+        finally:
+            advanced_queue.pg_pool.putconn(conn)
+            
+    except Exception as e:
+        logger.error(f"❌ Failed to delete info: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/admin/search-info")
+async def search_business_info(q: str = "", category: str = ""):
+    """Search business information"""
+    try:
+        if not advanced_queue.pg_pool:
+            return {"results": [], "count": 0}
+        
+        conn = advanced_queue.pg_pool.getconn()
+        try:
+            cursor = conn.cursor()
+            
+            where_conditions = ["active = true"]
+            params = []
+            
+            if q:
+                where_conditions.append("(title ILIKE %s OR content ILIKE %s OR keywords ILIKE %s)")
+                params.extend([f"%{q}%", f"%{q}%", f"%{q}%"])
+            
+            if category:
+                where_conditions.append("category = %s")
+                params.append(category)
+            
+            query = f"""
+                SELECT id, category, title, content, keywords, alternative_response, added
+                FROM bot_knowledge 
+                WHERE {' AND '.join(where_conditions)}
+                ORDER BY added DESC
+                LIMIT 50
+            """
+            
+            cursor.execute(query, params)
+            rows = cursor.fetchall()
+            
+            results = []
+            for row in rows:
+                results.append({
+                    "id": row[0],
+                    "category": row[1],
+                    "title": row[2],
+                    "content": row[3][:200] + "..." if len(row[3]) > 200 else row[3],
+                    "keywords": row[4].split(',') if row[4] else [],
+                    "added": row[6].isoformat() if row[6] else ""
+                })
+            
+            return {"results": results, "count": len(results)}
+            
+        finally:
+            advanced_queue.pg_pool.putconn(conn)
+            
+    except Exception as e:
+        logger.error(f"❌ Search failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 # =====================================================
 # STARTUP AND SHUTDOWN HANDLERS
