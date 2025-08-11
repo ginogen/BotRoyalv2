@@ -481,9 +481,12 @@ class AdvancedMessageQueue:
             message_dict['priority'] = MessagePriority[message_dict['priority'].upper()]
             message_dict['source'] = MessageSource(message_dict['source'])
             
-            # Parse metadata
+            # Parse metadata - check if it's already a dict or needs JSON parsing
             if message_dict['metadata']:
-                message_dict['metadata'] = json.loads(message_dict['metadata'])
+                if isinstance(message_dict['metadata'], str):
+                    message_dict['metadata'] = json.loads(message_dict['metadata'])
+                elif not isinstance(message_dict['metadata'], dict):
+                    message_dict['metadata'] = {}
             else:
                 message_dict['metadata'] = {}
             
