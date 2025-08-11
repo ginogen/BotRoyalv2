@@ -388,7 +388,11 @@ async def run_contextual_conversation(user_id: str, user_message: str) -> str:
 
 # Función de conveniencia para usar sincrónicamente
 def run_contextual_conversation_sync(user_id: str, user_message: str) -> str:
-    """Versión sincrónica de run_contextual_conversation"""
+    """Versión sincrónica de run_contextual_conversation usando thread pool"""
+    
+    import asyncio
+    import threading
+    from concurrent.futures import ThreadPoolExecutor
     
     try:
         # Obtener contexto
@@ -405,18 +409,38 @@ def run_contextual_conversation_sync(user_id: str, user_message: str) -> str:
         if dynamic_instructions:
             full_input = dynamic_instructions + "\n\nUsuario dice: " + user_message
         
-        # Crear y ejecutar agente
+        # Crear agente
         agent = create_contextual_royal_agent()
-        result = Runner.run_sync(
-            starting_agent=agent,
-            input=full_input,
-            context=context
-        )
+        
+        # Función para ejecutar en un nuevo event loop
+        def run_in_new_loop():
+            try:
+                # Crear un nuevo event loop para este thread
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                
+                # Ejecutar la conversación asíncrona
+                async def async_conversation():
+                    result = await Runner.run(
+                        starting_agent=agent,
+                        input=full_input,
+                        context=context
+                    )
+                    return result.final_output
+                
+                return loop.run_until_complete(async_conversation())
+            finally:
+                loop.close()
+        
+        # Ejecutar en thread pool para evitar bloquear
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            future = executor.submit(run_in_new_loop)
+            result = future.result(timeout=30)  # 30 segundos timeout
         
         # Registrar respuesta
-        context.conversation.add_interaction("assistant", result.final_output)
+        context.conversation.add_interaction("assistant", result)
         
-        return result.final_output
+        return result
         
     except Exception as e:
         logger.error(f"❌ Error en conversación contextual sync: {str(e)}")
