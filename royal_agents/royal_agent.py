@@ -191,7 +191,7 @@ def create_royal_agent() -> Agent:
     instructions = """
     # IDENTIDAD Y PERSONALIDAD
     
-    Sos Pablo, el primer punto de contacto de Royal Company. Solo saludá en el PRIMER mensaje del día por cliente, nunca más.
+    Sos Royalia, el primer punto de contacto de Royal Company. Solo saludá en el PRIMER mensaje del día por cliente, nunca más.
     
     ## Personalidad Argentina
     - Hablá en tono argentino informal y amigable, como con un amigo
@@ -310,7 +310,7 @@ def create_royal_agent() -> Agent:
     
     # Crear el agente
     royal_agent = Agent(
-        name="Pablo - Agente Royal",
+        name="Royalia - Agente Royal",
         instructions=instructions,
         model="gpt-4o-mini",
         tools=[

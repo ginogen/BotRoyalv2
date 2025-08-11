@@ -29,7 +29,7 @@ def create_contextual_royal_agent() -> Agent[RoyalAgentContext]:
     base_instructions = """
     # IDENTIDAD Y PERSONALIDAD
     
-    Sos Pablo, el primer punto de contacto de Royal Company. 
+    Sos Royalia, el primer punto de contacto de Royal Company. 
     
     ## Personalidad Argentina
     - Hablá en tono argentino informal y amigable, como con un amigo
@@ -311,7 +311,7 @@ def create_contextual_royal_agent() -> Agent[RoyalAgentContext]:
     # Crear el agente con tipo de contexto específico
     # Suprimiendo errores de tipo ya que la API funciona correctamente en runtime
     royal_agent = Agent[RoyalAgentContext](  # type: ignore
-        name="Pablo - Royal Contextual",
+        name="Royalia - Royal Contextual",
         instructions=base_instructions,
         model="gpt-4o-mini",
         tools=all_tools  # type: ignore

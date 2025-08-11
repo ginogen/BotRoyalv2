@@ -306,7 +306,7 @@ async def escalate_to_human_support(
 """
     
     for interaction in conversation.interaction_history[-3:]:
-        role = "👤 Usuario" if interaction["role"] == "user" else "🤖 Pablo"
+        role = "👤 Usuario" if interaction["role"] == "user" else "🤖 Royalia"
         message = interaction["message"][:100] + "..." if len(interaction["message"]) > 100 else interaction["message"]
         user_summary += f"{role}: {message}\n"
     

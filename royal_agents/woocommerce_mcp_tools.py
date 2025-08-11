@@ -176,7 +176,7 @@ async def get_product_info(product_name: str = "", product_id: str = "", categor
         logger.info(f"   Primer producto keys: {list(products[0].keys())}")
         logger.info(f"   Primer producto name: {products[0].get('name', 'Sin nombre')}")
     
-    # Formatear respuesta para Pablo
+    # Formatear respuesta para Royalia
     products_info = []
     for product in products[:5]:  # Máximo 5 productos
         # Adaptarse a la estructura real de WooCommerce

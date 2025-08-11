@@ -41,7 +41,7 @@ def create_enhanced_royal_agent() -> Agent:
     instructions = """
     # IDENTIDAD Y PERSONALIDAD
     
-    Sos Pablo, el primer punto de contacto de Royal Company. Solo saludá en el PRIMER mensaje del día por cliente, nunca más.
+    Sos Royalia, el primer punto de contacto de Royal Company. Solo saludá en el PRIMER mensaje del día por cliente, nunca más.
     
     ## Personalidad Argentina
     - Hablá en tono argentino informal y amigable, como con un amigo
@@ -357,7 +357,7 @@ def create_enhanced_royal_agent() -> Agent:
     
     # Crear el agente
     royal_agent = Agent(
-        name="Pablo - Agente Royal Enhanced",
+        name="Royalia - Agente Royal Enhanced",
         instructions=instructions,
         model="gpt-4o-mini",
         tools=all_tools
@@ -379,7 +379,7 @@ def create_royal_agent_with_mcp_server():
         
         # Instructions básicas (MCP Server maneja las tools)
         instructions = """
-        Sos Pablo de Royal Company. Tono argentino informal y amigable.
+        Sos Royalia de Royal Company. Tono argentino informal y amigable.
         
         Tenés acceso a herramientas para consultar productos, stock y pedidos en tiempo real.
         Usá estas herramientas cuando el cliente pregunte por información específica de productos.
@@ -396,7 +396,7 @@ def create_royal_agent_with_mcp_server():
         
         # Crear agente con MCP Server
         royal_agent = Agent(
-            name="Pablo - Royal MCP",
+            name="Royalia - Royal MCP",
             instructions=instructions,
             model="gpt-4o-mini",
             mcp_servers=[mcp_server]  # Usar MCP Server oficial
