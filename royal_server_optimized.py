@@ -272,16 +272,17 @@ async def send_evolution_message(phone: str, message: str) -> bool:
                 json=payload
             )
             
-            # Enhanced error logging
-            if response.status_code != 200:
-                logger.error(f"❌ Evolution API Error:")
-                logger.error(f"   Status Code: {response.status_code}")
-                logger.error(f"   Response: {response.text}")
-                logger.error(f"   Headers: {dict(response.headers)}")
-                return False
+            # Check for success (200 or 201 are both success)
+            if response.status_code in [200, 201]:
+                logger.info(f"✅ Evolution message sent to {formatted_phone}")
+                return True
             
-            logger.info(f"✅ Evolution message sent to {formatted_phone}")
-            return True
+            # Enhanced error logging for actual errors
+            logger.error(f"❌ Evolution API Error:")
+            logger.error(f"   Status Code: {response.status_code}")
+            logger.error(f"   Response: {response.text}")
+            logger.error(f"   Headers: {dict(response.headers)}")
+            return False
             
     except Exception as e:
         logger.error(f"❌ Evolution send error: {e}")
@@ -559,8 +560,22 @@ async def evolution_webhook(request: Request, background_tasks: BackgroundTasks)
         if ENABLE_REQUEST_LOGGING:
             logger.info(f"📱 Evolution webhook: {json.dumps(data, indent=2)[:500]}...")
         
-        # Extract message data
+        # Only process incoming messages from users (not our own messages)
+        event = data.get("event", "")
         message_data_raw = data.get("data", {})
+        
+        # Filter out events we don't want to process
+        if event not in ["messages.upsert"]:
+            logger.info(f"🔇 Ignoring event: {event}")
+            return {"status": "received", "ignored": event}
+        
+        # Check if message is from us (fromMe: true)
+        from_me = message_data_raw.get("key", {}).get("fromMe", False)
+        if from_me:
+            logger.info("🔇 Ignoring message from bot itself (fromMe: true)")
+            return {"status": "received", "ignored": "fromMe"}
+        
+        # Extract message data
         message_content = message_data_raw.get("message", {}).get("conversation", "").strip()
         from_number = message_data_raw.get("key", {}).get("remoteJid", "").replace("@s.whatsapp.net", "")
         
