@@ -246,6 +246,15 @@ async def send_evolution_message(phone: str, message: str) -> bool:
     try:
         import httpx
         
+        # Use phone number exactly as received (Evolution API expects no + prefix)
+        formatted_phone = phone
+        
+        # Log the request details for debugging
+        logger.info(f"🔄 Sending message to Evolution API:")
+        logger.info(f"   URL: {EVOLUTION_API_URL}/message/sendText/{INSTANCE_NAME}")
+        logger.info(f"   Phone: {formatted_phone}")
+        logger.info(f"   Message length: {len(message)}")
+        
         async with httpx.AsyncClient(timeout=30.0) as client:
             headers = {
                 "apikey": EVOLUTION_API_TOKEN,
@@ -253,7 +262,7 @@ async def send_evolution_message(phone: str, message: str) -> bool:
             }
             
             payload = {
-                "number": phone,
+                "number": formatted_phone,
                 "textMessage": {"text": message}
             }
             
@@ -263,13 +272,16 @@ async def send_evolution_message(phone: str, message: str) -> bool:
                 json=payload
             )
             
-            success = response.status_code == 200
-            if success:
-                logger.info(f"✅ Evolution message sent to {phone}")
-            else:
-                logger.error(f"❌ Evolution send failed: {response.status_code}")
+            # Enhanced error logging
+            if response.status_code != 200:
+                logger.error(f"❌ Evolution API Error:")
+                logger.error(f"   Status Code: {response.status_code}")
+                logger.error(f"   Response: {response.text}")
+                logger.error(f"   Headers: {dict(response.headers)}")
+                return False
             
-            return success
+            logger.info(f"✅ Evolution message sent to {formatted_phone}")
+            return True
             
     except Exception as e:
         logger.error(f"❌ Evolution send error: {e}")
