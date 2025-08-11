@@ -1,30 +1,141 @@
-# Bot Royal v2 - Dependencias principales
-streamlit
-openai
-python-dotenv
-httpx
-pandas
-requests
-WooCommerce
+# Bot Royal v2 - Maximum Efficiency Edition
+# Core dependencies for optimized Royal Bot
 
-# Servidor web optimizado para Chatwoot
-fastapi
-uvicorn[standard]
+# =====================================================
+# CORE SYSTEM DEPENDENCIES
+# =====================================================
 
-# Sistema de conversación y contexto
-typing-extensions
+# FastAPI and web server
+fastapi>=0.104.0
+uvicorn[standard]>=0.24.0
+pydantic>=2.0.0
 
-# Base de datos
-psycopg2-binary
+# HTTP client for external APIs
+httpx>=0.25.0
 
-# Agentes y MCP
-pydantic
-mcp
-openai-agents
+# Environment and configuration
+python-dotenv>=1.0.0
 
-# Logging y monitoreo
-python-json-logger
+# =====================================================
+# AI AND AGENTS SYSTEM
+# =====================================================
 
-# Utilidades adicionales
-nest_asyncio
-plotly
+# OpenAI integration
+openai>=1.3.0
+openai-agents>=0.1.0
+
+# Royal agents and MCP tools
+mcp>=0.2.0
+
+# =====================================================
+# DATABASE SYSTEMS (Multi-layer)
+# =====================================================
+
+# PostgreSQL (primary persistent storage)
+psycopg2-binary>=2.9.7
+
+# Redis (high-speed cache layer)
+redis[hiredis]>=5.0.0
+
+# =====================================================
+# PERFORMANCE AND MONITORING
+# =====================================================
+
+# System monitoring
+psutil>=5.9.0
+
+# Async support and utilities
+asyncio-mqtt>=0.13.0
+typing-extensions>=4.8.0
+nest_asyncio>=1.5.0
+
+# JSON and data processing
+pandas>=2.1.0
+
+# =====================================================
+# LOGGING AND DEBUGGING
+# =====================================================
+
+# Structured logging
+python-json-logger>=2.0.0
+
+# Performance profiling (development)
+line_profiler>=4.1.0
+
+# =====================================================
+# EXTERNAL INTEGRATIONS
+# =====================================================
+
+# WhatsApp and messaging
+requests>=2.31.0
+
+# E-commerce integration
+WooCommerce>=3.0.0
+
+# =====================================================
+# DEVELOPMENT AND TESTING
+# =====================================================
+
+# Testing framework
+pytest>=7.4.0
+pytest-asyncio>=0.21.0
+
+# Code quality
+black>=23.0.0
+flake8>=6.0.0
+
+# Visualization and admin interface
+plotly>=5.17.0
+streamlit>=1.28.0
+
+# =====================================================
+# RAILWAY DEPLOYMENT OPTIMIZATIONS
+# =====================================================
+
+# Production WSGI server (backup)
+gunicorn>=21.2.0
+
+# Process management
+supervisor>=4.2.0
+
+# Memory optimization
+memory-profiler>=0.61.0
+
+# =====================================================
+# SECURITY AND STABILITY
+# =====================================================
+
+# Environment security
+cryptography>=41.0.0
+
+# Rate limiting and security
+slowapi>=0.1.9
+python-multipart>=0.0.6
+
+# =====================================================
+# OPTIONAL DEPENDENCIES (for specific features)
+# =====================================================
+
+# Advanced analytics (optional)
+# numpy>=1.25.0
+# scipy>=1.11.0
+
+# Machine learning (optional)
+# scikit-learn>=1.3.0
+
+# Advanced caching (optional)  
+# diskcache>=5.6.0
+
+# =====================================================
+# VERSION CONSTRAINTS FOR STABILITY
+# =====================================================
+
+# Ensure compatibility with Railway Python runtime
+python-dateutil>=2.8.0
+six>=1.16.0
+urllib3>=2.0.0,<3.0.0
+certifi>=2023.7.22
+
+# Pin critical versions for stability
+asyncio>=3.4.3
+json-logging>=1.3.0

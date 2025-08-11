@@ -80,7 +80,7 @@ async def evolution_webhook(request: Request):
         return {
             "status": "error",
             "message": f"Error procesando webhook: {str(e)}"
-        }
+    }
 
 if __name__ == "__main__":
     import uvicorn
