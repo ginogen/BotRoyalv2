@@ -218,7 +218,8 @@ class Worker:
             result = await self.circuit_breaker.call(
                 self.message_processor,
                 message.user_id,
-                message.message
+                message.message,
+                message  # Pass the full message data
             )
             success = True
             

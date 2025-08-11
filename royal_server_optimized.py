@@ -120,7 +120,7 @@ class WebhookMessage(BaseModel):
 # CORE MESSAGE PROCESSOR
 # =====================================================
 
-async def process_royal_message(user_id: str, message: str) -> str:
+async def process_royal_message(user_id: str, message: str, message_data: Optional['MessageData'] = None) -> str:
     """
     Core message processor that integrates with all our systems.
     This is what gets called by the worker pool.
@@ -142,6 +142,10 @@ async def process_royal_message(user_id: str, message: str) -> str:
             system_metrics['average_response_time'] * 0.9 + processing_time * 0.1
         )
         
+        # Send response back to appropriate channel
+        if message_data:
+            await send_response_to_channel(user_id, response, message_data)
+        
         logger.info(f"✅ Message processed for {user_id} in {processing_time:.2f}s")
         return response
         
@@ -150,11 +154,46 @@ async def process_royal_message(user_id: str, message: str) -> str:
         logger.error(f"❌ Processing failed for {user_id} after {processing_time:.2f}s: {e}")
         
         # Return friendly error message
-        return (
+        error_response = (
             "Disculpá, tuve un problemita técnico. "
             "Dame un momento que ya te ayudo. "
             "Si es urgente, podés contactar directamente a nuestros locales."
         )
+        
+        # Try to send error response
+        if message_data:
+            try:
+                await send_response_to_channel(user_id, error_response, message_data)
+            except:
+                pass  # Don't fail if we can't send error response
+        
+        return error_response
+
+async def send_response_to_channel(user_id: str, response: str, message_data: 'MessageData'):
+    """Send response back to the appropriate channel (WhatsApp, Chatwoot, etc.)"""
+    
+    try:
+        if message_data.source == MessageSource.EVOLUTION and message_data.phone:
+            # Send to WhatsApp via Evolution API
+            success = await send_evolution_message(message_data.phone, response)
+            if success:
+                logger.info(f"📱 Response sent to WhatsApp: {user_id}")
+            else:
+                logger.error(f"❌ Failed to send WhatsApp response: {user_id}")
+                
+        elif message_data.source == MessageSource.CHATWOOT and message_data.conversation_id:
+            # Send to Chatwoot
+            success = await send_chatwoot_message(message_data.conversation_id, response)
+            if success:
+                logger.info(f"💬 Response sent to Chatwoot: {user_id}")
+            else:
+                logger.error(f"❌ Failed to send Chatwoot response: {user_id}")
+                
+        else:
+            logger.warning(f"⚠️ No channel configured for response: {user_id} (source: {message_data.source})")
+            
+    except Exception as e:
+        logger.error(f"❌ Error sending response to channel: {e}")
 
 # =====================================================
 # EXTERNAL SERVICE INTEGRATIONS
