@@ -478,17 +478,42 @@ class AdvancedMessageQueue:
             
             # Convert to MessageData
             message_dict = dict(row)
+            
+            # Remove database-specific fields that don't belong in MessageData
+            database_fields = ['id', 'worker_id', 'status']
+            for field in database_fields:
+                message_dict.pop(field, None)
+            
+            # Map database field names to MessageData field names
+            field_mapping = {
+                'message_content': 'message',
+                'created_at': 'created_at',
+                'scheduled_at': 'scheduled_at', 
+                'started_at': 'started_at',
+                'completed_at': 'completed_at'
+            }
+            
+            # Apply field mapping
+            for db_field, msg_field in field_mapping.items():
+                if db_field in message_dict and db_field != msg_field:
+                    message_dict[msg_field] = message_dict.pop(db_field)
+            
             message_dict['priority'] = MessagePriority[message_dict['priority'].upper()]
             message_dict['source'] = MessageSource(message_dict['source'])
             
             # Parse metadata - check if it's already a dict or needs JSON parsing
-            if message_dict['metadata']:
+            if message_dict.get('metadata'):
                 if isinstance(message_dict['metadata'], str):
                     message_dict['metadata'] = json.loads(message_dict['metadata'])
                 elif not isinstance(message_dict['metadata'], dict):
                     message_dict['metadata'] = {}
             else:
                 message_dict['metadata'] = {}
+            
+            # Handle missing fields with defaults
+            message_dict.setdefault('error_details', {})
+            message_dict.setdefault('attempts', 0)
+            message_dict.setdefault('max_attempts', 3)
             
             return MessageData.from_dict(message_dict)
             
