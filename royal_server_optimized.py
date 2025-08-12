@@ -106,6 +106,9 @@ system_metrics = {
 # Bot state manager instance
 bot_state_manager: Optional[BotStateManager] = None
 
+# Mapeo conversación <-> teléfono para sincronización entre canales
+conversation_phone_mapping = {}
+
 # =====================================================
 # PYDANTIC MODELS
 # =====================================================
@@ -395,6 +398,50 @@ async def metrics_collector_task():
     logger.info("📊 Metrics collector stopped")
 
 # =====================================================
+# CONVERSATION-PHONE MAPPING FUNCTIONS
+# =====================================================
+
+def link_conversation_to_phone(conversation_id: str, phone: str):
+    """Vincular conversación de Chatwoot con número de teléfono"""
+    global conversation_phone_mapping
+    conversation_phone_mapping[conversation_id] = phone
+    logger.info(f"🔗 Vinculando conversación {conversation_id} con teléfono {phone}")
+
+def get_phone_from_conversation(conversation_id: str) -> Optional[str]:
+    """Obtener número de teléfono desde conversación de Chatwoot"""
+    return conversation_phone_mapping.get(conversation_id)
+
+def get_conversation_from_phone(phone: str) -> Optional[str]:
+    """Obtener conversación de Chatwoot desde número de teléfono"""
+    for conv_id, mapped_phone in conversation_phone_mapping.items():
+        if mapped_phone == phone:
+            return conv_id
+    return None
+
+async def pause_bot_for_both_channels(phone: str, conversation_id: str, reason: str) -> bool:
+    """Pausar bot para ambos canales (WhatsApp y Chatwoot)"""
+    success_phone = await bot_state_manager.pause_bot(phone, reason)
+    success_conv = await bot_state_manager.pause_bot(f"conv_{conversation_id}", reason)
+    
+    if success_phone and success_conv:
+        logger.info(f"✅ Bot pausado para AMBOS canales: {phone} y conv_{conversation_id}")
+        return True
+    elif success_phone or success_conv:
+        logger.warning(f"⚠️ Bot pausado parcialmente: phone={success_phone}, conv={success_conv}")
+        return True
+    else:
+        logger.error(f"❌ No se pudo pausar bot para ningún canal")
+        return False
+
+async def resume_bot_for_both_channels(phone: str, conversation_id: str) -> bool:
+    """Reactivar bot para ambos canales (WhatsApp y Chatwoot)"""
+    success_phone = await bot_state_manager.resume_bot(phone)
+    success_conv = await bot_state_manager.resume_bot(f"conv_{conversation_id}")
+    
+    logger.info(f"✅ Bot reactivado para AMBOS canales: {phone} y conv_{conversation_id}")
+    return True
+
+# =====================================================
 # BOT CONTROL FUNCTIONS
 # =====================================================
 
@@ -506,14 +553,15 @@ async def handle_agent_private_note(data: Dict) -> Dict:
         
         # Comandos de control del bot
         if content in ["/bot pause", "/bot pausar", "bot pause", "bot pausar"]:
-            # Pausar bot - SIEMPRE usar el teléfono como identificador principal
+            # Pausar para AMBOS canales si hay vinculación
             if phone:
-                identifier = phone
-                success = await bot_state_manager.pause_bot(identifier, f"agent_{agent_name}")
-                logger.info(f"🎯 Pausando bot para teléfono: {identifier}")
+                success = await pause_bot_for_both_channels(phone, conversation_id, f"agent_{agent_name}")
+                logger.info(f"🎯 Pausando bot para AMBOS canales: teléfono {phone} y conversación {conversation_id}")
             else:
-                logger.error(f"❌ No se pudo extraer teléfono de la conversación {conversation_id}")
-                success = False
+                # Solo pausar conversación si no hay teléfono
+                identifier = f"conv_{conversation_id}"
+                success = await bot_state_manager.pause_bot(identifier, f"agent_{agent_name}")
+                logger.info(f"🎯 Pausando bot para conversación: {identifier}")
             
             if success:
                 # NO enviar mensaje - debe ser transparente para el usuario
@@ -531,14 +579,15 @@ async def handle_agent_private_note(data: Dict) -> Dict:
                 return {"status": "error", "message": "No se pudo pausar el bot"}
         
         elif content in ["/bot resume", "/bot activar", "bot resume", "bot activar"]:
-            # Reactivar bot - usar teléfono como identificador
+            # Reactivar para AMBOS canales si hay vinculación
             if phone:
-                identifier = phone
-                success = await bot_state_manager.resume_bot(identifier)
-                logger.info(f"🎯 Reactivando bot para teléfono: {identifier}")
+                success = await resume_bot_for_both_channels(phone, conversation_id)
+                logger.info(f"🎯 Reactivando bot para AMBOS canales: teléfono {phone} y conversación {conversation_id}")
             else:
-                logger.error(f"❌ No se pudo extraer teléfono de la conversación {conversation_id}")
-                success = False
+                # Solo reactivar conversación si no hay teléfono
+                identifier = f"conv_{conversation_id}"
+                success = await bot_state_manager.resume_bot(identifier)
+                logger.info(f"🎯 Reactivando bot para conversación: {identifier}")
             
             if success:
                 # NO enviar mensaje - transición debe ser invisible
@@ -559,10 +608,12 @@ async def handle_agent_private_note(data: Dict) -> Dict:
             # Consultar estado del bot
             if phone:
                 identifier = phone
-                state = await bot_state_manager.get_bot_state(identifier)
+                logger.info(f"🎯 Consultando estado para teléfono: {identifier}")
             else:
-                logger.error(f"❌ No se pudo extraer teléfono de la conversación {conversation_id}")
-                return {"status": "error", "message": "No se pudo consultar estado"}
+                identifier = f"conv_{conversation_id}"
+                logger.info(f"🎯 Consultando estado para conversación: {identifier}")
+            
+            state = await bot_state_manager.get_bot_state(identifier)
             
             status_msg = "🟢 ACTIVO" if state["active"] else "🔴 PAUSADO"
             reason = state.get("reason", "")
@@ -732,15 +783,44 @@ async def chatwoot_webhook(request: Request, background_tasks: BackgroundTasks):
                     user_id = f"chatwoot_{str(contact_id)}"
                     conversation_id = str(conversation["id"])
                     
-                    # Extract phone number for state checking
+                    # Extract phone number for state checking and mapping
                     phone = None
                     if conversation.get("contact_phone"):
                         phone = conversation["contact_phone"].replace("+", "").replace("-", "").replace(" ", "")
                     
-                    # Check if bot is active for this conversation/phone
-                    identifier = phone if phone else f"conv_{conversation_id}"
-                    if not await bot_state_manager.is_bot_active(identifier):
-                        logger.info(f"🔇 Bot pausado para {identifier} (Chatwoot), mensaje ignorado")
+                    # Si no encontramos teléfono, intentar extraerlo del source_id o contact
+                    if not phone:
+                        # Buscar teléfono en contact si está disponible
+                        sender = data.get("sender", {})
+                        if "phone" in sender:
+                            phone = str(sender["phone"]).replace("+", "").replace("-", "").replace(" ", "")
+                    
+                    # Crear vinculación si encontramos teléfono
+                    if phone:
+                        link_conversation_to_phone(conversation_id, phone)
+                        logger.info(f"🔗 Vinculación creada: conversación {conversation_id} ↔ teléfono {phone}")
+                    else:
+                        # Buscar vinculación existente
+                        phone = get_phone_from_conversation(conversation_id)
+                        if phone:
+                            logger.info(f"🔍 Usando vinculación existente: conversación {conversation_id} ↔ teléfono {phone}")
+                    
+                    # Check if bot is active - verificar AMBOS identificadores
+                    bot_active = True
+                    
+                    # Primero verificar por teléfono si está disponible
+                    if phone:
+                        if not await bot_state_manager.is_bot_active(phone):
+                            bot_active = False
+                            logger.info(f"🔇 Bot pausado para teléfono {phone} (Chatwoot), mensaje ignorado")
+                    
+                    # También verificar por conversación  
+                    conv_identifier = f"conv_{conversation_id}"
+                    if not await bot_state_manager.is_bot_active(conv_identifier):
+                        bot_active = False
+                        logger.info(f"🔇 Bot pausado para conversación {conv_identifier} (Chatwoot), mensaje ignorado")
+                    
+                    if not bot_active:
                         return {"status": "bot_paused", "message": "ignored", "source": "chatwoot"}
                     
                     # Determine priority based on content
@@ -814,13 +894,24 @@ async def evolution_webhook(request: Request, background_tasks: BackgroundTasks)
         if message_content and from_number:
             user_id = f"whatsapp_{from_number}"
             
+            # Buscar si este teléfono tiene una conversación vinculada
+            conversation_id = get_conversation_from_phone(from_number)
+            if conversation_id:
+                logger.info(f"📱 Teléfono {from_number} vinculado a conversación {conversation_id}")
+            
             # Handle bot control commands first
             control_response = await handle_bot_control_commands(from_number, message_content)
             if control_response:
                 return control_response
             
-            # Check if bot is active for this user
-            if not await bot_state_manager.is_bot_active(from_number):
+            # Check if bot is active for this user (verificar ambos identificadores)
+            bot_active = await bot_state_manager.is_bot_active(from_number)
+            if conversation_id:
+                # También verificar por conversación si existe vinculación
+                conv_active = await bot_state_manager.is_bot_active(f"conv_{conversation_id}")
+                bot_active = bot_active and conv_active
+            
+            if not bot_active:
                 logger.info(f"🔇 Bot pausado para {from_number}, mensaje ignorado")
                 return {"status": "bot_paused", "message": "ignored"}
             
