@@ -479,21 +479,41 @@ async def handle_agent_private_note(data: Dict) -> Dict:
         conversation = data.get("conversation", {})
         conversation_id = str(conversation.get("id", ""))
         
-        # Extraer número de teléfono de la conversación si es posible
+        # Extraer número de teléfono de la conversación
         phone = None
         contact_phone = conversation.get("contact_phone")
         if contact_phone:
             phone = contact_phone.replace("+", "").replace("-", "").replace(" ", "")
         
+        # Buscar el número en contact_inbox si no está en contact_phone
+        if not phone:
+            contact_inbox = conversation.get("contact_inbox", {})
+            source_id = contact_inbox.get("source_id", "")
+            # source_id podría contener el número de teléfono
+            if source_id and source_id.replace("-", "").isdigit():
+                phone = source_id.replace("-", "")
+        
+        # Si aún no tenemos teléfono, buscar en additional_attributes
+        if not phone:
+            attrs = conversation.get("additional_attributes", {})
+            if "phone_number" in attrs:
+                phone = attrs["phone_number"].replace("+", "").replace("-", "").replace(" ", "")
+        
         agent_name = data.get("sender", {}).get("name", "Agente")
         
         logger.info(f"📝 Nota privada del {agent_name}: {content}")
+        logger.info(f"🔍 Teléfono extraído: {phone} | Conversación: {conversation_id}")
         
         # Comandos de control del bot
         if content in ["/bot pause", "/bot pausar", "bot pause", "bot pausar"]:
-            # Pausar bot para esta conversación
-            identifier = phone if phone else f"conv_{conversation_id}"
-            success = await bot_state_manager.pause_bot(identifier, f"agent_{agent_name}")
+            # Pausar bot - SIEMPRE usar el teléfono como identificador principal
+            if phone:
+                identifier = phone
+                success = await bot_state_manager.pause_bot(identifier, f"agent_{agent_name}")
+                logger.info(f"🎯 Pausando bot para teléfono: {identifier}")
+            else:
+                logger.error(f"❌ No se pudo extraer teléfono de la conversación {conversation_id}")
+                success = False
             
             if success:
                 # NO enviar mensaje - debe ser transparente para el usuario
@@ -511,9 +531,14 @@ async def handle_agent_private_note(data: Dict) -> Dict:
                 return {"status": "error", "message": "No se pudo pausar el bot"}
         
         elif content in ["/bot resume", "/bot activar", "bot resume", "bot activar"]:
-            # Reactivar bot para esta conversación
-            identifier = phone if phone else f"conv_{conversation_id}"
-            success = await bot_state_manager.resume_bot(identifier)
+            # Reactivar bot - usar teléfono como identificador
+            if phone:
+                identifier = phone
+                success = await bot_state_manager.resume_bot(identifier)
+                logger.info(f"🎯 Reactivando bot para teléfono: {identifier}")
+            else:
+                logger.error(f"❌ No se pudo extraer teléfono de la conversación {conversation_id}")
+                success = False
             
             if success:
                 # NO enviar mensaje - transición debe ser invisible
@@ -532,8 +557,12 @@ async def handle_agent_private_note(data: Dict) -> Dict:
         
         elif content in ["/bot status", "/bot estado", "bot status", "bot estado"]:
             # Consultar estado del bot
-            identifier = phone if phone else f"conv_{conversation_id}"
-            state = await bot_state_manager.get_bot_state(identifier)
+            if phone:
+                identifier = phone
+                state = await bot_state_manager.get_bot_state(identifier)
+            else:
+                logger.error(f"❌ No se pudo extraer teléfono de la conversación {conversation_id}")
+                return {"status": "error", "message": "No se pudo consultar estado"}
             
             status_msg = "🟢 ACTIVO" if state["active"] else "🔴 PAUSADO"
             reason = state.get("reason", "")
