@@ -456,60 +456,11 @@ async def handle_bot_control_commands(phone: str, message: str) -> Optional[Dict
     try:
         message_lower = message.lower().strip()
         
-        # Comandos para pausar el bot
-        if message_lower in ["/pausar", "/stop", "pausar", "stop"]:
-            success = await bot_state_manager.pause_bot(phone, "user_command")
-            if success:
-                await send_evolution_message(
-                    phone,
-                    "🔴 Bot pausado. Envía /activar para reactivarlo cuando necesites ayuda."
-                )
-                logger.info(f"🔴 Bot pausado por usuario {phone}")
-                return {"status": "bot_paused", "command": "user_pause"}
-            else:
-                await send_evolution_message(
-                    phone,
-                    "❌ No se pudo pausar el bot. Inténtalo de nuevo."
-                )
-                return {"status": "error", "command": "pause_failed"}
-        
-        # Comandos para activar el bot
-        elif message_lower in ["/activar", "/start", "activar", "start"]:
-            success = await bot_state_manager.resume_bot(phone)
-            if success:
-                await send_evolution_message(
-                    phone,
-                    "🟢 Bot activado. ¡Listo para ayudarte! "
-                    "¿En qué puedo asistirte hoy?"
-                )
-                logger.info(f"🟢 Bot reactivado por usuario {phone}")
-                return {"status": "bot_resumed", "command": "user_resume"}
-            else:
-                await send_evolution_message(
-                    phone,
-                    "❌ No se pudo activar el bot. Inténtalo de nuevo."
-                )
-                return {"status": "error", "command": "resume_failed"}
-        
-        # Comando para verificar estado
-        elif message_lower in ["/estado", "estado"]:
-            state = await bot_state_manager.get_bot_state(phone)
-            
-            if state["active"]:
-                status_msg = "🟢 El bot está ACTIVO y listo para ayudarte."
-            else:
-                reason = state.get("reason", "desconocida")
-                ttl = state.get("ttl_remaining")
-                status_msg = f"🔴 El bot está PAUSADO (Razón: {reason})"
-                if ttl and ttl > 0:
-                    hours = ttl // 3600
-                    minutes = (ttl % 3600) // 60
-                    status_msg += f"\nSe reactivará automáticamente en {hours}h {minutes}m"
-                status_msg += "\n\nEnvía /activar para reactivarlo ahora."
-            
-            await send_evolution_message(phone, status_msg)
-            logger.info(f"ℹ️ Estado consultado por usuario {phone}: {state['status']}")
-            return {"status": "status_sent", "command": "status_check", "state": state}
+        # Control del bot SOLO desde Chatwoot (agentes)
+        # Comandos desde WhatsApp son ignorados para mantener transparencia total
+        if message_lower in ["/pausar", "/stop", "/activar", "/start", "/estado", "pausar", "stop", "activar", "start", "estado"]:
+            logger.info(f"🔇 Comando de control ignorado desde WhatsApp: {message}")
+            return None
         
         # No es un comando de control
         return None
@@ -545,12 +496,8 @@ async def handle_agent_private_note(data: Dict) -> Dict:
             success = await bot_state_manager.pause_bot(identifier, f"agent_{agent_name}")
             
             if success:
-                # Enviar mensaje al usuario (transparente)
-                if phone:
-                    await send_evolution_message(
-                        phone,
-                        "Un momento por favor, un especialista revisará tu consulta."
-                    )
+                # NO enviar mensaje - debe ser transparente para el usuario
+                pass
                 
                 logger.info(f"🔴 Bot pausado por {agent_name} para {identifier}")
                 
@@ -569,12 +516,8 @@ async def handle_agent_private_note(data: Dict) -> Dict:
             success = await bot_state_manager.resume_bot(identifier)
             
             if success:
-                # Opcional: Enviar mensaje al usuario
-                if phone:
-                    await send_evolution_message(
-                        phone,
-                        "Perfecto, continuemos. ¿En qué más puedo ayudarte?"
-                    )
+                # NO enviar mensaje - transición debe ser invisible
+                pass
                 
                 logger.info(f"🟢 Bot reactivado por {agent_name} para {identifier}")
                 
@@ -736,13 +679,13 @@ async def chatwoot_webhook(request: Request, background_tasks: BackgroundTasks):
         
         logger.info(f"🔍 DEBUG - Event: {event}, MsgType: {message_type}, Sender: {sender_type}, Private: {is_private}, Content: '{content}'")
         
-        # Handle agent control commands (private notes or direct messages from agents)
+        # Handle agent control commands (notes or messages from agents)
         if (data.get("event") == "message_created" and 
-            data.get("message_type") == "incoming" and
             data.get("sender", {}).get("type") == "user"):
-            # This could be from an agent
+            # This is from an agent (user in Chatwoot = agent)
             content_lower = content.lower().strip()
             if any(cmd in content_lower for cmd in ["/bot pause", "/bot resume", "/bot status", "bot pause", "bot resume"]):
+                logger.info(f"🎯 Comando de agente detectado: {content}")
                 return await handle_agent_private_note(data)
         
         # Process only incoming messages from contacts
