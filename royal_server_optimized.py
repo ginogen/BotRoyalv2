@@ -723,17 +723,27 @@ async def chatwoot_webhook(request: Request, background_tasks: BackgroundTasks):
     try:
         data = await request.json()
         
-        # Log webhook if enabled
+        # Log webhook if enabled  
         if ENABLE_REQUEST_LOGGING:
             logger.info(f"📨 Chatwoot webhook: {json.dumps(data, indent=2)[:500]}...")
         
-        # Handle agent control via private notes
+        # DEBUG: Log key fields for bot control
+        event = data.get("event")
+        message_type = data.get("message_type") 
+        sender_type = data.get("sender", {}).get("type")
+        content = data.get("content", "")
+        is_private = data.get("private", False)
+        
+        logger.info(f"🔍 DEBUG - Event: {event}, MsgType: {message_type}, Sender: {sender_type}, Private: {is_private}, Content: '{content}'")
+        
+        # Handle agent control commands (private notes or direct messages from agents)
         if (data.get("event") == "message_created" and 
             data.get("message_type") == "incoming" and
-            data.get("sender", {}).get("type") == "user" and
-            data.get("private", False)):
-            # This is a private note from an agent
-            return await handle_agent_private_note(data)
+            data.get("sender", {}).get("type") == "user"):
+            # This could be from an agent
+            content_lower = content.lower().strip()
+            if any(cmd in content_lower for cmd in ["/bot pause", "/bot resume", "/bot status", "bot pause", "bot resume"]):
+                return await handle_agent_private_note(data)
         
         # Process only incoming messages from contacts
         if (data.get("event") == "message_created" and 
