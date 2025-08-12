@@ -34,6 +34,9 @@ from advanced_message_queue import (
 )
 from dynamic_worker_pool import initialize_worker_pool, shutdown_worker_pool, dynamic_pool
 
+# Bot state management
+from bot_state_manager import BotStateManager
+
 # Royal agents import
 try:
     from royal_agents import run_contextual_conversation_sync
@@ -99,6 +102,9 @@ system_metrics = {
     'average_response_time': 0.0,
     'last_health_check': None
 }
+
+# Bot state manager instance
+bot_state_manager: Optional[BotStateManager] = None
 
 # =====================================================
 # PYDANTIC MODELS
@@ -389,6 +395,130 @@ async def metrics_collector_task():
     logger.info("📊 Metrics collector stopped")
 
 # =====================================================
+# BOT CONTROL FUNCTIONS
+# =====================================================
+
+async def handle_label_association(data: Dict) -> Dict:
+    """
+    Manejar eventos de asociación de etiquetas desde Chatwoot
+    Detecta cuando se agrega/quita la etiqueta 'bot-paused'
+    """
+    try:
+        label_data = data.get("data", {})
+        action = label_data.get("action")  # "add" o "remove"
+        labels = label_data.get("labels", [])
+        chat_id = label_data.get("chatId", "").replace("@s.whatsapp.net", "")
+        
+        if ENABLE_REQUEST_LOGGING:
+            logger.info(f"🏷️ Label event: {action} - Labels: {labels} - Chat: {chat_id}")
+        
+        if "bot-paused" in labels and chat_id:
+            if action == "add":
+                # Pausar bot
+                success = await bot_state_manager.pause_bot(chat_id, "agent_control")
+                if success:
+                    # Notificar al usuario
+                    await send_evolution_message(
+                        chat_id, 
+                        "🔴 Un agente ha tomado control de esta conversación. "
+                        "El asistente virtual está pausado temporalmente."
+                    )
+                    logger.info(f"🔴 Bot pausado por agente para {chat_id}")
+                
+            elif action == "remove":
+                # Reactivar bot
+                success = await bot_state_manager.resume_bot(chat_id)
+                if success:
+                    # Notificar al usuario
+                    await send_evolution_message(
+                        chat_id,
+                        "🟢 El asistente virtual está nuevamente disponible. "
+                        "¿En qué puedo ayudarte?"
+                    )
+                    logger.info(f"🟢 Bot reactivado por agente para {chat_id}")
+        
+        return {
+            "status": "label_processed", 
+            "action": action, 
+            "labels": labels,
+            "chat_id": chat_id
+        }
+        
+    except Exception as e:
+        logger.error(f"❌ Error procesando etiquetas: {e}")
+        return {"status": "error", "message": str(e)}
+
+async def handle_bot_control_commands(phone: str, message: str) -> Optional[Dict]:
+    """
+    Manejar comandos de control del bot desde WhatsApp
+    Comandos: /pausar, /stop, /activar, /start, /estado
+    """
+    try:
+        message_lower = message.lower().strip()
+        
+        # Comandos para pausar el bot
+        if message_lower in ["/pausar", "/stop", "pausar", "stop"]:
+            success = await bot_state_manager.pause_bot(phone, "user_command")
+            if success:
+                await send_evolution_message(
+                    phone,
+                    "🔴 Bot pausado. Envía /activar para reactivarlo cuando necesites ayuda."
+                )
+                logger.info(f"🔴 Bot pausado por usuario {phone}")
+                return {"status": "bot_paused", "command": "user_pause"}
+            else:
+                await send_evolution_message(
+                    phone,
+                    "❌ No se pudo pausar el bot. Inténtalo de nuevo."
+                )
+                return {"status": "error", "command": "pause_failed"}
+        
+        # Comandos para activar el bot
+        elif message_lower in ["/activar", "/start", "activar", "start"]:
+            success = await bot_state_manager.resume_bot(phone)
+            if success:
+                await send_evolution_message(
+                    phone,
+                    "🟢 Bot activado. ¡Listo para ayudarte! "
+                    "¿En qué puedo asistirte hoy?"
+                )
+                logger.info(f"🟢 Bot reactivado por usuario {phone}")
+                return {"status": "bot_resumed", "command": "user_resume"}
+            else:
+                await send_evolution_message(
+                    phone,
+                    "❌ No se pudo activar el bot. Inténtalo de nuevo."
+                )
+                return {"status": "error", "command": "resume_failed"}
+        
+        # Comando para verificar estado
+        elif message_lower in ["/estado", "estado"]:
+            state = await bot_state_manager.get_bot_state(phone)
+            
+            if state["active"]:
+                status_msg = "🟢 El bot está ACTIVO y listo para ayudarte."
+            else:
+                reason = state.get("reason", "desconocida")
+                ttl = state.get("ttl_remaining")
+                status_msg = f"🔴 El bot está PAUSADO (Razón: {reason})"
+                if ttl and ttl > 0:
+                    hours = ttl // 3600
+                    minutes = (ttl % 3600) // 60
+                    status_msg += f"\nSe reactivará automáticamente en {hours}h {minutes}m"
+                status_msg += "\n\nEnvía /activar para reactivarlo ahora."
+            
+            await send_evolution_message(phone, status_msg)
+            logger.info(f"ℹ️ Estado consultado por usuario {phone}: {state['status']}")
+            return {"status": "status_sent", "command": "status_check", "state": state}
+        
+        # No es un comando de control
+        return None
+        
+    except Exception as e:
+        logger.error(f"❌ Error procesando comando de control: {e}")
+        return {"status": "error", "message": str(e)}
+
+# =====================================================
 # API ENDPOINTS
 # =====================================================
 
@@ -565,7 +695,12 @@ async def evolution_webhook(request: Request, background_tasks: BackgroundTasks)
         event = data.get("event", "")
         message_data_raw = data.get("data", {})
         
-        # Filter out events we don't want to process
+        # Handle different event types
+        if event == "labels.association":
+            # Handle label changes from Chatwoot
+            return await handle_label_association(data)
+        
+        # Process regular messages
         if event not in ["messages.upsert"]:
             logger.info(f"🔇 Ignoring event: {event}")
             return {"status": "received", "ignored": event}
@@ -582,6 +717,16 @@ async def evolution_webhook(request: Request, background_tasks: BackgroundTasks)
         
         if message_content and from_number:
             user_id = f"whatsapp_{from_number}"
+            
+            # Handle bot control commands first
+            control_response = await handle_bot_control_commands(from_number, message_content)
+            if control_response:
+                return control_response
+            
+            # Check if bot is active for this user
+            if not await bot_state_manager.is_bot_active(from_number):
+                logger.info(f"🔇 Bot pausado para {from_number}, mensaje ignorado")
+                return {"status": "bot_paused", "message": "ignored"}
             
             # Auto-prioritize based on content
             priority = MessagePriority.NORMAL
@@ -645,6 +790,158 @@ async def test_message(test_msg: TestMessage):
         "message": test_msg.message,
         "queue_info": "Message added to advanced priority queue for processing"
     }
+
+# =====================================================
+# BOT STATE CONTROL ENDPOINTS
+# =====================================================
+
+@app.get("/bot/status/{identifier}")
+async def get_bot_status(identifier: str):
+    """
+    Obtener el estado del bot para un identificador específico
+    
+    Args:
+        identifier: Número de teléfono o ID de conversación
+    """
+    try:
+        state = await bot_state_manager.get_bot_state(identifier)
+        return {
+            "identifier": identifier,
+            "bot_active": state["active"],
+            "status": state["status"],
+            "reason": state["reason"],
+            "paused_at": state["paused_at"],
+            "ttl_remaining": state["ttl_remaining"],
+            "timestamp": datetime.now().isoformat()
+        }
+    except Exception as e:
+        logger.error(f"❌ Error obteniendo estado del bot: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/bot/pause/{identifier}")
+async def pause_bot_endpoint(identifier: str, reason: str = "manual", ttl: int = 86400):
+    """
+    Pausar el bot para un identificador específico
+    
+    Args:
+        identifier: Número de teléfono o ID de conversación
+        reason: Razón de la pausa
+        ttl: Tiempo de vida en segundos (default: 24 horas)
+    """
+    try:
+        success = await bot_state_manager.pause_bot(identifier, reason, ttl)
+        
+        if success:
+            # Enviar notificación si es un número de WhatsApp
+            if identifier.isdigit() and len(identifier) >= 10:
+                await send_evolution_message(
+                    identifier,
+                    f"🔴 El bot ha sido pausado por el administrador. "
+                    f"Razón: {reason}. Envía /activar para intentar reactivarlo."
+                )
+            
+            return {
+                "status": "success",
+                "message": f"Bot pausado para {identifier}",
+                "reason": reason,
+                "ttl": ttl,
+                "timestamp": datetime.now().isoformat()
+            }
+        else:
+            raise HTTPException(status_code=500, detail="No se pudo pausar el bot")
+    
+    except Exception as e:
+        logger.error(f"❌ Error pausando bot: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/bot/resume/{identifier}")
+async def resume_bot_endpoint(identifier: str):
+    """
+    Reactivar el bot para un identificador específico
+    
+    Args:
+        identifier: Número de teléfono o ID de conversación
+    """
+    try:
+        success = await bot_state_manager.resume_bot(identifier)
+        
+        if success:
+            # Enviar notificación si es un número de WhatsApp
+            if identifier.isdigit() and len(identifier) >= 10:
+                await send_evolution_message(
+                    identifier,
+                    "🟢 El bot ha sido reactivado por el administrador. "
+                    "¡Listo para ayudarte!"
+                )
+            
+            return {
+                "status": "success",
+                "message": f"Bot reactivado para {identifier}",
+                "timestamp": datetime.now().isoformat()
+            }
+        else:
+            return {
+                "status": "info",
+                "message": f"El bot ya estaba activo para {identifier}",
+                "timestamp": datetime.now().isoformat()
+            }
+    
+    except Exception as e:
+        logger.error(f"❌ Error reactivando bot: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/bot/pause-all")
+async def pause_all_bots_endpoint(reason: str = "maintenance"):
+    """
+    Pausar todos los bots (útil para mantenimiento)
+    
+    Args:
+        reason: Razón del mantenimiento
+    """
+    try:
+        count = await bot_state_manager.pause_all_bots(reason)
+        
+        return {
+            "status": "success",
+            "message": f"{count} bots pausados",
+            "reason": reason,
+            "timestamp": datetime.now().isoformat()
+        }
+    
+    except Exception as e:
+        logger.error(f"❌ Error pausando todos los bots: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/bot/resume-all")
+async def resume_all_bots_endpoint():
+    """Reactivar todos los bots"""
+    try:
+        count = await bot_state_manager.resume_all_bots()
+        
+        return {
+            "status": "success",
+            "message": f"{count} bots reactivados",
+            "timestamp": datetime.now().isoformat()
+        }
+    
+    except Exception as e:
+        logger.error(f"❌ Error reactivando todos los bots: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/bot/stats")
+async def get_bot_stats():
+    """Obtener estadísticas del sistema de bots"""
+    try:
+        stats = await bot_state_manager.get_stats()
+        
+        return {
+            "timestamp": datetime.now().isoformat(),
+            **stats
+        }
+    
+    except Exception as e:
+        logger.error(f"❌ Error obteniendo estadísticas: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 # =====================================================
 # MONITORING ENDPOINTS
@@ -1004,7 +1301,15 @@ async def search_business_info(q: str = "", category: str = ""):
 @app.on_event("startup")
 async def startup_event():
     """Initialize all systems on startup"""
+    global bot_state_manager
+    
     logger.info("🚀 Starting Royal Bot - Maximum Efficiency Edition")
+    
+    # Initialize bot state manager
+    logger.info("🤖 Initializing bot state manager...")
+    redis_url = os.getenv("REDIS_URL", "redis://localhost:6379")
+    bot_state_manager = BotStateManager(redis_url)
+    await bot_state_manager.initialize()
     
     # Initialize hybrid context manager
     logger.info("🧠 Initializing hybrid context manager...")
@@ -1031,11 +1336,18 @@ async def startup_event():
 @app.on_event("shutdown")
 async def shutdown_event():
     """Graceful shutdown of all systems"""
+    global bot_state_manager
+    
     logger.info("🛑 Shutting down Royal Bot - Maximum Efficiency Edition")
     
     # Shutdown worker pool first (stop processing new messages)
     logger.info("⚡ Shutting down worker pool...")
     await shutdown_worker_pool()
+    
+    # Close bot state manager connections
+    logger.info("🤖 Closing bot state manager...")
+    if bot_state_manager:
+        await bot_state_manager.close()
     
     # Close context manager connections
     logger.info("🧠 Closing context manager connections...")
