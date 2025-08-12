@@ -518,6 +518,101 @@ async def handle_bot_control_commands(phone: str, message: str) -> Optional[Dict
         logger.error(f"❌ Error procesando comando de control: {e}")
         return {"status": "error", "message": str(e)}
 
+async def handle_agent_private_note(data: Dict) -> Dict:
+    """
+    Manejar notas privadas de agentes en Chatwoot para control del bot
+    Comandos: /bot pause, /bot resume, /bot status
+    """
+    try:
+        content = data.get("content", "").strip().lower()
+        conversation = data.get("conversation", {})
+        conversation_id = str(conversation.get("id", ""))
+        
+        # Extraer número de teléfono de la conversación si es posible
+        phone = None
+        contact_phone = conversation.get("contact_phone")
+        if contact_phone:
+            phone = contact_phone.replace("+", "").replace("-", "").replace(" ", "")
+        
+        agent_name = data.get("sender", {}).get("name", "Agente")
+        
+        logger.info(f"📝 Nota privada del {agent_name}: {content}")
+        
+        # Comandos de control del bot
+        if content in ["/bot pause", "/bot pausar", "bot pause", "bot pausar"]:
+            # Pausar bot para esta conversación
+            identifier = phone if phone else f"conv_{conversation_id}"
+            success = await bot_state_manager.pause_bot(identifier, f"agent_{agent_name}")
+            
+            if success:
+                # Enviar mensaje al usuario (transparente)
+                if phone:
+                    await send_evolution_message(
+                        phone,
+                        "Un momento por favor, un especialista revisará tu consulta."
+                    )
+                
+                logger.info(f"🔴 Bot pausado por {agent_name} para {identifier}")
+                
+                return {
+                    "status": "bot_paused",
+                    "message": f"Bot pausado por {agent_name}",
+                    "identifier": identifier
+                }
+            else:
+                logger.error(f"❌ No se pudo pausar bot para {identifier}")
+                return {"status": "error", "message": "No se pudo pausar el bot"}
+        
+        elif content in ["/bot resume", "/bot activar", "bot resume", "bot activar"]:
+            # Reactivar bot para esta conversación
+            identifier = phone if phone else f"conv_{conversation_id}"
+            success = await bot_state_manager.resume_bot(identifier)
+            
+            if success:
+                # Opcional: Enviar mensaje al usuario
+                if phone:
+                    await send_evolution_message(
+                        phone,
+                        "Perfecto, continuemos. ¿En qué más puedo ayudarte?"
+                    )
+                
+                logger.info(f"🟢 Bot reactivado por {agent_name} para {identifier}")
+                
+                return {
+                    "status": "bot_resumed",
+                    "message": f"Bot reactivado por {agent_name}",
+                    "identifier": identifier
+                }
+            else:
+                logger.info(f"ℹ️ Bot ya estaba activo para {identifier}")
+                return {"status": "info", "message": "Bot ya estaba activo"}
+        
+        elif content in ["/bot status", "/bot estado", "bot status", "bot estado"]:
+            # Consultar estado del bot
+            identifier = phone if phone else f"conv_{conversation_id}"
+            state = await bot_state_manager.get_bot_state(identifier)
+            
+            status_msg = "🟢 ACTIVO" if state["active"] else "🔴 PAUSADO"
+            reason = state.get("reason", "")
+            if reason:
+                status_msg += f" ({reason})"
+            
+            logger.info(f"ℹ️ Estado consultado por {agent_name}: {status_msg}")
+            
+            return {
+                "status": "status_checked",
+                "bot_status": status_msg,
+                "state": state,
+                "identifier": identifier
+            }
+        
+        # No es un comando de control del bot
+        return {"status": "ignored", "message": "Nota privada ignorada"}
+        
+    except Exception as e:
+        logger.error(f"❌ Error procesando nota privada: {e}")
+        return {"status": "error", "message": str(e)}
+
 # =====================================================
 # API ENDPOINTS
 # =====================================================
@@ -632,6 +727,14 @@ async def chatwoot_webhook(request: Request, background_tasks: BackgroundTasks):
         if ENABLE_REQUEST_LOGGING:
             logger.info(f"📨 Chatwoot webhook: {json.dumps(data, indent=2)[:500]}...")
         
+        # Handle agent control via private notes
+        if (data.get("event") == "message_created" and 
+            data.get("message_type") == "incoming" and
+            data.get("sender", {}).get("type") == "user" and
+            data.get("private", False)):
+            # This is a private note from an agent
+            return await handle_agent_private_note(data)
+        
         # Process only incoming messages from contacts
         if (data.get("event") == "message_created" and 
             data.get("message_type") == "incoming" and
@@ -646,6 +749,17 @@ async def chatwoot_webhook(request: Request, background_tasks: BackgroundTasks):
                 if contact_id is not None:
                     user_id = f"chatwoot_{str(contact_id)}"
                     conversation_id = str(conversation["id"])
+                    
+                    # Extract phone number for state checking
+                    phone = None
+                    if conversation.get("contact_phone"):
+                        phone = conversation["contact_phone"].replace("+", "").replace("-", "").replace(" ", "")
+                    
+                    # Check if bot is active for this conversation/phone
+                    identifier = phone if phone else f"conv_{conversation_id}"
+                    if not await bot_state_manager.is_bot_active(identifier):
+                        logger.info(f"🔇 Bot pausado para {identifier} (Chatwoot), mensaje ignorado")
+                        return {"status": "bot_paused", "message": "ignored", "source": "chatwoot"}
                     
                     # Determine priority based on content
                     priority = MessagePriority.NORMAL
