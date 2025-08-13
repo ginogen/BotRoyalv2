@@ -792,18 +792,31 @@ async def resume_bot_for_both_channels(phone: str, conversation_id: str) -> bool
 # BOT CONTROL FUNCTIONS  
 # =====================================================
 
-def detect_bot_paused_tag(labels: list) -> bool:
+def detect_bot_control_tags(labels: list) -> dict:
     """
-    Detecta si la etiqueta 'bot-paused' está presente en la lista de etiquetas
+    Detecta etiquetas de control del bot ('bot-paused' y 'bot-active') en la lista de etiquetas
     
     Args:
         labels: Lista de etiquetas de la conversación
         
     Returns:
-        True si bot-paused está presente, False si no
+        Dict con información de las etiquetas detectadas:
+        {
+            'bot_paused': bool,
+            'bot_active': bool, 
+            'action': 'pause'|'activate'|None,
+            'priority_tag': str|None
+        }
     """
+    result = {
+        'bot_paused': False,
+        'bot_active': False,
+        'action': None,
+        'priority_tag': None
+    }
+    
     if not labels or not isinstance(labels, list):
-        return False
+        return result
         
     for label in labels:
         # Manejar diferentes formatos de etiqueta
@@ -814,11 +827,24 @@ def detect_bot_paused_tag(labels: list) -> bool:
         elif isinstance(label, str):
             label_name = label
         
-        # Verificar si es la etiqueta bot-paused
-        if label_name.lower().strip() == 'bot-paused':
-            return True
+        label_name = label_name.lower().strip()
+        
+        # Verificar etiquetas de control
+        if label_name == 'bot-paused':
+            result['bot_paused'] = True
+        elif label_name == 'bot-active':
+            result['bot_active'] = True
     
-    return False
+    # Determinar acción basada en prioridad
+    # bot-active tiene precedencia sobre bot-paused
+    if result['bot_active']:
+        result['action'] = 'activate'
+        result['priority_tag'] = 'bot-active'
+    elif result['bot_paused']:
+        result['action'] = 'pause'
+        result['priority_tag'] = 'bot-paused'
+    
+    return result
 
 async def handle_conversation_updated(data: Dict) -> Dict:
     """
@@ -871,9 +897,9 @@ async def handle_conversation_updated(data: Dict) -> Dict:
         
         logger.info(f"🔍 Etiquetas encontradas para conversación {conversation_id}: {labels}")
         
-        # Detectar si bot-paused está presente
-        has_bot_paused_tag = detect_bot_paused_tag(labels)
-        logger.info(f"🎯 Etiqueta bot-paused detectada: {has_bot_paused_tag}")
+        # Detectar etiquetas de control del bot
+        control_tags = detect_bot_control_tags(labels)
+        logger.info(f"🎯 Etiquetas de control detectadas: {control_tags}")
         
         # Determinar identificadores para el estado del bot
         identifiers = []
@@ -886,45 +912,69 @@ async def handle_conversation_updated(data: Dict) -> Dict:
         conv_identifier = f"conv_{conversation_id}"
         identifiers.append(conv_identifier)
         
-        # Procesar cambio de estado del bot
+        # Procesar cambio de estado del bot basado en etiquetas de control
         actions_taken = []
+        action = control_tags.get('action')
+        priority_tag = control_tags.get('priority_tag')
         
         for identifier in identifiers:
             # Obtener estado actual del bot para este identificador
             current_state = await bot_state_manager.get_bot_state(identifier)
             is_currently_paused = not current_state.get("active", True)
+            current_reason = current_state.get("reason", "")
             
-            logger.info(f"🔍 Estado actual para {identifier}: pausado={is_currently_paused}")
+            logger.info(f"🔍 Estado actual para {identifier}: pausado={is_currently_paused}, razón='{current_reason}'")
             
-            if has_bot_paused_tag and not is_currently_paused:
-                # Pausar bot - etiqueta presente y bot no estaba pausado
-                success = await bot_state_manager.pause_bot(
-                    identifier, 
-                    reason="etiqueta_bot_paused",
-                    ttl=86400  # 24 horas por defecto
-                )
-                
-                if success:
-                    actions_taken.append(f"paused_{identifier}")
-                    logger.info(f"🔴 Bot pausado por etiqueta para {identifier}")
-                
-            elif not has_bot_paused_tag and is_currently_paused:
-                # Reactivar bot - etiqueta removida y bot estaba pausado
-                # Solo reactivar si fue pausado por etiqueta
-                if current_state.get("reason") == "etiqueta_bot_paused":
+            if action == 'activate':
+                # REACTIVAR BOT - etiqueta bot-active presente
+                if is_currently_paused:
                     success = await bot_state_manager.resume_bot(identifier)
                     
                     if success:
-                        actions_taken.append(f"resumed_{identifier}")
-                        logger.info(f"🟢 Bot reactivado por remoción de etiqueta para {identifier}")
+                        actions_taken.append(f"force_resumed_{identifier}")
+                        logger.info(f"🟢 Bot FORZADAMENTE reactivado por etiqueta '{priority_tag}' para {identifier}")
+                        logger.info(f"   ↳ Razón de pausa anterior sobreescrita: '{current_reason}'")
+                    else:
+                        logger.error(f"❌ Error reactivando bot por etiqueta '{priority_tag}' para {identifier}")
                 else:
-                    logger.info(f"ℹ️ Bot pausado por otra razón ({current_state.get('reason')}), no reactivar automáticamente")
+                    logger.info(f"ℹ️ Bot ya estaba activo para {identifier}, etiqueta '{priority_tag}' ignorada")
+                
+            elif action == 'pause':
+                # PAUSAR BOT - etiqueta bot-paused presente
+                if not is_currently_paused:
+                    success = await bot_state_manager.pause_bot(
+                        identifier, 
+                        reason="etiqueta_bot_paused",
+                        ttl=86400  # 24 horas por defecto
+                    )
+                    
+                    if success:
+                        actions_taken.append(f"paused_{identifier}")
+                        logger.info(f"🔴 Bot pausado por etiqueta '{priority_tag}' para {identifier}")
+                    else:
+                        logger.error(f"❌ Error pausando bot por etiqueta '{priority_tag}' para {identifier}")
+                else:
+                    logger.info(f"ℹ️ Bot ya estaba pausado para {identifier}, etiqueta '{priority_tag}' ignorada")
+                
+            elif not control_tags['bot_paused'] and not control_tags['bot_active']:
+                # SIN ETIQUETAS DE CONTROL - verificar si se removieron etiquetas
+                if is_currently_paused and current_reason == "etiqueta_bot_paused":
+                    # Solo reactivar si fue pausado específicamente por etiqueta bot-paused
+                    success = await bot_state_manager.resume_bot(identifier)
+                    
+                    if success:
+                        actions_taken.append(f"auto_resumed_{identifier}")
+                        logger.info(f"🟢 Bot reactivado automáticamente por remoción de etiqueta bot-paused para {identifier}")
+                    else:
+                        logger.error(f"❌ Error reactivando bot automáticamente para {identifier}")
+                else:
+                    logger.info(f"ℹ️ Sin etiquetas de control para {identifier}, manteniendo estado actual")
         
         return {
             "status": "processed",
             "conversation_id": conversation_id,
             "phone": phone,
-            "has_bot_paused_tag": has_bot_paused_tag,
+            "control_tags": control_tags,
             "actions_taken": actions_taken,
             "identifiers": identifiers
         }
@@ -2437,17 +2487,18 @@ async def shutdown_event():
 # TEST ENDPOINTS FOR BOT-PAUSED TAG SYSTEM
 # =====================================================
 
-@app.post("/test/bot-paused-tag")
-async def test_bot_paused_tag_endpoint(request: Request):
+@app.post("/test/bot-control-tags")
+async def test_bot_control_tags_endpoint(request: Request):
     """
-    Endpoint de prueba para simular eventos conversation_updated con etiquetas bot-paused
+    Endpoint de prueba para simular eventos conversation_updated con etiquetas de control del bot
     
     Body esperado:
     {
         "conversation_id": "123",
         "phone": "5491112345678", 
-        "has_bot_paused_tag": true/false,
-        "labels": [{"title": "bot-paused"}] // opcional
+        "bot_paused": true/false,     // opcional
+        "bot_active": true/false,     // opcional  
+        "labels": [{"title": "bot-paused"}, {"title": "bot-active"}] // opcional
     }
     """
     try:
@@ -2455,12 +2506,16 @@ async def test_bot_paused_tag_endpoint(request: Request):
         
         conversation_id = data.get("conversation_id", "test_123")
         phone = data.get("phone", "5491112345678") 
-        has_tag = data.get("has_bot_paused_tag", False)
+        bot_paused = data.get("bot_paused", False)
+        bot_active = data.get("bot_active", False)
         labels = data.get("labels", [])
         
-        # Si no hay labels pero has_bot_paused_tag es True, crear la etiqueta
-        if has_tag and not labels:
-            labels = [{"title": "bot-paused"}]
+        # Si no hay labels pero se especificaron flags, crear las etiquetas
+        if not labels:
+            if bot_paused:
+                labels.append({"title": "bot-paused"})
+            if bot_active:
+                labels.append({"title": "bot-active"})
         
         # Crear payload simulado de conversation_updated
         simulated_webhook_data = {
@@ -2479,7 +2534,7 @@ async def test_bot_paused_tag_endpoint(request: Request):
         }
         
         logger.info(f"🧪 TEST: Simulando conversation_updated para conversación {conversation_id}")
-        logger.info(f"🧪 TEST: Teléfono: {phone}, Bot-paused tag: {has_tag}")
+        logger.info(f"🧪 TEST: Teléfono: {phone}, bot-paused: {bot_paused}, bot-active: {bot_active}")
         
         # Procesar usando la función existente
         result = await handle_conversation_updated(simulated_webhook_data)
@@ -2534,18 +2589,100 @@ async def test_conversation_webhook_endpoint(request: Request):
             detail=f"Error en test de webhook: {str(e)}"
         )
 
+@app.post("/test/complaint-scenario")
+async def test_complaint_scenario_endpoint(request: Request):
+    """
+    Endpoint de prueba para simular el escenario completo de reclamo → pausa → reactivación
+    
+    Body esperado:
+    {
+        "conversation_id": "123",
+        "phone": "5491112345678",
+        "step": "complaint"|"support_assigns"|"agent_reactivates"
+    }
+    """
+    try:
+        data = await request.json()
+        
+        conversation_id = data.get("conversation_id", "test_complaint_123")
+        phone = data.get("phone", "5491112345678")
+        step = data.get("step", "complaint")
+        
+        logger.info(f"🧪 TEST RECLAMO: Simulando paso '{step}' para conversación {conversation_id}")
+        
+        if step == "complaint":
+            # Simular mensaje de reclamo
+            complaint_message = "Tengo un reclamo con mi pedido, llegó dañado"
+            
+            # Simular la lógica de check_and_route_by_keywords
+            # En realidad esto pausaría el bot con razón "Asignado a equipo support"
+            success = await bot_state_manager.pause_bot(
+                phone, 
+                reason="Asignado a equipo support",
+                ttl=86400  # 24 horas
+            )
+            
+            if success:
+                return {
+                    "status": "complaint_processed",
+                    "step": step,
+                    "conversation_id": conversation_id,
+                    "phone": phone,
+                    "message": "Bot pausado por reclamo (simulado)",
+                    "bot_paused": True,
+                    "pause_reason": "Asignado a equipo support",
+                    "ttl_hours": 24
+                }
+        
+        elif step == "agent_reactivates":
+            # Simular que agente agrega etiqueta bot-active
+            webhook_data = {
+                "event": "conversation_updated",
+                "conversation": {
+                    "id": conversation_id,
+                    "contact_phone": f"+{phone}",
+                    "labels": [
+                        {"title": "bot-active"}  # Etiqueta de reactivación
+                    ]
+                }
+            }
+            
+            logger.info(f"🧪 TEST RECLAMO: Agente reactiva bot con etiqueta bot-active")
+            result = await handle_conversation_updated(webhook_data)
+            
+            return {
+                "status": "agent_reactivation_processed",
+                "step": step,
+                "webhook_result": result,
+                "expected_action": "Bot debería reactivarse inmediatamente"
+            }
+            
+        else:
+            return {
+                "status": "error",
+                "message": f"Paso desconocido: {step}. Usar: 'complaint' o 'agent_reactivates'"
+            }
+        
+    except Exception as e:
+        logger.error(f"❌ Error en test de escenario de reclamo: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error en test de reclamo: {str(e)}"
+        )
+
 @app.get("/test/bot-paused-instructions")
 async def get_bot_paused_instructions(request: Request):
     """
     Endpoint que devuelve las instrucciones para usar el sistema bot-paused
     """
     return {
-        "sistema": "Control de Bot con Etiqueta bot-paused",
-        "descripcion": "Sistema simplificado para pausar/reactivar el bot desde Chatwoot",
+        "sistema": "Control de Bot con Etiquetas bot-paused y bot-active",
+        "descripcion": "Sistema para pausar/reactivar el bot desde Chatwoot con control de prioridades",
         
         "uso": {
             "pausar_bot": "Agregar etiqueta 'bot-paused' a la conversación en Chatwoot",
-            "reactivar_bot": "Remover etiqueta 'bot-paused' de la conversación en Chatwoot"
+            "reactivar_bot_normal": "Remover etiqueta 'bot-paused' de la conversación en Chatwoot", 
+            "reactivar_bot_forzado": "Agregar etiqueta 'bot-active' (funciona para cualquier pausa)"
         },
         
         "configuracion_webhook": {
@@ -2554,48 +2691,85 @@ async def get_bot_paused_instructions(request: Request):
             "metodo": "POST"
         },
         
-        "etiqueta": {
-            "nombre": "bot-paused",
-            "tipo": "case-sensitive",
-            "formato": "Exactamente 'bot-paused' (sin espacios, con guión)"
+        "etiquetas": {
+            "bot_paused": {
+                "nombre": "bot-paused",
+                "funcion": "Pausar bot",
+                "tipo": "case-sensitive",
+                "formato": "Exactamente 'bot-paused' (sin espacios, con guión)"
+            },
+            "bot_active": {
+                "nombre": "bot-active", 
+                "funcion": "Reactivar bot (override cualquier pausa)",
+                "tipo": "case-sensitive",
+                "formato": "Exactamente 'bot-active' (sin espacios, con guión)",
+                "prioridad": "ALTA - Tiene precedencia sobre bot-paused"
+            }
         },
         
         "funcionamiento": [
-            "1. Agente agrega etiqueta 'bot-paused' en Chatwoot",
-            "2. Webhook conversation_updated se dispara inmediatamente",
-            "3. Sistema detecta etiqueta y pausa bot para ese usuario", 
-            "4. Bot no responde mensajes del usuario",
-            "5. Agente maneja conversación manualmente",
-            "6. Agente remueve etiqueta 'bot-paused' cuando termine",
-            "7. Webhook se dispara nuevamente", 
-            "8. Sistema detecta que no hay etiqueta y reactiva bot",
-            "9. Bot vuelve a responder normalmente"
+            "1. Sistema detecta reclamos → Bot pausado por 24h (razón: 'Asignado a equipo support')",
+            "2. Agente resuelve problema y quiere reactivar bot",
+            "3. Agente agrega etiqueta 'bot-active' en Chatwoot",
+            "4. Webhook conversation_updated se dispara inmediatamente",
+            "5. Sistema detecta 'bot-active' → Bot reactivado INMEDIATAMENTE",
+            "6. Bot funciona normalmente (sin esperar 24h)",
+            "7. ALTERNATIVO: Usar 'bot-paused' para pausar manualmente",
+            "8. PRIORIDAD: 'bot-active' siempre gana sobre 'bot-paused'"
         ],
         
         "endpoints_test": [
-            "POST /test/bot-paused-tag - Simular etiqueta bot-paused",
+            "POST /test/bot-control-tags - Simular etiquetas bot-paused/bot-active",
             "POST /test/conversation-webhook - Simular webhook completo",
+            "POST /test/complaint-scenario - Simular reclamo completo + reactivación",
             "GET /bot/status/{phone} - Ver estado actual del bot",
             "GET /test/bot-paused-instructions - Estas instrucciones"
         ],
         
         "ejemplos": {
-            "pausar_bot": {
+            "pausar_bot_manual": {
                 "metodo": "POST",
-                "url": "/test/bot-paused-tag",
+                "url": "/test/bot-control-tags",
                 "body": {
                     "conversation_id": "123", 
                     "phone": "5491112345678",
-                    "has_bot_paused_tag": True
+                    "bot_paused": True
                 }
             },
-            "reactivar_bot": {
+            "reactivar_bot_normal": {
                 "metodo": "POST", 
-                "url": "/test/bot-paused-tag",
+                "url": "/test/bot-control-tags",
                 "body": {
                     "conversation_id": "123",
                     "phone": "5491112345678", 
-                    "has_bot_paused_tag": False
+                    "bot_paused": False
+                }
+            },
+            "reactivar_bot_forzado": {
+                "metodo": "POST",
+                "url": "/test/bot-control-tags", 
+                "body": {
+                    "conversation_id": "123",
+                    "phone": "5491112345678",
+                    "bot_active": True
+                }
+            },
+            "escenario_reclamo": {
+                "metodo": "POST",
+                "url": "/test/complaint-scenario",
+                "body": {
+                    "conversation_id": "complaint_123",
+                    "phone": "5491112345678",
+                    "step": "complaint"
+                }
+            },
+            "escenario_reactivacion": {
+                "metodo": "POST", 
+                "url": "/test/complaint-scenario",
+                "body": {
+                    "conversation_id": "complaint_123",
+                    "phone": "5491112345678", 
+                    "step": "agent_reactivates"
                 }
             }
         }
