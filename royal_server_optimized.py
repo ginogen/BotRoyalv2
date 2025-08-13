@@ -1206,13 +1206,23 @@ async def evolution_webhook(request: Request, background_tasks: BackgroundTasks)
         
         # Process regular messages
         if event not in ["messages.upsert"]:
-            logger.info(f"🔇 Ignoring event: {event}")
+            # Log especial para identificar qué eventos llegan
+            if event == "messages.update":
+                logger.debug(f"🔇 Ignoring event: {event}")  # Menos verboso
+            else:
+                logger.info(f"🔇 Ignoring event: {event}")
             return {"status": "received", "ignored": event}
         
         logger.info(f"📱 Processing messages.upsert event")
         
+        # Debug: Mostrar estructura del mensaje completo
+        logger.info(f"📱 Raw message data keys: {list(message_data_raw.keys())}")
+        logger.info(f"📱 Raw message structure: {json.dumps(message_data_raw, indent=2)[:1000]}...")
+        
         # Check if message is from us (fromMe: true)
         from_me = message_data_raw.get("key", {}).get("fromMe", False)
+        logger.info(f"📱 fromMe value: {from_me}")
+        
         if from_me:
             logger.info("🔇 Ignoring message from bot itself (fromMe: true)")
             return {"status": "received", "ignored": "fromMe"}
@@ -1221,7 +1231,33 @@ async def evolution_webhook(request: Request, background_tasks: BackgroundTasks)
         message_content = message_data_raw.get("message", {}).get("conversation", "").strip()
         from_number = message_data_raw.get("key", {}).get("remoteJid", "").replace("@s.whatsapp.net", "")
         
+        # Debug: Mostrar campos extraídos
+        logger.info(f"📱 Extracted - Content: '{message_content}', From: '{from_number}'")
+        logger.info(f"📱 Message object keys: {list(message_data_raw.get('message', {}).keys())}")
+        logger.info(f"📱 Key object: {message_data_raw.get('key', {})}")
+        
         if message_content and from_number:
+            # Generar ID único para prevenir procesamiento duplicado
+            message_id = message_data_raw.get("key", {}).get("id", "")
+            processing_key = f"{from_number}:{message_id}:{message_content[:20]}"
+            
+            # Verificar si ya procesamos este mensaje (cache simple en memoria)
+            if not hasattr(process_message_pipeline, '_processed_messages'):
+                process_message_pipeline._processed_messages = set()
+            
+            if processing_key in process_message_pipeline._processed_messages:
+                logger.warning(f"🔄 Mensaje duplicado ignorado: {from_number} - {message_content[:50]}...")
+                return {"status": "duplicate_ignored", "phone": from_number}
+            
+            # Marcar como procesado
+            process_message_pipeline._processed_messages.add(processing_key)
+            
+            # Limpiar cache viejo (mantener solo últimos 100)
+            if len(process_message_pipeline._processed_messages) > 100:
+                old_messages = list(process_message_pipeline._processed_messages)[:50]
+                for old in old_messages:
+                    process_message_pipeline._processed_messages.remove(old)
+            
             logger.info(f"📱 PROCESANDO mensaje WhatsApp de {from_number}: '{message_content[:100]}...'")
             user_id = f"whatsapp_{from_number}"
             
@@ -1308,6 +1344,13 @@ async def evolution_webhook(request: Request, background_tasks: BackgroundTasks)
                     "webhook_data": data
                 }
             )
+        else:
+            # Debug: Si no hay contenido o número, mostrar qué pasó  
+            logger.warning(f"📱 Mensaje messages.upsert SIN CONTENIDO VÁLIDO:")
+            logger.warning(f"   - Content: '{message_content}'")
+            logger.warning(f"   - From: '{from_number}'")
+            logger.warning(f"   - fromMe: {from_me}")
+            logger.warning(f"   - Full data: {json.dumps(message_data_raw, indent=2)[:500]}...")
         
         return {"status": "received", "processed": True}
         
