@@ -18,6 +18,9 @@ from .royal_agent import (
     get_acompanamiento_venta_info,
     get_situaciones_frecuentes
 )
+# Importar sistema de seguimiento
+from .follow_up_system import activate_followup_for_user, user_responded
+from datetime import datetime
 import logging
 
 logger = logging.getLogger(__name__)
@@ -400,6 +403,19 @@ async def run_contextual_conversation(user_id: str, user_message: str) -> str:
         # Obtener o crear contexto
         context = context_manager.get_or_create_context(user_id)
         
+        # DETECTAR RESPUESTA DEL USUARIO (para resetear seguimiento)
+        # Si el usuario ya tenía un seguimiento activo, resetear a Día 0
+        try:
+            user_profile = {
+                "last_interaction": datetime.now().isoformat(),
+                "conversation_summary": context.get_conversation_summary()[:200],
+                "response_detected": True
+            }
+            user_responded(user_id, user_profile)
+            logger.info(f"🔄 Usuario {user_id} respondió - Follow-up reseteado a Día 0")
+        except Exception as e:
+            logger.error(f"❌ Error reseteando follow-up para {user_id}: {e}")
+        
         # Registrar mensaje del usuario
         context.conversation.add_interaction("user", user_message)
         
@@ -424,6 +440,36 @@ async def run_contextual_conversation(user_id: str, user_message: str) -> str:
         # Registrar respuesta
         context.conversation.add_interaction("assistant", result.final_output)
         
+        # ACTIVAR SISTEMA DE SEGUIMIENTO - Crear perfil del usuario ENRIQUECIDO
+        user_profile = {
+            # Datos básicos (existentes)
+            "last_interaction": datetime.now().isoformat(),
+            "conversation_summary": context.get_conversation_summary()[:300],  # Aumentado a 300 chars
+            "user_type": _extract_user_type_from_context(context),
+            "interest": _extract_interest_from_context(context),
+            "experience_level": _extract_experience_level_from_context(context),
+            
+            # NUEVOS datos contextuales específicos
+            "specific_products": _extract_specific_products_from_context(context),
+            "budget_mentioned": _extract_budget_from_context(context),
+            "objections": _extract_objections_from_context(context),
+            "questions_asked": _extract_questions_asked_from_context(context),
+            "engagement_level": _extract_engagement_level_from_context(context),
+            "conversation_topics": _extract_conversation_topics_from_context(context),
+            
+            # Métricas adicionales
+            "conversation_length": len(context.get_conversation_summary()),
+            "interaction_count_at_followup": len(context.conversation.interaction_history),
+            "conversation_started": context.conversation.conversation_started.isoformat(),
+        }
+        
+        # Activar follow-up automático (comenzará en 1 hora)
+        try:
+            activate_followup_for_user(user_id, user_profile)
+            logger.info(f"🚀 Follow-up activado para usuario: {user_id}")
+        except Exception as e:
+            logger.error(f"❌ Error activando follow-up para {user_id}: {e}")
+        
         logger.info(f"✅ Conversación completada para: {user_id}")
         logger.info(f"   Respuesta length: {len(result.final_output)}")
         
@@ -444,6 +490,19 @@ def run_contextual_conversation_sync(user_id: str, user_message: str) -> str:
     try:
         # Obtener contexto
         context = context_manager.get_or_create_context(user_id)
+        
+        # DETECTAR RESPUESTA DEL USUARIO (para resetear seguimiento)
+        # Si el usuario ya tenía un seguimiento activo, resetear a Día 0
+        try:
+            user_profile = {
+                "last_interaction": datetime.now().isoformat(),
+                "conversation_summary": context.get_conversation_summary()[:200],
+                "response_detected": True
+            }
+            user_responded(user_id, user_profile)
+            logger.info(f"🔄 Usuario {user_id} respondió - Follow-up reseteado a Día 0")
+        except Exception as e:
+            logger.error(f"❌ Error reseteando follow-up para {user_id}: {e}")
         
         # Registrar mensaje
         context.conversation.add_interaction("user", user_message)
@@ -487,6 +546,36 @@ def run_contextual_conversation_sync(user_id: str, user_message: str) -> str:
         # Registrar respuesta
         context.conversation.add_interaction("assistant", result)
         
+        # ACTIVAR SISTEMA DE SEGUIMIENTO - Crear perfil del usuario ENRIQUECIDO
+        user_profile = {
+            # Datos básicos (existentes)
+            "last_interaction": datetime.now().isoformat(),
+            "conversation_summary": context.get_conversation_summary()[:300],  # Aumentado a 300 chars
+            "user_type": _extract_user_type_from_context(context),
+            "interest": _extract_interest_from_context(context),
+            "experience_level": _extract_experience_level_from_context(context),
+            
+            # NUEVOS datos contextuales específicos
+            "specific_products": _extract_specific_products_from_context(context),
+            "budget_mentioned": _extract_budget_from_context(context),
+            "objections": _extract_objections_from_context(context),
+            "questions_asked": _extract_questions_asked_from_context(context),
+            "engagement_level": _extract_engagement_level_from_context(context),
+            "conversation_topics": _extract_conversation_topics_from_context(context),
+            
+            # Métricas adicionales
+            "conversation_length": len(context.get_conversation_summary()),
+            "interaction_count_at_followup": len(context.conversation.interaction_history),
+            "conversation_started": context.conversation.conversation_started.isoformat(),
+        }
+        
+        # Activar follow-up automático (comenzará en 1 hora)
+        try:
+            activate_followup_for_user(user_id, user_profile)
+            logger.info(f"🚀 Follow-up activado para usuario: {user_id}")
+        except Exception as e:
+            logger.error(f"❌ Error activando follow-up para {user_id}: {e}")
+        
         return result
         
     except Exception as e:
@@ -500,4 +589,300 @@ contextual_royal_agent = create_contextual_royal_agent()
 def cleanup_old_contexts():
     """Limpia contextos antiguos (llamar periódicamente)"""
     context_manager.cleanup_old_contexts(hours=24)
-    logger.info("🧹 Limpieza de contextos antiguos completada") 
+    logger.info("🧹 Limpieza de contextos antiguos completada")
+
+# Funciones auxiliares para extraer información del contexto para el sistema de seguimiento
+def _extract_user_type_from_context(context: RoyalAgentContext) -> str:
+    """Extrae el tipo de usuario basado en el contexto de la conversación"""
+    try:
+        conversation_text = context.get_conversation_summary().lower()
+        
+        # Palabras clave para identificar tipo de usuario
+        if any(word in conversation_text for word in ["emprender", "emprendedor", "emprendedora", "arrancar", "empezar"]):
+            return "emprendedor"
+        elif any(word in conversation_text for word in ["revender", "revendedor", "revendedora", "vender", "negocio"]):
+            return "revendedor"
+        elif any(word in conversation_text for word in ["comprar para mi", "para uso personal", "para mí"]):
+            return "minorista"
+        else:
+            return "potencial_emprendedor"  # Default
+            
+    except Exception as e:
+        logger.error(f"❌ Error extrayendo tipo de usuario: {e}")
+        return "desconocido"
+
+def _extract_interest_from_context(context: RoyalAgentContext) -> str:
+    """Extrae el interés principal del usuario basado en la conversación"""
+    try:
+        conversation_text = context.get_conversation_summary().lower()
+        
+        # Contar menciones por categoría
+        interests = {
+            "joyas": ["joya", "anillo", "aros", "pulsera", "dije", "plata", "oro"],
+            "maquillaje": ["maquillaje", "labial", "base", "sombra", "cosmetic", "belleza"],
+            "indumentaria": ["ropa", "remera", "jean", "vestido", "indumentaria", "fashion"],
+            "relojes": ["reloj", "casio", "hora"],
+            "accesorios": ["accesorio", "bolso", "cartera", "bijouterie"]
+        }
+        
+        # Contar menciones
+        interest_scores = {}
+        for category, keywords in interests.items():
+            score = sum(1 for keyword in keywords if keyword in conversation_text)
+            if score > 0:
+                interest_scores[category] = score
+        
+        # Retornar el interés con más menciones
+        if interest_scores:
+            return max(interest_scores, key=interest_scores.get)
+        else:
+            return "general"
+            
+    except Exception as e:
+        logger.error(f"❌ Error extrayendo interés: {e}")
+        return "general"
+
+def _extract_experience_level_from_context(context: RoyalAgentContext) -> str:
+    """Extrae el nivel de experiencia del usuario"""
+    try:
+        conversation_text = context.get_conversation_summary().lower()
+        
+        # Palabras clave para novatos
+        beginner_keywords = ["empezar", "arrancar", "primera vez", "no sé", "nuevo", "nueva", "nunca", "como empiezo"]
+        # Palabras clave para experimentados
+        experienced_keywords = ["ya vendo", "experiencia", "hace tiempo", "conozco", "ya trabajo", "mi negocio"]
+        
+        beginner_score = sum(1 for keyword in beginner_keywords if keyword in conversation_text)
+        experienced_score = sum(1 for keyword in experienced_keywords if keyword in conversation_text)
+        
+        if beginner_score > experienced_score:
+            return "empezando"
+        elif experienced_score > beginner_score:
+            return "experimentado"
+        else:
+            return "intermedio"
+            
+    except Exception as e:
+        logger.error(f"❌ Error extrayendo nivel de experiencia: {e}")
+        return "desconocido"
+
+# NUEVAS FUNCIONES DE EXTRACCIÓN AVANZADA
+def _extract_specific_products_from_context(context: RoyalAgentContext) -> List[str]:
+    """Extrae productos específicos mencionados en la conversación"""
+    try:
+        conversation_text = context.get_conversation_summary().lower()
+        
+        # Productos específicos con patrones de reconocimiento
+        specific_products = {
+            # Joyas
+            "anillos de plata 925": ["anillo de plata", "anillos plata 925", "anillos de plata"],
+            "aros con cristales": ["aros cristal", "aros con cristal", "aros cristales"],
+            "pulseras ajustables": ["pulsera ajustable", "pulseras que se ajustan"],
+            "dijes personalizados": ["dije personalizado", "dijes con nombre"],
+            "conjuntos de aros": ["conjunto de aros", "set de aros"],
+            
+            # Maquillaje
+            "labiales de larga duración": ["labial larga duración", "labiales que duran"],
+            "bases líquidas": ["base líquida", "bases fluidas"],
+            "paletas de sombras": ["paleta de sombras", "paleta sombra"],
+            "kits de maquillaje": ["kit maquillaje", "set de maquillaje"],
+            
+            # Indumentaria
+            "remeras oversized": ["remera oversize", "remeras grandes"],
+            "jeans de moda": ["jean de moda", "jeans trendy"],
+            "vestidos casuales": ["vestido casual", "vestidos cómodos"],
+            
+            # Combos
+            "combo emprendedor": ["combo emprendedora", "combo para emprender"],
+            "combo joyas trendy": ["combo joya", "combo de joyas"],
+            "combo todo en uno": ["combo completo", "combo total"]
+        }
+        
+        mentioned_products = []
+        for product_name, patterns in specific_products.items():
+            if any(pattern in conversation_text for pattern in patterns):
+                mentioned_products.append(product_name)
+        
+        # Agregar productos genéricos si se mencionaron
+        generic_products = {
+            "anillos": ["anillo"],
+            "aros": ["aros", "aro"],
+            "pulseras": ["pulsera"],
+            "labiales": ["labial"],
+            "remeras": ["remera"],
+            "relojes": ["reloj"]
+        }
+        
+        for product_name, patterns in generic_products.items():
+            if any(pattern in conversation_text for pattern in patterns):
+                if not any(product_name in mp for mp in mentioned_products):
+                    mentioned_products.append(product_name)
+        
+        return mentioned_products[:5]  # Máximo 5 productos
+        
+    except Exception as e:
+        logger.error(f"❌ Error extrayendo productos específicos: {e}")
+        return []
+
+def _extract_budget_from_context(context: RoyalAgentContext) -> Optional[str]:
+    """Extrae presupuesto mencionado por el usuario"""
+    try:
+        conversation_text = context.get_conversation_summary()
+        
+        import re
+        
+        # Patrones para capturar presupuestos
+        budget_patterns = [
+            r'\$\s*(\d{1,3}(?:\.\d{3})*(?:,\d{2})?)',  # $40.000 o $40,000
+            r'(\d{1,3}(?:\.\d{3})*)\s*pesos',  # 40.000 pesos
+            r'(\d{1,3}(?:\.\d{3})*)\s*mil',    # 40 mil
+            r'presupuesto.*?(\d{1,3}(?:\.\d{3})*)',  # presupuesto de 40000
+            r'invertir.*?(\d{1,3}(?:\.\d{3})*)',     # invertir 40000
+            r'tengo.*?(\d{1,3}(?:\.\d{3})*)',        # tengo 40000
+        ]
+        
+        for pattern in budget_patterns:
+            matches = re.findall(pattern, conversation_text, re.IGNORECASE)
+            if matches:
+                # Tomar el número más alto (probablemente el presupuesto real)
+                amounts = []
+                for match in matches:
+                    # Limpiar y convertir a número
+                    clean_amount = match.replace('.', '').replace(',', '')
+                    try:
+                        amounts.append(int(clean_amount))
+                    except ValueError:
+                        continue
+                
+                if amounts:
+                    max_amount = max(amounts)
+                    # Formatear bonito
+                    if max_amount >= 1000:
+                        return f"${max_amount:,}".replace(',', '.')
+                    else:
+                        return f"${max_amount}"
+        
+        return None
+        
+    except Exception as e:
+        logger.error(f"❌ Error extrayendo presupuesto: {e}")
+        return None
+
+def _extract_objections_from_context(context: RoyalAgentContext) -> List[str]:
+    """Extrae objeciones y dudas específicas expresadas por el usuario"""
+    try:
+        conversation_text = context.get_conversation_summary().lower()
+        
+        # Objeciones comunes con patrones
+        objections_patterns = {
+            "no sé qué elegir": ["no sé qué", "no se que", "no sé cuál", "qué me recomendás", "qué me recomiendas"],
+            "es mucha inversión": ["mucha plata", "mucho dinero", "muy caro", "mucha inversión", "no tengo tanto"],
+            "no tengo experiencia": ["no tengo experiencia", "nunca vendí", "no sé vender", "soy nueva en esto"],
+            "no tengo tiempo": ["no tengo tiempo", "muy ocupada", "no puedo dedicar"],
+            "no sé si se vende": ["se venderá", "si se vende", "tiene salida", "se mueve"],
+            "tengo miedo de perder": ["miedo de perder", "y si no funciona", "riesgo", "pérdida"],
+            "no sé por dónde empezar": ["por dónde empiezo", "cómo empiezo", "no sé empezar", "primer paso"]
+        }
+        
+        detected_objections = []
+        for objection, patterns in objections_patterns.items():
+            if any(pattern in conversation_text for pattern in patterns):
+                detected_objections.append(objection)
+        
+        return detected_objections[:3]  # Máximo 3 objeciones principales
+        
+    except Exception as e:
+        logger.error(f"❌ Error extrayendo objeciones: {e}")
+        return []
+
+def _extract_questions_asked_from_context(context: RoyalAgentContext) -> List[str]:
+    """Extrae preguntas específicas que hizo el usuario"""
+    try:
+        conversation_text = context.get_conversation_summary().lower()
+        
+        # Preguntas frecuentes con patrones
+        common_questions = {
+            "cuánto necesito para empezar": ["cuánto necesito", "cuánto para empezar", "cuánto invertir", "inversión inicial"],
+            "qué productos se venden más": ["qué se vende más", "qué productos van mejor", "cuáles son los más vendidos"],
+            "cuánto gano por producto": ["cuánto gano", "qué margen", "rentabilidad", "ganancia por"],
+            "cómo funciona el envío": ["envío", "cómo me llega", "shipping", "entrega"],
+            "tienen local físico": ["local", "dónde están", "dirección", "showroom"],
+            "cuánto tiempo demora": ["cuánto tarda", "tiempo de entrega", "demora"],
+            "cómo hago el pedido": ["cómo compro", "cómo pido", "proceso de compra"],
+            "tienen garantía": ["garantía", "devolución", "cambio"],
+            "qué formas de pago": ["pago", "cuotas", "tarjeta", "transferencia"]
+        }
+        
+        detected_questions = []
+        for question, patterns in common_questions.items():
+            if any(pattern in conversation_text for pattern in patterns):
+                detected_questions.append(question)
+        
+        return detected_questions[:4]  # Máximo 4 preguntas principales
+        
+    except Exception as e:
+        logger.error(f"❌ Error extrayendo preguntas: {e}")
+        return []
+
+def _extract_engagement_level_from_context(context: RoyalAgentContext) -> str:
+    """Determina el nivel de engagement del usuario durante la conversación"""
+    try:
+        # Obtener métricas de la conversación
+        conversation_length = len(context.get_conversation_summary())
+        interaction_count = len(context.conversation.interaction_history)
+        
+        # Buscar indicadores de alto engagement
+        conversation_text = context.get_conversation_summary().lower()
+        
+        high_engagement_indicators = [
+            "me interesa", "me gusta", "quiero saber", "contame más", 
+            "perfecto", "genial", "me encanta", "qué bueno",
+            "sí", "dale", "ok", "entiendo"
+        ]
+        
+        low_engagement_indicators = [
+            "no me interesa", "después veo", "lo pienso", "no sé",
+            "tal vez", "capaz", "no estoy segura"
+        ]
+        
+        high_score = sum(1 for indicator in high_engagement_indicators if indicator in conversation_text)
+        low_score = sum(1 for indicator in low_engagement_indicators if indicator in conversation_text)
+        
+        # Determinar engagement basado en múltiples factores
+        if conversation_length > 500 and interaction_count >= 3 and high_score > low_score:
+            return "alto"
+        elif conversation_length > 200 and high_score >= low_score:
+            return "medio"
+        else:
+            return "bajo"
+            
+    except Exception as e:
+        logger.error(f"❌ Error determinando engagement: {e}")
+        return "medio"
+
+def _extract_conversation_topics_from_context(context: RoyalAgentContext) -> List[str]:
+    """Extrae los temas principales de conversación"""
+    try:
+        conversation_text = context.get_conversation_summary().lower()
+        
+        topics_patterns = {
+            "combos emprendedores": ["combo emprendedor", "combo para empezar", "kit emprendedor"],
+            "márgenes de ganancia": ["margen", "ganancia", "rentabilidad", "cuánto gano"],
+            "productos trendy": ["moda", "trendy", "tendencia", "lo que está"],
+            "inversión inicial": ["inversión", "invertir", "presupuesto inicial", "cuánto necesito"],
+            "experiencia en ventas": ["experiencia", "vendí", "vendo", "negocio", "clientas"],
+            "envíos y logística": ["envío", "entrega", "dónde llega", "andreani"],
+            "formas de pago": ["pago", "cuotas", "tarjeta", "transferencia", "efectivo"],
+            "catálogo de productos": ["productos", "catálogo", "qué tienen", "variedad"]
+        }
+        
+        detected_topics = []
+        for topic, patterns in topics_patterns.items():
+            if any(pattern in conversation_text for pattern in patterns):
+                detected_topics.append(topic)
+        
+        return detected_topics[:4]  # Máximo 4 temas principales
+        
+    except Exception as e:
+        logger.error(f"❌ Error extrayendo temas de conversación: {e}")
+        return [] 

@@ -41,10 +41,22 @@ from bot_state_manager import BotStateManager
 # Royal agents import
 try:
     from royal_agents import run_contextual_conversation_sync
+    # Importar sistema de seguimiento
+    from royal_agents.follow_up_scheduler import start_follow_up_scheduler, stop_follow_up_scheduler
+    from royal_agents.follow_up_system import get_users_for_followup
 except ImportError:
     # Fallback if royal_agents not available
     def run_contextual_conversation_sync(user_id: str, message: str) -> str:
         return "Sistema en modo de prueba. Royal agents no disponible."
+    
+    def start_follow_up_scheduler(callback=None):
+        pass
+    
+    def stop_follow_up_scheduler():
+        pass
+    
+    def get_users_for_followup():
+        return []
 
 # Logging setup
 logging.basicConfig(
@@ -1988,6 +2000,181 @@ async def search_business_info(q: str = "", category: str = ""):
         raise HTTPException(status_code=500, detail=str(e))
 
 # =====================================================
+# FOLLOW-UP SYSTEM ENDPOINTS
+# =====================================================
+
+@app.get("/followup/stats")
+async def get_followup_stats():
+    """Obtiene estadísticas del sistema de seguimiento"""
+    try:
+        from royal_agents.follow_up_scheduler import get_scheduler_stats
+        
+        stats = get_scheduler_stats()
+        
+        # Agregar información adicional
+        users_ready = get_users_for_followup()
+        stats['users_ready_for_followup'] = len(users_ready)
+        stats['system_active'] = True
+        
+        return {
+            "success": True,
+            "stats": stats
+        }
+        
+    except Exception as e:
+        logger.error(f"❌ Error obteniendo stats de follow-up: {e}")
+        return {
+            "success": False,
+            "error": str(e),
+            "stats": {
+                "system_active": False,
+                "error": "Sistema no disponible"
+            }
+        }
+
+@app.get("/followup/users")
+async def get_followup_users():
+    """Obtiene usuarios activos en el sistema de seguimiento"""
+    try:
+        users_ready = get_users_for_followup()
+        
+        # Serializar información de usuarios (sin datos sensibles)
+        users_info = []
+        for user_followup in users_ready:
+            user_info = {
+                "user_id": user_followup.user_id,
+                "current_stage": user_followup.current_stage,
+                "is_active": user_followup.is_active,
+                "interaction_count": user_followup.interaction_count,
+                "last_stage_completed": user_followup.last_stage_completed,
+                "time_since_last_interaction": (
+                    datetime.now() - user_followup.last_interaction
+                ).days if user_followup.last_interaction else None
+            }
+            users_info.append(user_info)
+        
+        return {
+            "success": True,
+            "users": users_info,
+            "count": len(users_info)
+        }
+        
+    except Exception as e:
+        logger.error(f"❌ Error obteniendo usuarios de follow-up: {e}")
+        return {
+            "success": False,
+            "error": str(e),
+            "users": [],
+            "count": 0
+        }
+
+@app.post("/followup/activate/{user_id}")
+async def activate_followup_manual(user_id: str):
+    """Activa manualmente el seguimiento para un usuario"""
+    try:
+        from royal_agents.follow_up_system import activate_followup_for_user
+        
+        # Perfil básico para activación manual
+        user_profile = {
+            "activated_manually": True,
+            "activation_time": datetime.now().isoformat(),
+            "source": "admin_panel"
+        }
+        
+        success = activate_followup_for_user(user_id, user_profile)
+        
+        if success:
+            logger.info(f"✅ Follow-up activado manualmente para {user_id}")
+            return {
+                "success": True,
+                "message": f"Follow-up activado para usuario {user_id}",
+                "user_id": user_id,
+                "stage": 0
+            }
+        else:
+            return {
+                "success": False,
+                "error": "No se pudo activar el follow-up",
+                "user_id": user_id
+            }
+        
+    except Exception as e:
+        logger.error(f"❌ Error activando follow-up manual para {user_id}: {e}")
+        return {
+            "success": False,
+            "error": str(e),
+            "user_id": user_id
+        }
+
+@app.post("/followup/deactivate/{user_id}")
+async def deactivate_followup_manual(user_id: str):
+    """Desactiva manualmente el seguimiento para un usuario"""
+    try:
+        from royal_agents.follow_up_system import deactivate_user_followup
+        
+        success = deactivate_user_followup(user_id)
+        
+        if success:
+            logger.info(f"🛑 Follow-up desactivado manualmente para {user_id}")
+            return {
+                "success": True,
+                "message": f"Follow-up desactivado para usuario {user_id}",
+                "user_id": user_id
+            }
+        else:
+            return {
+                "success": False,
+                "error": "No se pudo desactivar el follow-up",
+                "user_id": user_id
+            }
+        
+    except Exception as e:
+        logger.error(f"❌ Error desactivando follow-up manual para {user_id}: {e}")
+        return {
+            "success": False,
+            "error": str(e),
+            "user_id": user_id
+        }
+
+@app.get("/followup/status/{user_id}")
+async def get_followup_status(user_id: str):
+    """Obtiene el estado del seguimiento para un usuario específico"""
+    try:
+        from royal_agents.follow_up_system import get_user_followup_status
+        
+        status = get_user_followup_status(user_id)
+        
+        if status:
+            return {
+                "success": True,
+                "user_id": user_id,
+                "status": {
+                    "current_stage": status.current_stage,
+                    "is_active": status.is_active,
+                    "interaction_count": status.interaction_count,
+                    "last_interaction": status.last_interaction.isoformat() if status.last_interaction else None,
+                    "stage_start_time": status.stage_start_time.isoformat() if status.stage_start_time else None,
+                    "last_stage_completed": status.last_stage_completed,
+                    "user_profile": status.user_profile
+                }
+            }
+        else:
+            return {
+                "success": True,
+                "user_id": user_id,
+                "status": None,
+                "message": "Usuario no tiene seguimiento activo"
+            }
+        
+    except Exception as e:
+        logger.error(f"❌ Error obteniendo status de follow-up para {user_id}: {e}")
+        return {
+            "success": False,
+            "error": str(e),
+            "user_id": user_id
+        }
+
+# =====================================================
 # STARTUP AND SHUTDOWN HANDLERS
 # =====================================================
 
@@ -2021,10 +2208,46 @@ async def startup_event():
     asyncio.create_task(response_sender_task())
     asyncio.create_task(metrics_collector_task())
     
+    # Initialize follow-up scheduler system
+    logger.info("⏰ Initializing follow-up scheduler...")
+    try:
+        # Callback para enviar mensajes de follow-up
+        def send_followup_message(user_id: str, message: str) -> bool:
+            """Envía mensaje de follow-up a través del sistema de colas"""
+            try:
+                message_data = MessageData(
+                    user_id=user_id,
+                    message=message,
+                    source=MessageSource.FOLLOWUP,
+                    priority=MessagePriority.HIGH,
+                    metadata={
+                        "is_followup": True,
+                        "timestamp": datetime.now().isoformat(),
+                        "automated": True
+                    }
+                )
+                
+                # Agregar a la cola de alta prioridad
+                success = advanced_queue.add_message(message_data)
+                logger.info(f"📤 Follow-up enviado a cola: {user_id} - Success: {success}")
+                return success
+                
+            except Exception as e:
+                logger.error(f"❌ Error enviando follow-up message: {e}")
+                return False
+        
+        # Inicializar scheduler con callback
+        start_follow_up_scheduler(send_followup_message)
+        logger.info("✅ Follow-up scheduler iniciado correctamente")
+        
+    except Exception as e:
+        logger.error(f"❌ Error iniciando follow-up scheduler: {e}")
+    
     logger.info("✅ Royal Bot - Maximum Efficiency Edition started successfully!")
     logger.info(f"   Environment: {ENVIRONMENT}")
     logger.info(f"   Port: {PORT}")
     logger.info(f"   Monitoring: {'Enabled' if ENABLE_PERFORMANCE_MONITORING else 'Disabled'}")
+    logger.info(f"   Follow-up System: {'Enabled' if 'start_follow_up_scheduler' in globals() else 'Disabled'}")
 
 @app.on_event("shutdown")
 async def shutdown_event():
@@ -2036,6 +2259,14 @@ async def shutdown_event():
     # Shutdown worker pool first (stop processing new messages)
     logger.info("⚡ Shutting down worker pool...")
     await shutdown_worker_pool()
+    
+    # Shutdown follow-up scheduler
+    logger.info("⏰ Shutting down follow-up scheduler...")
+    try:
+        stop_follow_up_scheduler()
+        logger.info("✅ Follow-up scheduler shut down successfully")
+    except Exception as e:
+        logger.error(f"❌ Error shutting down follow-up scheduler: {e}")
     
     # Close bot state manager connections
     logger.info("🤖 Closing bot state manager...")

@@ -51,6 +51,7 @@ class MessageSource(Enum):
     EVOLUTION = "evolution"
     TEST = "test"
     SYSTEM = "system"
+    FOLLOWUP = "followup"
 
 # =====================================================
 # DATA MODELS
