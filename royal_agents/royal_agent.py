@@ -149,6 +149,54 @@ def get_royal_education_info() -> str:
     """
 
 @function_tool
+def get_combos_emprendedores_info() -> str:
+    """Información introductoria rápida sobre Combos Emprendedores. Complementa el archivo de entrenamiento."""
+    return """
+    🚀 **COMBOS EMPRENDEDORES - Para quien está empezando**
+    
+    Para quien está empezando, recomendamos nuestros Combos Emprendedores 💼
+    
+    **¿Qué son los Combos Emprendedores?**
+    Tenemos combos exclusivos de cada rubro —joyas, indumentaria, maquillaje, bijouterie, relojes, accesorios y más— para que, según el rubro que quieras trabajar, puedas arrancar sin perder tiempo eligiendo uno por uno.
+    
+    **¿Por qué son ideales para empezar?**
+    Cuando una emprendedora recién empieza, muchas veces no sabe qué elegir. Por eso, con nuestra experiencia armamos estos combos con productos clásicos, de moda, de bajo precio y con alta rotación, que son los más fáciles de vender y recuperar la inversión rápido 📦💰
+    
+    **Ventajas:**
+    • Arranque más simple y rápido
+    • Stock listo para salir a vender
+    • Productos seleccionados por experiencia
+    • Alta rotación y fácil venta
+    • Recuperación rápida de inversión
+    • Todo pensado para que funcione
+    
+    **Rubros disponibles:**
+    • Joyas (plata 925, acero)
+    • Indumentaria y accesorios
+    • Maquillaje y belleza
+    • Bijouterie
+    • Relojes
+    • Y más categorías
+    
+    ¿En qué rubro te gustaría arrancar? 💎
+    
+    **Link:** https://royalmayorista.com.ar/categoria-producto/combo-emprendedor/
+    """
+
+@function_tool
+def get_inversion_presupuesto_info() -> str:
+    """Información sobre cuánto invertir y presupuesto recomendado para emprendedores."""
+    return """
+    Me encanta que ya estés pensando en invertir 💛 Eso es clave para arrancar con fuerza y generar ventas desde el primer día.
+    
+    Como la compra mínima es de $40.000, lo ideal para tu primera inversión está entre $40.000 y $150.000, según lo que quieras y puedas destinar. Esto te permite tener suficiente variedad para mostrar, probar diferentes productos y ver cuáles se mueven mejor con tus clientas.
+    
+    Cuanta más variedad tengas al inicio, más fácil es que las personas te digan qué les gusta y qué prefieren. Esa información es oro para que puedas traer justo lo que ellas buscan y aumentar tus ventas 🚀
+    
+    Contame, ¿ya tenés en mente si querés trabajar con joyas, maquillaje o ropa? Así te ayudo a armar la mejor combinación para vos.
+    """
+
+@function_tool
 def get_situaciones_frecuentes(situacion: str) -> str:
     """Respuestas para situaciones frecuentes específicas."""
     
@@ -319,6 +367,8 @@ def create_royal_agent() -> Agent:
             get_arreglos_info,
             get_joyas_personalizadas_info,
             get_royal_education_info,
+            get_combos_emprendedores_info,
+            get_inversion_presupuesto_info,
             get_situaciones_frecuentes
         ]
     )

@@ -13,6 +13,8 @@ from .royal_agent import (
     get_arreglos_info,
     get_joyas_personalizadas_info, 
     get_royal_education_info,
+    get_combos_emprendedores_info,
+    get_inversion_presupuesto_info,
     get_situaciones_frecuentes
 )
 import logging
@@ -89,6 +91,16 @@ def create_contextual_royal_agent() -> Agent[RoyalAgentContext]:
     2. Si detecta frustración → ACTIVAR HITL, NO seguir con compra
     3. PREGUNTAR qué específicamente busca
     4. Ofrecer alternativas diferentes
+    
+    ### Para emprendedores que recién empiezan:
+    **Palabras:** "empezar", "arrancar", "inicio", "primera vez", "no sé qué elegir", "soy nueva"
+    → **ACCIÓN:** SIEMPRE usar get_combos_emprendedores_info()
+    → **IMPORTANTE:** Esta información es clave para convertir emprendedores nuevos
+    
+    ### Para consultas sobre presupuesto e inversión:
+    **Palabras:** "cuánto invertir", "presupuesto", "cuánto comprar", "cuánto necesito", "cuánto gastar", "cuánto destinar", "primera inversión"
+    → **ACCIÓN:** SIEMPRE usar get_inversion_presupuesto_info()
+    → **CRÍTICO:** Esta información convierte dudas en ventas
 
     # 🧠 CAPACIDADES DE MEMORIA Y CONTEXTO
     
@@ -154,9 +166,11 @@ def create_contextual_royal_agent() -> Agent[RoyalAgentContext]:
     
     1. **USAR get_context_summary()** para ver su perfil actual
     2. **APLICAR protocolo según su experiencia:**
-       - Empezando: preguntas + combos básicos
-       - Experimentado: productos específicos + diversificación
+       - **Empezando/Primera vez**: USAR get_combos_emprendedores_info() inmediatamente
+       - **Experimentado**: productos específicos + diversificación
     3. **GUARDAR información con update_user_profile()**
+    4. **REGLA CRÍTICA:** Si mencionan "no sé qué elegir" o "empezar" → combos emprendedores OBLIGATORIO
+    5. **REGLA CRÍTICA:** Si preguntan por dinero/presupuesto → get_inversion_presupuesto_info() OBLIGATORIO
     
     ## 2. PROTOCOLO PARA PRODUCTOS ESPECÍFICOS:
     
@@ -270,6 +284,16 @@ def create_contextual_royal_agent() -> Agent[RoyalAgentContext]:
     3. **NUNCA inventar links**
     ```
     
+    **Ejemplo 5 - Pregunta por presupuesto:**
+    ```
+    Usuario: "¿Cuánto necesito invertir para empezar?"
+    
+    1. **SIEMPRE usar get_inversion_presupuesto_info()**
+    2. La herramienta da información específica sobre montos ($40,000-$150,000)
+    3. **NUNCA inventar montos o rangos** - usar solo la información de la herramienta
+    4. Continuar la conversación preguntando por el rubro de interés
+    ```
+    
     # REGLAS DE COMPORTAMIENTO CRÍTICAS
     
     1. **SIEMPRE detectar frustración PRIMERO** antes de cualquier acción
@@ -291,6 +315,8 @@ def create_contextual_royal_agent() -> Agent[RoyalAgentContext]:
         get_arreglos_info,
         get_joyas_personalizadas_info,
         get_royal_education_info,
+        get_combos_emprendedores_info,
+        get_inversion_presupuesto_info,
         get_situaciones_frecuentes
     ]
     
