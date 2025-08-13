@@ -15,6 +15,7 @@ from .royal_agent import (
     get_royal_education_info,
     get_combos_emprendedores_info,
     get_inversion_presupuesto_info,
+    get_acompanamiento_venta_info,
     get_situaciones_frecuentes
 )
 import logging
@@ -101,6 +102,11 @@ def create_contextual_royal_agent() -> Agent[RoyalAgentContext]:
     **Palabras:** "cuánto invertir", "presupuesto", "cuánto comprar", "cuánto necesito", "cuánto gastar", "cuánto destinar", "primera inversión"
     → **ACCIÓN:** SIEMPRE usar get_inversion_presupuesto_info()
     → **CRÍTICO:** Esta información convierte dudas en ventas
+    
+    ### Para acompañamiento y cierre:
+    **Palabras:** "me ayudás", "no sé cuál elegir", "qué me recomendás", "qué me conviene", "estoy motivada", "quiero arrancar ya"
+    → **ACCIÓN:** Usar get_acompanamiento_venta_info() cuando detectes interés alto
+    → **OBJETIVO:** Convertir motivación en acción inmediata
 
     # 🧠 CAPACIDADES DE MEMORIA Y CONTEXTO
     
@@ -171,6 +177,9 @@ def create_contextual_royal_agent() -> Agent[RoyalAgentContext]:
     3. **GUARDAR información con update_user_profile()**
     4. **REGLA CRÍTICA:** Si mencionan "no sé qué elegir" o "empezar" → combos emprendedores OBLIGATORIO
     5. **REGLA CRÍTICA:** Si preguntan por dinero/presupuesto → get_inversion_presupuesto_info() OBLIGATORIO
+    6. **REGLA DE CONVERSIÓN:** SIEMPRE incluir CTAs claras cuando muestres productos o combos
+    7. **REGLA ANTI-OBJECIÓN:** Romper objeciones de precio explicando ROI y rentabilidad
+    8. **REGLA DE URGENCIA:** Mencionar que combos se agotan o son limitados (sin mentir)
     
     ## 2. PROTOCOLO PARA PRODUCTOS ESPECÍFICOS:
     
@@ -317,6 +326,7 @@ def create_contextual_royal_agent() -> Agent[RoyalAgentContext]:
         get_royal_education_info,
         get_combos_emprendedores_info,
         get_inversion_presupuesto_info,
+        get_acompanamiento_venta_info,
         get_situaciones_frecuentes
     ]
     

@@ -178,9 +178,11 @@ def get_combos_emprendedores_info() -> str:
     • Relojes
     • Y más categorías
     
-    ¿En qué rubro te gustaría arrancar? 💎
+    **🚀 ¡Es el momento perfecto para empezar!** Ya tenés toda la información que necesitás. Los combos se agotan rápido porque son los favoritos de las emprendedoras.
     
-    **Link:** https://royalmayorista.com.ar/categoria-producto/combo-emprendedor/
+    **Hacé clic en este enlace y empezá tu pedido ahora 👉 https://royalmayorista.com.ar/categoria-producto/combo-emprendedor/**
+    
+    ¿En qué rubro te gustaría arrancar? Te armo una recomendación personalizada en este momento 💎
     """
 
 @function_tool
@@ -193,7 +195,28 @@ def get_inversion_presupuesto_info() -> str:
     
     Cuanta más variedad tengas al inicio, más fácil es que las personas te digan qué les gusta y qué prefieren. Esa información es oro para que puedas traer justo lo que ellas buscan y aumentar tus ventas 🚀
     
-    Contame, ¿ya tenés en mente si querés trabajar con joyas, maquillaje o ropa? Así te ayudo a armar la mejor combinación para vos.
+    **💡 Miralo así:** Con solo $40.000 ya tenés suficiente para generar $100.000+ en ventas. Es una inversión que se recupera en semanas, no en meses.
+    
+    Contame, ¿ya tenés en mente si querés trabajar con joyas, maquillaje o ropa? **En este momento te puedo armar un kit personalizado** con los productos que más se venden en ese rubro 🚀
+    """
+
+@function_tool
+def get_acompanamiento_venta_info() -> str:
+    """Ofrece acompañamiento inmediato y cierre de venta consultivo."""
+    return """
+    🎆 **¡Perfect timing!** Te noto súper motivada y eso es lo más importante para tener éxito.
+    
+    **📞 ¿Querés que te arme algo personalizado AHORA MISMO?**
+    
+    En base a lo que me contás, puedo armarte un kit con los productos que más se venden en tu zona y que tienen mejor margen de ganancia. No pierdas tiempo eligiendo uno por uno.
+    
+    **💎 Esto es lo que pasa después:**
+    1. Te mando la selección personalizada
+    2. Hacés el pedido en 5 minutos
+    3. En 2-3 días tenés tu stock listo para vender
+    4. Empezás a recuperar tu inversión en la primera semana
+    
+    **🚀 Decime:** ¿Prefierís que te arme algo de joyas, maquillaje o indumentaria? ¡Arranquemos!
     """
 
 @function_tool
@@ -369,6 +392,7 @@ def create_royal_agent() -> Agent:
             get_royal_education_info,
             get_combos_emprendedores_info,
             get_inversion_presupuesto_info,
+            get_acompanamiento_venta_info,
             get_situaciones_frecuentes
         ]
     )

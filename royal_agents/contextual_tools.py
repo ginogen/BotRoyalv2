@@ -626,7 +626,7 @@ async def get_combos_with_context(wrapper: RunContextWrapper[RoyalAgentContext])
     logger.info(f"✅ {len(all_combos)} combos guardados en contexto para referencias")
     
     header = "🚀 **COMBOS EMPRENDEDORES DISPONIBLES:**\n"
-    footer = "\n💡 *Podés elegir por número: 'quiero el combo 1', 'me interesa el 3', etc.*"
+    footer = "\n**🔥 ¡Estos combos se agotan rápido!** La mayoría de emprendedoras eligen estos porque ya están probados.\n\n💡 **Podés elegir ahora:** 'quiero el combo 1', 'me interesa el 3', etc.\n\n**¿Cuál te llama más la atención?** Te ayudo a completar tu pedido en este momento 👉"
     
     return header + "\n".join(products_info) + footer
 
