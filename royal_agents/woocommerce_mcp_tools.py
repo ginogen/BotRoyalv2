@@ -233,61 +233,6 @@ Cantidad: {stock_quantity}
     
     return "\n".join(results) if results else "No se pudo verificar el stock"
 
-@function_tool
-async def get_order_status(order_id: str = "", customer_email: str = "") -> str:
-    """
-    Obtiene el estado de pedidos de WooCommerce.
-    
-    Args:
-        order_id: ID del pedido específico
-        customer_email: Email del cliente para buscar sus pedidos
-    """
-    
-    params = {}
-    if order_id:
-        # Buscar pedido específico
-        result = await wc_client.make_request(f'orders/{order_id}')
-        
-        if 'error' in result:
-            return f"No encontré el pedido #{order_id}. Verificá el número por favor."
-        
-        order = result.get('order', {})
-        status_map = {
-            'pending': '⏳ Pendiente de pago',
-            'processing': '🔄 Procesando',
-            'on-hold': '⏸️ En espera',
-            'completed': '✅ Completado',
-            'cancelled': '❌ Cancelado',
-            'refunded': '💸 Reembolsado',
-            'failed': '❌ Falló'
-        }
-        
-        status = status_map.get(order.get('status'), order.get('status', 'Desconocido'))
-        
-        return f"""
-📋 **Pedido #{order_id}**
-Estado: {status}
-Total: ${order.get('total', '0')}
-Fecha: {order.get('date_created', 'No disponible')}
-Cliente: {order.get('billing', {}).get('first_name', '')} {order.get('billing', {}).get('last_name', '')}
-"""
-    
-    elif customer_email:
-        # Buscar pedidos por email
-        params['customer'] = customer_email
-        result = await wc_client.make_request('orders', params)
-        
-        if 'error' in result or not result.get('orders'):
-            return f"No encontré pedidos para {customer_email}"
-        
-        orders_info = []
-        for order in result.get('orders', [])[:3]:  # Últimos 3 pedidos
-            status = status_map.get(order.get('status'), order.get('status'))
-            orders_info.append(f"Pedido #{order.get('id')}: {status} - ${order.get('total')}")
-        
-        return "📋 **Tus últimos pedidos:**\n" + "\n".join(orders_info)
-    
-    return "Necesito el número de pedido o tu email para consultar el estado"
 
 @function_tool
 async def get_product_categories() -> str:
@@ -514,7 +459,6 @@ def create_woocommerce_tools():
     return [
         get_product_info,
         check_stock_availability, 
-        get_order_status,
         get_product_categories,
         search_products_by_price_range,
         get_combo_emprendedor_products,

@@ -107,6 +107,12 @@ def create_contextual_royal_agent() -> Agent[RoyalAgentContext]:
     **Palabras:** "me ayudás", "no sé cuál elegir", "qué me recomendás", "qué me conviene", "estoy motivada", "quiero arrancar ya"
     → **ACCIÓN:** Usar get_acompanamiento_venta_info() cuando detectes interés alto
     → **OBJETIVO:** Convertir motivación en acción inmediata
+    
+    ### 🚨 IMPORTANTE - Consultas sobre PEDIDOS/ÓRDENES:
+    **Palabras:** "mi pedido", "mi orden", "estado de mi", "dónde está mi", "cuándo llega mi", "seguimiento"
+    → **ACCIÓN:** NO usar herramientas del bot - El sistema automáticamente DERIVA estas consultas al equipo de seguimiento
+    → **NUNCA:** Intentar consultar estado de pedidos con herramientas
+    → **IMPORTANTE:** Estas consultas se detectan automáticamente y se asignan al equipo correspondiente
 
     # 🧠 CAPACIDADES DE MEMORIA Y CONTEXTO
     

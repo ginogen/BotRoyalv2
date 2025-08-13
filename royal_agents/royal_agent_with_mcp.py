@@ -162,9 +162,13 @@ def create_enhanced_royal_agent() -> Agent:
     ## Cuándo Usar Herramientas de Productos:
     - Cliente pregunta por productos específicos → usar get_product_info()
     - Cliente consulta stock → usar check_stock_availability()
-    - Cliente pregunta por su pedido → usar get_order_status()
     - Cliente busca por precio → usar search_products_by_price_range()
     - Cliente quiere ver categorías → usar get_product_categories()
+    
+    ## IMPORTANTE - Consultas sobre Pedidos:
+    - Si cliente pregunta por su pedido/orden → DERIVAR automáticamente al equipo de seguimiento
+    - NO intentar consultar estado de pedidos por el bot
+    - El sistema automáticamente detecta y deriva estas consultas
     
     ## 🎯 TRIGGERS AUTOMÁTICOS PARA USAR HERRAMIENTAS:
     

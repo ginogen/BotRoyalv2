@@ -437,11 +437,14 @@ def get_conversation_from_phone(phone: str) -> Optional[str]:
 KEYWORD_ROUTING = {
     "shipping": {
         "keywords": [
-            "envío", "envios", "enviar", "despacho", "seguimiento", 
-            "tracking", "demora", "entrega", "cuando llega", "donde esta"
+            "mi pedido", "mi orden", "mi compra", "estado de mi", "donde esta mi",
+            "cuando llega mi", "ya enviaron mi", "seguimiento de mi", "tracking de mi",
+            "estado del pedido", "donde esta el pedido", "cuando llega el pedido",
+            "ya enviaron el pedido", "ya despacharon", "seguimiento del pedido",
+            "que paso con mi", "como va mi", "me enviaron", "ya salio mi"
         ],
         "team_id": CHATWOOT_TEAM_SHIPPING_ID,
-        "message": "Te estoy transfiriendo con nuestro equipo de envíos 📦\nEn breve te van a contactar para resolver tu consulta."
+        "message": "Te estoy conectando con nuestro equipo de seguimiento de pedidos 📦\nVan a revisar el estado específico de tu compra y te van a dar toda la información actualizada."
     },
     "support": {
         "keywords": [
@@ -518,6 +521,33 @@ async def assign_conversation_to_team(conversation_id: str, team_id: int, reason
         system_metrics['assignments_failed'] += 1
         return False
 
+def is_order_inquiry(message: str) -> bool:
+    """
+    Determina si el mensaje es una consulta específica sobre un pedido ya realizado
+    vs. una consulta general sobre condiciones de envío
+    """
+    message_lower = message.lower()
+    
+    # Palabras que indican consulta sobre pedido específico
+    order_indicators = [
+        "mi pedido", "mi orden", "mi compra", "mi producto",
+        "el pedido que", "la orden que", "lo que compré", "lo que pague",
+        "mi encargo", "mi solicitud"
+    ]
+    
+    # Palabras que indican estado/seguimiento
+    status_indicators = [
+        "estado", "donde esta", "cuando llega", "ya enviaron",
+        "seguimiento", "tracking", "que paso con", "como va",
+        "ya despacharon", "ya salio"
+    ]
+    
+    # Debe tener al menos un indicador de pedido Y uno de estado
+    has_order_ref = any(indicator in message_lower for indicator in order_indicators)
+    has_status_ref = any(indicator in message_lower for indicator in status_indicators)
+    
+    return has_order_ref or has_status_ref
+
 async def check_and_route_by_keywords(message: str, conversation_id: str, phone: str) -> bool:
     """
     Verifica palabras clave en el mensaje y asigna a equipos si corresponde
@@ -534,6 +564,11 @@ async def check_and_route_by_keywords(message: str, conversation_id: str, phone:
     
     # Revisar cada categoría de keywords
     for route_type, config in KEYWORD_ROUTING.items():
+        # Para shipping, hacer validación adicional
+        if route_type == "shipping":
+            if not is_order_inquiry(message):
+                continue  # Skip si no es consulta sobre pedido específico
+        
         # Verificar si alguna keyword coincide
         matched_keywords = [kw for kw in config["keywords"] if kw in message_lower]
         
