@@ -68,6 +68,11 @@ EVOLUTION_API_URL = os.getenv("EVOLUTION_API_URL")
 EVOLUTION_API_TOKEN = os.getenv("EVOLUTION_API_TOKEN")
 INSTANCE_NAME = os.getenv("INSTANCE_NAME", "F1_Retencion")
 
+# Team IDs for automatic assignment
+CHATWOOT_TEAM_SHIPPING_ID = int(os.getenv("CHATWOOT_TEAM_SHIPPING_ID", "0"))
+CHATWOOT_TEAM_SUPPORT_ID = int(os.getenv("CHATWOOT_TEAM_SUPPORT_ID", "0"))
+CHATWOOT_TEAM_BILLING_ID = int(os.getenv("CHATWOOT_TEAM_BILLING_ID", "0"))
+
 # Performance tuning
 ENABLE_PERFORMANCE_MONITORING = os.getenv("ENABLE_PERFORMANCE_MONITORING", "true").lower() == "true"
 ENABLE_REQUEST_LOGGING = os.getenv("ENABLE_REQUEST_LOGGING", "true").lower() == "true"
@@ -125,6 +130,12 @@ class WebhookMessage(BaseModel):
     conversation_id: Optional[str] = None
     phone: Optional[str] = None
     metadata: Optional[Dict[str, Any]] = {}
+
+class TestAssignment(BaseModel):
+    message: str
+    phone: str
+    conversation_id: str
+    simulate_only: Optional[bool] = False
 
 # =====================================================
 # CORE MESSAGE PROCESSOR
@@ -417,6 +428,157 @@ def get_conversation_from_phone(phone: str) -> Optional[str]:
         if mapped_phone == phone:
             return conv_id
     return None
+
+# =====================================================
+# AUTOMATIC CONVERSATION ASSIGNMENT
+# =====================================================
+
+# Keyword routing configuration
+KEYWORD_ROUTING = {
+    "shipping": {
+        "keywords": [
+            "envío", "envios", "enviar", "despacho", "seguimiento", 
+            "tracking", "demora", "entrega", "cuando llega", "donde esta"
+        ],
+        "team_id": CHATWOOT_TEAM_SHIPPING_ID,
+        "message": "Te estoy transfiriendo con nuestro equipo de envíos 📦\nEn breve te van a contactar para resolver tu consulta."
+    },
+    "support": {
+        "keywords": [
+            "reclamo", "queja", "problema", "no funciona", "defectuoso", 
+            "roto", "mal estado", "garantia", "devolucion", "cambio"
+        ],
+        "team_id": CHATWOOT_TEAM_SUPPORT_ID,
+        "message": "Te voy a conectar con nuestro equipo de soporte técnico 🛠️\nVan a resolver tu problema de inmediato."
+    },
+    "billing": {
+        "keywords": [
+            "factura", "pago", "transferencia", "comprobante", "facturación",
+            "cobro", "precio mal", "me cobraron", "descuento", "promocion"
+        ],
+        "team_id": CHATWOOT_TEAM_BILLING_ID,
+        "message": "Te derivo con nuestro área de facturación 💳\nVan a revisar tu caso específico."
+    }
+}
+
+async def assign_conversation_to_team(conversation_id: str, team_id: int, reason: str = "") -> bool:
+    """
+    Asigna una conversación a un equipo específico en Chatwoot
+    
+    Args:
+        conversation_id: ID de la conversación en Chatwoot
+        team_id: ID del equipo al que asignar
+        reason: Razón de la asignación para logging
+        
+    Returns:
+        bool: True si la asignación fue exitosa
+    """
+    if not all([CHATWOOT_API_URL, CHATWOOT_API_TOKEN, CHATWOOT_ACCOUNT_ID]):
+        logger.warning("⚠️ Chatwoot API no configurada para asignación")
+        return False
+    
+    if team_id == 0:
+        logger.warning(f"⚠️ Team ID no configurado para asignación: {reason}")
+        return False
+    
+    try:
+        url = f"{CHATWOOT_API_URL}/api/v1/accounts/{CHATWOOT_ACCOUNT_ID}/conversations/{conversation_id}/assignments"
+        
+        headers = {
+            "Content-Type": "application/json",
+            "api_access_token": CHATWOOT_API_TOKEN
+        }
+        
+        data = {"team_id": team_id}
+        
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.post(url, json=data, headers=headers)
+            
+        if response.status_code == 200:
+            logger.info(f"✅ Conversación {conversation_id} asignada al equipo {team_id} - Razón: {reason}")
+            
+            # Actualizar métricas
+            system_metrics.setdefault('assignments_successful', 0)
+            system_metrics['assignments_successful'] += 1
+            system_metrics['last_assignment'] = datetime.now().isoformat()
+            
+            return True
+        else:
+            logger.error(f"❌ Error asignando conversación {conversation_id}: {response.status_code} - {response.text}")
+            
+            # Actualizar métricas de error
+            system_metrics.setdefault('assignments_failed', 0)
+            system_metrics['assignments_failed'] += 1
+            
+            return False
+            
+    except Exception as e:
+        logger.error(f"❌ Error en asignación de conversación {conversation_id}: {e}")
+        system_metrics.setdefault('assignments_failed', 0)
+        system_metrics['assignments_failed'] += 1
+        return False
+
+async def check_and_route_by_keywords(message: str, conversation_id: str, phone: str) -> bool:
+    """
+    Verifica palabras clave en el mensaje y asigna a equipos si corresponde
+    
+    Args:
+        message: Mensaje del usuario
+        conversation_id: ID de conversación en Chatwoot
+        phone: Número de teléfono del usuario
+        
+    Returns:
+        bool: True si se realizó una asignación
+    """
+    message_lower = message.lower()
+    
+    # Revisar cada categoría de keywords
+    for route_type, config in KEYWORD_ROUTING.items():
+        # Verificar si alguna keyword coincide
+        matched_keywords = [kw for kw in config["keywords"] if kw in message_lower]
+        
+        if matched_keywords:
+            logger.info(f"🎯 Keywords detectadas [{route_type}]: {matched_keywords} en mensaje: '{message[:50]}...'")
+            
+            # Intentar asignar conversación
+            success = await assign_conversation_to_team(
+                conversation_id, 
+                config["team_id"],
+                f"Keyword detectada: {route_type} ({', '.join(matched_keywords)})"
+            )
+            
+            if success:
+                # Pausar bot para ambos canales
+                pause_success = await pause_bot_for_both_channels(
+                    phone, 
+                    conversation_id, 
+                    f"Asignado a equipo {route_type}"
+                )
+                
+                if pause_success:
+                    logger.info(f"⏸️ Bot pausado para {phone} tras asignación a {route_type}")
+                
+                # Enviar mensaje de confirmación apropiado según el canal
+                try:
+                    if phone and not phone.startswith("chatwoot_"):
+                        # Enviar vía WhatsApp si tenemos número real
+                        await send_evolution_message(phone, config["message"])
+                        logger.info(f"📱 Mensaje de confirmación enviado a WhatsApp: {phone}")
+                    else:
+                        # Enviar vía Chatwoot si no tenemos número de teléfono
+                        await send_chatwoot_message(conversation_id, config["message"])
+                        logger.info(f"💬 Mensaje de confirmación enviado a Chatwoot: {conversation_id}")
+                except Exception as e:
+                    logger.error(f"❌ Error enviando confirmación: {e}")
+                
+                # Log de éxito completo
+                logger.info(f"🚀 Asignación completada: {phone} → Equipo {route_type} (Conversación {conversation_id})")
+                
+                return True
+            else:
+                logger.error(f"❌ Falló asignación para keywords {route_type}: {matched_keywords}")
+    
+    return False
 
 async def pause_bot_for_both_channels(phone: str, conversation_id: str, reason: str) -> bool:
     """Pausar bot para ambos canales (WhatsApp y Chatwoot)"""
@@ -823,6 +985,17 @@ async def chatwoot_webhook(request: Request, background_tasks: BackgroundTasks):
                     if not bot_active:
                         return {"status": "bot_paused", "message": "ignored", "source": "chatwoot"}
                     
+                    # 🎯 CHECK FOR ASSIGNMENT KEYWORDS BEFORE PROCESSING
+                    routed = await check_and_route_by_keywords(
+                        content, 
+                        conversation_id, 
+                        phone if phone else f"chatwoot_{contact_id}"
+                    )
+                    
+                    if routed:
+                        logger.info(f"🚀 Mensaje de Chatwoot ruteado automáticamente: {conversation_id}")
+                        return {"status": "routed_to_team", "conversation_id": conversation_id, "source": "chatwoot"}
+                    
                     # Determine priority based on content
                     priority = MessagePriority.NORMAL
                     if any(word in content.lower() for word in ['urgente', 'problema', 'error']):
@@ -914,6 +1087,20 @@ async def evolution_webhook(request: Request, background_tasks: BackgroundTasks)
             if not bot_active:
                 logger.info(f"🔇 Bot pausado para {from_number}, mensaje ignorado")
                 return {"status": "bot_paused", "message": "ignored"}
+            
+            # 🎯 CHECK FOR ASSIGNMENT KEYWORDS BEFORE PROCESSING
+            if conversation_id:
+                routed = await check_and_route_by_keywords(
+                    message_content, 
+                    conversation_id, 
+                    from_number
+                )
+                
+                if routed:
+                    logger.info(f"🚀 Mensaje ruteado automáticamente: {from_number} → {conversation_id}")
+                    return {"status": "routed_to_team", "conversation_id": conversation_id, "phone": from_number}
+            else:
+                logger.info(f"ℹ️ No hay conversación vinculada para {from_number}, continuando con bot normal")
             
             # Auto-prioritize based on content
             priority = MessagePriority.NORMAL
@@ -1128,6 +1315,75 @@ async def get_bot_stats():
     
     except Exception as e:
         logger.error(f"❌ Error obteniendo estadísticas: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/test/assignment")
+async def test_assignment_endpoint(test_data: TestAssignment):
+    """
+    Endpoint para probar el sistema de asignación automática
+    
+    Args:
+        test_data: Datos de prueba con mensaje, teléfono y conversación
+    """
+    try:
+        logger.info(f"🧪 TEST: Probando asignación para mensaje: '{test_data.message[:50]}...'")
+        
+        # Crear vinculación temporal para la prueba
+        original_mapping = conversation_phone_mapping.get(test_data.conversation_id)
+        link_conversation_to_phone(test_data.conversation_id, test_data.phone)
+        
+        try:
+            if test_data.simulate_only:
+                # Solo simular detección sin asignar realmente
+                message_lower = test_data.message.lower()
+                detected_routes = []
+                
+                for route_type, config in KEYWORD_ROUTING.items():
+                    matched_keywords = [kw for kw in config["keywords"] if kw in message_lower]
+                    if matched_keywords:
+                        detected_routes.append({
+                            "route_type": route_type,
+                            "matched_keywords": matched_keywords,
+                            "team_id": config["team_id"],
+                            "message": config["message"]
+                        })
+                
+                return {
+                    "status": "simulation",
+                    "message": test_data.message,
+                    "conversation_id": test_data.conversation_id,
+                    "phone": test_data.phone,
+                    "detected_routes": detected_routes,
+                    "would_assign": len(detected_routes) > 0,
+                    "timestamp": datetime.now().isoformat()
+                }
+            else:
+                # Probar asignación real
+                routed = await check_and_route_by_keywords(
+                    test_data.message,
+                    test_data.conversation_id,
+                    test_data.phone
+                )
+                
+                return {
+                    "status": "success",
+                    "message": test_data.message,
+                    "conversation_id": test_data.conversation_id,
+                    "phone": test_data.phone,
+                    "routed": routed,
+                    "result": "assigned" if routed else "no_keywords_matched",
+                    "timestamp": datetime.now().isoformat()
+                }
+        
+        finally:
+            # Restaurar mapeo original o limpiar
+            if original_mapping:
+                link_conversation_to_phone(test_data.conversation_id, original_mapping)
+            elif test_data.conversation_id in conversation_phone_mapping:
+                del conversation_phone_mapping[test_data.conversation_id]
+    
+    except Exception as e:
+        logger.error(f"❌ Error en test de asignación: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 # =====================================================
