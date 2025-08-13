@@ -18,6 +18,7 @@ from datetime import datetime, timedelta
 from typing import Dict, Any, Optional
 import time
 import uuid
+import httpx
 
 # FastAPI and middleware
 from fastapi import FastAPI, HTTPException, Request, BackgroundTasks
@@ -140,6 +141,11 @@ class TestAssignment(BaseModel):
     phone: str
     conversation_id: str
     simulate_only: Optional[bool] = False
+
+class ManualMessage(BaseModel):
+    message: str
+    phone: str
+    from_user: Optional[bool] = True
 
 # =====================================================
 # CORE MESSAGE PROCESSOR
@@ -617,6 +623,7 @@ async def check_and_route_by_keywords(message: str, conversation_id: str, phone:
         
         if matched_keywords:
             logger.info(f"🎯 Keywords detectadas [{route_type}]: {matched_keywords} en mensaje: '{message[:50]}...'")
+            logger.info(f"🎯 Intentando asignar conversación {conversation_id} al equipo {config['team_id']} ({route_type})")
             
             # Intentar asignar conversación
             success = await assign_conversation_to_team(
@@ -1170,6 +1177,7 @@ async def chatwoot_webhook(request: Request, background_tasks: BackgroundTasks):
                         return {"status": "bot_paused", "message": "ignored", "source": "chatwoot"}
                     
                     # 🎯 CHECK FOR ASSIGNMENT KEYWORDS BEFORE PROCESSING
+                    logger.info(f"🔍 CHATWOOT - Revisando keywords en: '{content[:50]}...' para conversación {conversation_id}")
                     routed = await check_and_route_by_keywords(
                         content, 
                         conversation_id, 
@@ -1179,6 +1187,9 @@ async def chatwoot_webhook(request: Request, background_tasks: BackgroundTasks):
                     if routed:
                         logger.info(f"🚀 Mensaje de Chatwoot ruteado automáticamente: {conversation_id}")
                         return {"status": "routed_to_team", "conversation_id": conversation_id, "source": "chatwoot"}
+                    else:
+                        logger.info(f"🔍 CHATWOOT - NO se detectaron keywords de asignación en: '{content[:50]}...'")
+                        # CONTINUAR con el procesamiento normal del bot solo si NO hubo asignación
                     
                     # Determine priority based on content
                     priority = MessagePriority.NORMAL
@@ -1278,10 +1289,21 @@ async def evolution_webhook(request: Request, background_tasks: BackgroundTasks)
             logger.info(f"📱 PROCESANDO mensaje WhatsApp de {from_number}: '{message_content[:100]}...'")
             user_id = f"whatsapp_{from_number}"
             
-            # Buscar si este teléfono tiene una conversación vinculada
-            conversation_id = get_conversation_from_phone(from_number)
-            if conversation_id:
-                logger.info(f"📱 Teléfono {from_number} vinculado a conversación {conversation_id}")
+            # PRIMERO: Buscar chatwootConversationId en el payload de Evolution
+            conversation_id = None
+            chatwoot_conv_id = message_data_raw.get("chatwootConversationId")
+            if chatwoot_conv_id:
+                conversation_id = str(chatwoot_conv_id)
+                logger.info(f"✅ Usando chatwootConversationId del payload: {conversation_id}")
+                # Crear vinculación automática
+                link_conversation_to_phone(conversation_id, from_number)
+            else:
+                # FALLBACK: Buscar en el mapeo local si no viene en el payload
+                conversation_id = get_conversation_from_phone(from_number)
+                if conversation_id:
+                    logger.info(f"📱 Teléfono {from_number} vinculado a conversación {conversation_id} (desde mapeo local)")
+                else:
+                    logger.info(f"⚠️ No hay chatwootConversationId en payload ni vinculación local para {from_number}")
             
             # Handle bot control commands first
             control_response = await handle_bot_control_commands(from_number, message_content)
@@ -1314,33 +1336,14 @@ async def evolution_webhook(request: Request, background_tasks: BackgroundTasks)
                 else:
                     logger.info(f"🔍 NO se detectaron keywords de asignación en: '{message_content[:50]}...'")
             else:
-                logger.warning(f"⚠️ No hay conversación vinculada para {from_number}")
+                logger.warning(f"⚠️ No hay conversación vinculada para {from_number} - usando fallback")
                 
-                # NUEVA FUNCIONALIDAD: Intentar buscar conversación por teléfono en Chatwoot
-                conversation_id = await find_or_create_conversation_for_phone(from_number)
+                # FUNCIONALIDAD FALLBACK: Detección sin asignación
+                # Si no hay conversation_id pero hay keywords importantes, notificar
+                if await detect_keywords_without_assignment(message_content, from_number):
+                    return {"status": "keywords_detected_no_assignment", "phone": from_number}
                 
-                if conversation_id:
-                    logger.info(f"✅ Conversación encontrada/creada: {conversation_id} para {from_number}")
-                    
-                    # Ahora revisar keywords con la nueva conversación
-                    logger.info(f"🔍 REVISANDO keywords en: '{message_content[:50]}...' para conversación {conversation_id}")
-                    routed = await check_and_route_by_keywords(
-                        message_content, 
-                        conversation_id, 
-                        from_number
-                    )
-                    
-                    if routed:
-                        logger.info(f"🚀 Mensaje ruteado tras encontrar conversación: {from_number} → {conversation_id}")
-                        return {"status": "routed_to_team", "conversation_id": conversation_id, "phone": from_number}
-                else:
-                    logger.warning(f"❌ No se pudo encontrar ni crear conversación para {from_number}")
-                    
-                    # FUNCIONALIDAD FALLBACK: Detección sin asignación
-                    if await detect_keywords_without_assignment(message_content, from_number):
-                        return {"status": "keywords_detected_no_assignment", "phone": from_number}
-                
-                logger.info(f"ℹ️ Continuando con bot normal para {from_number}")
+                logger.info(f"ℹ️ Continuando con bot normal para {from_number} (sin conversation_id)")
             
             # Auto-prioritize based on content
             priority = MessagePriority.NORMAL
