@@ -488,7 +488,7 @@ KEYWORD_ROUTING = {
             "pedido roto", "llego roto", "vino roto", "llegó dañado", "dañado"
         ],
         "team_id": CHATWOOT_TEAM_SUPPORT_ID,
-        "message": "Te voy a conectar con nuestro equipo de soporte técnico 🛠️\nVan a resolver tu problema de inmediato."
+        "message": "Te voy a conectar con nuestro equipo, quienes te van a ayudar con tu reclamo especifico. 🛠️\nVan a resolver tu problema de inmediato."
     },
     "billing": {
         "keywords": [
