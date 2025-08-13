@@ -449,7 +449,8 @@ KEYWORD_ROUTING = {
     "support": {
         "keywords": [
             "reclamo", "queja", "problema", "no funciona", "defectuoso", 
-            "roto", "mal estado", "garantia", "devolucion", "cambio"
+            "roto", "mal estado", "garantia", "devolucion", "cambio",
+            "pedido roto", "llego roto", "vino roto", "llegó dañado", "dañado"
         ],
         "team_id": CHATWOOT_TEAM_SUPPORT_ID,
         "message": "Te voy a conectar con nuestro equipo de soporte técnico 🛠️\nVan a resolver tu problema de inmediato."
@@ -527,6 +528,7 @@ def is_order_inquiry(message: str) -> bool:
     vs. una consulta general sobre condiciones de envío
     """
     message_lower = message.lower()
+    logger.info(f"🔍 is_order_inquiry - Analizando: '{message_lower[:50]}...'")
     
     # Palabras que indican consulta sobre pedido específico
     order_indicators = [
@@ -546,7 +548,12 @@ def is_order_inquiry(message: str) -> bool:
     has_order_ref = any(indicator in message_lower for indicator in order_indicators)
     has_status_ref = any(indicator in message_lower for indicator in status_indicators)
     
-    return has_order_ref or has_status_ref
+    logger.info(f"🔍 has_order_ref: {has_order_ref}, has_status_ref: {has_status_ref}")
+    
+    result = has_order_ref or has_status_ref
+    logger.info(f"🔍 is_order_inquiry resultado: {result}")
+    
+    return result
 
 async def check_and_route_by_keywords(message: str, conversation_id: str, phone: str) -> bool:
     """
@@ -561,16 +568,23 @@ async def check_and_route_by_keywords(message: str, conversation_id: str, phone:
         bool: True si se realizó una asignación
     """
     message_lower = message.lower()
+    logger.info(f"🔍 check_and_route_by_keywords - Analizando: '{message_lower[:100]}...'")
     
     # Revisar cada categoría de keywords
     for route_type, config in KEYWORD_ROUTING.items():
+        logger.info(f"🔍 Revisando categoría: {route_type}")
+        
         # Para shipping, hacer validación adicional
         if route_type == "shipping":
-            if not is_order_inquiry(message):
+            is_order_query = is_order_inquiry(message)
+            logger.info(f"🔍 Shipping - es consulta de pedido?: {is_order_query}")
+            if not is_order_query:
+                logger.info(f"🔍 Skipping shipping - no es consulta de pedido específico")
                 continue  # Skip si no es consulta sobre pedido específico
         
         # Verificar si alguna keyword coincide
         matched_keywords = [kw for kw in config["keywords"] if kw in message_lower]
+        logger.info(f"🔍 Keywords coincidentes en {route_type}: {matched_keywords}")
         
         if matched_keywords:
             logger.info(f"🎯 Keywords detectadas [{route_type}]: {matched_keywords} en mensaje: '{message[:50]}...'")
@@ -950,11 +964,13 @@ async def chatwoot_webhook(request: Request, background_tasks: BackgroundTasks):
         # DEBUG: Log key fields for bot control
         event = data.get("event")
         message_type = data.get("message_type") 
-        sender_type = data.get("sender", {}).get("type")
+        sender = data.get("sender", {})
+        sender_type = sender.get("type") if sender else None
         content = data.get("content", "")
         is_private = data.get("private", False)
         
         logger.info(f"🔍 DEBUG - Event: {event}, MsgType: {message_type}, Sender: {sender_type}, Private: {is_private}, Content: '{content}'")
+        logger.info(f"🔍 DEBUG - Sender completo: {sender}")
         
         # Handle agent control commands (notes or messages from agents)
         if (data.get("event") == "message_created" and 
@@ -965,10 +981,21 @@ async def chatwoot_webhook(request: Request, background_tasks: BackgroundTasks):
                 logger.info(f"🎯 Comando de agente detectado: {content}")
                 return await handle_agent_private_note(data)
         
-        # Process only incoming messages from contacts
+        # Process only incoming messages from contacts  
+        # Nota: A veces sender.type es None pero el mensaje sigue siendo válido
         if (data.get("event") == "message_created" and 
-            data.get("message_type") == "incoming" and
-            data.get("sender", {}).get("type") == "contact"):
+            data.get("message_type") == "incoming"):
+            
+            sender_type = data.get("sender", {}).get("type") if data.get("sender") else None
+            logger.info(f"🔍 Mensaje incoming detectado, sender.type: {sender_type}")
+            
+            # Skip si es mensaje de agente (user type)
+            if sender_type == "user":
+                logger.info("🔇 Ignorando mensaje de agente (user type)")
+                return {"status": "received", "ignored": "agent_message"}
+            
+            # Procesar mensajes de contact o sender type desconocido
+            logger.info("🔵 PROCESANDO mensaje incoming de contact en Chatwoot")
             
             conversation = data.get("conversation", {})
             content = data.get("content", "").strip()
@@ -1054,6 +1081,9 @@ async def chatwoot_webhook(request: Request, background_tasks: BackgroundTasks):
                         # Schedule response sending (this would be handled by worker completion)
                         # background_tasks.add_task(send_chatwoot_response, conversation_id, user_id)
                         pass
+        else:
+            # Log por qué no se procesó el mensaje
+            logger.info(f"🔇 Mensaje NO procesado - Event: {data.get('event')}, MsgType: {data.get('message_type')}, Sender: {data.get('sender', {}).get('type')}")
         
         return {"status": "received", "processed": True}
         
@@ -1100,6 +1130,7 @@ async def evolution_webhook(request: Request, background_tasks: BackgroundTasks)
         from_number = message_data_raw.get("key", {}).get("remoteJid", "").replace("@s.whatsapp.net", "")
         
         if message_content and from_number:
+            logger.info(f"📱 PROCESANDO mensaje WhatsApp de {from_number}: '{message_content[:100]}...'")
             user_id = f"whatsapp_{from_number}"
             
             # Buscar si este teléfono tiene una conversación vinculada
@@ -1125,6 +1156,7 @@ async def evolution_webhook(request: Request, background_tasks: BackgroundTasks)
             
             # 🎯 CHECK FOR ASSIGNMENT KEYWORDS BEFORE PROCESSING
             if conversation_id:
+                logger.info(f"🔍 REVISANDO keywords en: '{message_content[:50]}...' para conversación {conversation_id}")
                 routed = await check_and_route_by_keywords(
                     message_content, 
                     conversation_id, 
@@ -1134,6 +1166,8 @@ async def evolution_webhook(request: Request, background_tasks: BackgroundTasks)
                 if routed:
                     logger.info(f"🚀 Mensaje ruteado automáticamente: {from_number} → {conversation_id}")
                     return {"status": "routed_to_team", "conversation_id": conversation_id, "phone": from_number}
+                else:
+                    logger.info(f"🔍 NO se detectaron keywords de asignación en: '{message_content[:50]}...'")
             else:
                 logger.info(f"ℹ️ No hay conversación vinculada para {from_number}, continuando con bot normal")
             
