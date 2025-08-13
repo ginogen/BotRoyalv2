@@ -629,6 +629,94 @@ async def check_and_route_by_keywords(message: str, conversation_id: str, phone:
     
     return False
 
+async def find_or_create_conversation_for_phone(phone: str) -> Optional[str]:
+    """
+    Busca una conversación existente en Chatwoot por número de teléfono
+    o crea una nueva si no existe
+    """
+    if not all([CHATWOOT_API_URL, CHATWOOT_API_TOKEN, CHATWOOT_ACCOUNT_ID]):
+        logger.warning("⚠️ Chatwoot API no configurada para búsqueda de conversaciones")
+        return None
+    
+    try:
+        # Buscar conversaciones existentes por teléfono
+        search_url = f"{CHATWOOT_API_URL}/api/v1/accounts/{CHATWOOT_ACCOUNT_ID}/conversations/search"
+        headers = {
+            "Content-Type": "application/json",
+            "api_access_token": CHATWOOT_API_TOKEN
+        }
+        
+        # Buscar por el teléfono con diferentes formatos
+        search_queries = [
+            phone,
+            f"+{phone}",
+            f"+1{phone}",  # Si es número de US
+            phone[-10:] if len(phone) > 10 else phone  # Últimos 10 dígitos
+        ]
+        
+        for query in search_queries:
+            params = {"q": query}
+            
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                response = await client.get(search_url, headers=headers, params=params)
+                
+            if response.status_code == 200:
+                data = response.json()
+                conversations = data.get("payload", [])
+                
+                if conversations:
+                    # Tomar la primera conversación encontrada
+                    conv = conversations[0]
+                    conversation_id = str(conv.get("id"))
+                    
+                    # Crear vinculación
+                    link_conversation_to_phone(conversation_id, phone)
+                    
+                    logger.info(f"🔍 Conversación encontrada por búsqueda: {conversation_id} para {phone}")
+                    return conversation_id
+        
+        # Si no se encontró, intentar crear una nueva conversación (esto requiere más lógica)
+        logger.info(f"🔍 No se encontró conversación existente para {phone}")
+        return None
+        
+    except Exception as e:
+        logger.error(f"❌ Error buscando conversación para {phone}: {e}")
+        return None
+
+async def detect_keywords_without_assignment(message: str, phone: str) -> bool:
+    """
+    Detecta keywords y notifica sin asignar conversación
+    (fallback cuando no hay conversation_id)
+    """
+    message_lower = message.lower()
+    
+    # Revisar si hay keywords de soporte que requieren atención
+    for route_type, config in KEYWORD_ROUTING.items():
+        matched_keywords = [kw for kw in config["keywords"] if kw in message_lower]
+        
+        if matched_keywords:
+            logger.warning(f"🚨 KEYWORDS DETECTADAS sin conversación: [{route_type}] {matched_keywords} de {phone}")
+            
+            # Enviar mensaje al usuario explicando que será contactado
+            fallback_message = f"""🔔 Detecté que necesitás ayuda con {route_type}.
+
+Como no puedo procesar tu consulta automáticamente en este momento, nuestro equipo especializado te va a contactar directamente para resolver tu situación.
+
+Gracias por tu paciencia. 🙏"""
+            
+            try:
+                await send_evolution_message(phone, fallback_message)
+                logger.info(f"📱 Mensaje de fallback enviado a {phone}")
+            except Exception as e:
+                logger.error(f"❌ Error enviando mensaje de fallback: {e}")
+            
+            # Log para que admin pueda revisar manualmente
+            logger.critical(f"🚨 ATENCIÓN MANUAL REQUERIDA: {phone} - Tipo: {route_type} - Keywords: {matched_keywords}")
+            
+            return True
+    
+    return False
+
 async def pause_bot_for_both_channels(phone: str, conversation_id: str, reason: str) -> bool:
     """Pausar bot para ambos canales (WhatsApp y Chatwoot)"""
     success_phone = await bot_state_manager.pause_bot(phone, reason)
@@ -1109,6 +1197,8 @@ async def evolution_webhook(request: Request, background_tasks: BackgroundTasks)
         event = data.get("event", "")
         message_data_raw = data.get("data", {})
         
+        logger.info(f"📱 Evolution event: {event}")
+        
         # Handle different event types
         if event == "labels.association":
             # Handle label changes from Chatwoot
@@ -1118,6 +1208,8 @@ async def evolution_webhook(request: Request, background_tasks: BackgroundTasks)
         if event not in ["messages.upsert"]:
             logger.info(f"🔇 Ignoring event: {event}")
             return {"status": "received", "ignored": event}
+        
+        logger.info(f"📱 Processing messages.upsert event")
         
         # Check if message is from us (fromMe: true)
         from_me = message_data_raw.get("key", {}).get("fromMe", False)
@@ -1169,7 +1261,33 @@ async def evolution_webhook(request: Request, background_tasks: BackgroundTasks)
                 else:
                     logger.info(f"🔍 NO se detectaron keywords de asignación en: '{message_content[:50]}...'")
             else:
-                logger.info(f"ℹ️ No hay conversación vinculada para {from_number}, continuando con bot normal")
+                logger.warning(f"⚠️ No hay conversación vinculada para {from_number}")
+                
+                # NUEVA FUNCIONALIDAD: Intentar buscar conversación por teléfono en Chatwoot
+                conversation_id = await find_or_create_conversation_for_phone(from_number)
+                
+                if conversation_id:
+                    logger.info(f"✅ Conversación encontrada/creada: {conversation_id} para {from_number}")
+                    
+                    # Ahora revisar keywords con la nueva conversación
+                    logger.info(f"🔍 REVISANDO keywords en: '{message_content[:50]}...' para conversación {conversation_id}")
+                    routed = await check_and_route_by_keywords(
+                        message_content, 
+                        conversation_id, 
+                        from_number
+                    )
+                    
+                    if routed:
+                        logger.info(f"🚀 Mensaje ruteado tras encontrar conversación: {from_number} → {conversation_id}")
+                        return {"status": "routed_to_team", "conversation_id": conversation_id, "phone": from_number}
+                else:
+                    logger.warning(f"❌ No se pudo encontrar ni crear conversación para {from_number}")
+                    
+                    # FUNCIONALIDAD FALLBACK: Detección sin asignación
+                    if await detect_keywords_without_assignment(message_content, from_number):
+                        return {"status": "keywords_detected_no_assignment", "phone": from_number}
+                
+                logger.info(f"ℹ️ Continuando con bot normal para {from_number}")
             
             # Auto-prioritize based on content
             priority = MessagePriority.NORMAL
