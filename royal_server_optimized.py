@@ -949,6 +949,12 @@ async def handle_conversation_updated(data: Dict) -> Dict:
             if source_id and source_id.replace("-", "").replace("+", "").replace(" ", "").isdigit():
                 phone = source_id.replace("-", "").replace("+", "").replace(" ", "")
         
+        # 5. Si aún no tenemos teléfono, buscar en las vinculaciones existentes
+        if not phone and conversation_id:
+            phone = get_phone_from_conversation(conversation_id)
+            if phone:
+                logger.info(f"🔗 Teléfono encontrado en vinculaciones: conversación {conversation_id} ↔ teléfono {phone}")
+        
         logger.info(f"🏷️ Procesando conversation_updated - Conversación: {conversation_id}, Teléfono: {phone}")
         
         # Extraer etiquetas de la conversación (buscar en múltiples ubicaciones)
@@ -983,6 +989,8 @@ async def handle_conversation_updated(data: Dict) -> Dict:
         # Siempre agregar identificador de conversación
         conv_identifier = f"conv_{conversation_id}"
         identifiers.append(conv_identifier)
+        
+        logger.info(f"🎯 Identificadores para procesar etiquetas: {identifiers}")
         
         # Procesar cambio de estado del bot basado en etiquetas de control
         actions_taken = []
