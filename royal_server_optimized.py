@@ -47,7 +47,10 @@ try:
 except ImportError:
     # Fallback if royal_agents not available
     def run_contextual_conversation_sync(user_id: str, message: str) -> str:
-        return "Sistema en modo de prueba. Royal agents no disponible."
+        # No responder con mensajes técnicos - simplemente retornar None
+        # Esto evita mostrar mensajes confusos al usuario
+        logger.warning(f"⚠️ Royal agents no disponible para {user_id}, mensaje ignorado")
+        return None
     
     def start_follow_up_scheduler(callback=None):
         pass
@@ -174,8 +177,45 @@ async def process_royal_message(user_id: str, message: str, message_data: Option
         # Log the processing start
         logger.info(f"🤖 Processing message for {user_id}: {message[:50]}...")
         
+        # ✨ NUEVO: Verificar estado del bot ANTES de procesar
+        # Extraer identificadores del mensaje
+        phone = message_data.phone if message_data else None
+        conversation_id = message_data.conversation_id if message_data else None
+        
+        # Verificar por teléfono (prioritario)
+        if phone:
+            is_active = await bot_state_manager.is_bot_active(phone)
+            if not is_active:
+                logger.info(f"🔇 Worker: Bot pausado para teléfono {phone}, mensaje ignorado silenciosamente")
+                return None
+        
+        # Verificar por conversación si no hay teléfono
+        elif conversation_id:
+            conv_identifier = f"conv_{conversation_id}"
+            is_active = await bot_state_manager.is_bot_active(conv_identifier)
+            if not is_active:
+                logger.info(f"🔇 Worker: Bot pausado para conversación {conv_identifier}, mensaje ignorado silenciosamente")
+                return None
+        
+        # Verificar por user_id como último recurso (para casos legacy)
+        elif user_id and not user_id.startswith("chatwoot_"):
+            # Si el user_id parece ser un teléfono, verificar
+            is_active = await bot_state_manager.is_bot_active(user_id)
+            if not is_active:
+                logger.info(f"🔇 Worker: Bot pausado para user_id {user_id}, mensaje ignorado silenciosamente")
+                return None
+        
+        # Si llegamos aquí, el bot está activo - procesar normalmente
+        logger.debug(f"✅ Worker: Bot activo para {user_id}, procesando mensaje...")
+        
         # Process with Royal agent (using sync version for thread compatibility)
         response = run_contextual_conversation_sync(user_id, message)
+        
+        # ✨ NUEVO: Verificar si hay respuesta válida antes de enviar
+        if response is None:
+            processing_time = time.time() - start_time
+            logger.info(f"🔇 No response generated for {user_id} (bot paused or agents unavailable), processed in {processing_time:.2f}s")
+            return None
         
         # Calculate processing time
         processing_time = time.time() - start_time
@@ -185,8 +225,8 @@ async def process_royal_message(user_id: str, message: str, message_data: Option
             system_metrics['average_response_time'] * 0.9 + processing_time * 0.1
         )
         
-        # Send response back to appropriate channel
-        if message_data:
+        # Send response back to appropriate channel (solo si hay respuesta válida)
+        if message_data and response:
             await send_response_to_channel(user_id, response, message_data)
         
         logger.info(f"✅ Message processed for {user_id} in {processing_time:.2f}s")
@@ -214,6 +254,11 @@ async def process_royal_message(user_id: str, message: str, message_data: Option
 
 async def send_response_to_channel(user_id: str, response: str, message_data: 'MessageData'):
     """Send response back to the appropriate channel (WhatsApp, Chatwoot, etc.)"""
+    
+    # Verificar que hay respuesta válida
+    if not response or response is None:
+        logger.debug(f"🔇 No response to send for {user_id} (None or empty)")
+        return False
     
     try:
         if message_data.source == MessageSource.EVOLUTION and message_data.phone:
@@ -857,43 +902,70 @@ async def handle_conversation_updated(data: Dict) -> Dict:
         Diccionario con el resultado del procesamiento
     """
     try:
+        # Buscar conversation_id en múltiples ubicaciones posibles
         conversation = data.get("conversation", {})
         conversation_id = str(conversation.get("id", ""))
         
+        # Si no está en conversation.id, buscar en el nivel raíz del payload
         if not conversation_id:
-            logger.warning("⚠️ conversation_updated sin ID de conversación")
+            conversation_id = str(data.get("id", ""))
+        
+        # Si aún no encontramos el ID, intentar con otros campos posibles
+        if not conversation_id:
+            # Algunas veces Chatwoot puede enviar el ID en diferentes formatos
+            if "conversation_id" in data:
+                conversation_id = str(data.get("conversation_id", ""))
+        
+        if not conversation_id:
+            logger.warning(f"⚠️ conversation_updated sin ID de conversación. Payload keys: {list(data.keys())}")
+            logger.debug(f"🔍 Payload completo: {data}")
             return {"status": "error", "message": "Missing conversation ID"}
         
-        # Extraer número de teléfono de la conversación
+        # Extraer número de teléfono de la conversación (buscar en múltiples ubicaciones)
         phone = None
+        
+        # 1. Buscar en conversation.contact_phone
         contact_phone = conversation.get("contact_phone")
         if contact_phone:
             phone = contact_phone.replace("+", "").replace("-", "").replace(" ", "")
         
-        # Buscar el número en contact_inbox si no está en contact_phone
+        # 2. Buscar en contact_inbox.source_id si no está en contact_phone
         if not phone:
             contact_inbox = conversation.get("contact_inbox", {})
             source_id = contact_inbox.get("source_id", "")
-            # source_id podría contener el número de teléfono
-            if source_id and source_id.replace("-", "").replace("+", "").isdigit():
-                phone = source_id.replace("-", "").replace("+", "")
+            if source_id and source_id.replace("-", "").replace("+", "").replace(" ", "").isdigit():
+                phone = source_id.replace("-", "").replace("+", "").replace(" ", "")
         
-        # Si aún no tenemos teléfono, buscar en additional_attributes  
+        # 3. Buscar en additional_attributes.phone_number
         if not phone:
             attrs = conversation.get("additional_attributes", {})
             if "phone_number" in attrs:
                 phone = attrs["phone_number"].replace("+", "").replace("-", "").replace(" ", "")
         
+        # 4. Si conversation está vacío, buscar teléfono en el payload principal
+        if not phone and not conversation:
+            # Buscar source_id en el nivel raíz
+            source_id = data.get("source_id", "")
+            if source_id and source_id.replace("-", "").replace("+", "").replace(" ", "").isdigit():
+                phone = source_id.replace("-", "").replace("+", "").replace(" ", "")
+        
         logger.info(f"🏷️ Procesando conversation_updated - Conversación: {conversation_id}, Teléfono: {phone}")
         
-        # Extraer etiquetas de la conversación
+        # Extraer etiquetas de la conversación (buscar en múltiples ubicaciones)
         labels = conversation.get("labels", [])
+        
+        # Si no hay etiquetas en conversation.labels, buscar en otros lugares
         if not labels:
-            # También intentar obtener de otros campos posibles
+            # Buscar en cached_label_list
             labels = conversation.get("cached_label_list", [])
             if isinstance(labels, str):
                 # Si es string separado por comas, convertir a lista
                 labels = [{"title": label.strip()} for label in labels.split(",") if label.strip()]
+        
+        # Si aún no hay etiquetas y conversation está vacío, buscar en el payload principal
+        if not labels and not conversation:
+            # Algunos webhooks podrían enviar las etiquetas en el nivel raíz
+            labels = data.get("labels", [])
         
         logger.info(f"🔍 Etiquetas encontradas para conversación {conversation_id}: {labels}")
         
