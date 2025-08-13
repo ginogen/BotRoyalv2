@@ -158,15 +158,15 @@ async def handle_missing_information_hitl(
     hitl_responses = {
         'product': [
             "Dale, dejame que chequeo eso puntualmente en el sistema y te confirmo ahora",
-            "Upa, tengo que verificar eso con el equipo. Dame un toque que te traigo la info completa",
+            "tengo que verificar eso con el equipo. Dame un momento que te traigo la info completa",
             "Mirá, eso lo tengo que consultar específicamente. En un ratito te confirmo todo",
-            "Che, déjame que reviso eso en detalle y te paso los datos exactos"
+            "déjame que reviso eso en detalle y te paso los datos exactos"
         ],
         'price': [
             "Los precios me los están actualizando justo ahora. Dame un minuto que te confirmo el valor exacto",
-            "Uy, tengo que chequear el precio actualizado. Ahora te traigo el dato preciso",
-            "Dale, que reviso el valor actual y te confirmo al toque",
-            "Déjame verificar el precio más reciente y te paso la info"
+            "tengo que chequear el precio actualizado. Ahora te traigo el dato preciso",
+            "Dale, dejame que reviso el valor actual y te confirmo en un moemento",
+            "Déjame verificar el precio  y te paso la info"
         ],
         'stock': [
             "El stock lo tengo que verificar en tiempo real. Un segundo que chequeo y te confirmo",
@@ -175,22 +175,22 @@ async def handle_missing_information_hitl(
             "Dejame que reviso el inventario actualizado y te paso el dato"
         ],
         'shipping': [
-            "Los envíos tengo que consultarlos según tu zona específica. Dame un toque",
-            "Uy, para el envío necesito chequear tu ubicación exacta. Ahora te confirmo",
+            "Los envíos tengo que consultarlos según tu zona específica. Ya te digo",
+            "ara el envío necesito chequear tu ubicación exacta. Ahora te confirmo",
             "Dale, que verifico las opciones de envío para tu zona y te cuento",
             "Tengo que consultar las opciones de entrega para donde estás. Un momento"
         ],
         'technical': [
-            "Che, se me está complicando el sistema. Dame un momento que lo soluciono",
-            "Uy, tengo un problemita técnico. Ya lo arreglo y te ayudo como corresponde",
+            "Uy, se me está complicando el sistema. Dame un momento que lo soluciono",
+            "Tengo un problemita técnico. Ya lo arreglo y te ayudo como corresponde",
             "Se me trabó algo acá. Un segundo que lo destrabó y seguimos",
             "Perdón, se me colgó algo. Ya vuelvo con toda la info que necesitás"
         ],
         'general': [
             "Dale, tengo que chequear eso puntualmente. Dame un ratito y te confirmo todo",
-            "Esa info la tengo que verificar bien. En un momento te traigo los datos completos",
+            "Esa info la tengo que verificar bien. En un momento te respondo",
             "Dejame que consulto eso específicamente y te paso toda la información",
-            "Che, eso lo tengo que revisar con detalle. Ahora te confirmo"
+            "eso lo tengo que revisar con detalle. Ahora te confirmo"
         ]
     }
     
@@ -236,8 +236,8 @@ async def check_mcp_connectivity_and_fallback(wrapper: RunContextWrapper[RoyalAg
             
             import random
             responses = [
-                "Che, se me está complicando el sistema. Dame un momento que lo soluciono 👍",
-                "Uy, tengo un problemita técnico. Ya lo arreglo y te ayudo como corresponde 👍",
+                "Uy, se me está complicando el sistema. Dame un momento que lo soluciono 👍",
+                "Tengo un problemita técnico. Ya lo arreglo y te ayudo como corresponde 👍",
                 "Se me trabó algo acá. Un segundo que lo destrabó y seguimos 👍"
             ]
             return f"HITL_ACTIVATED|{random.choice(responses)}"
@@ -256,7 +256,7 @@ async def check_mcp_connectivity_and_fallback(wrapper: RunContextWrapper[RoyalAg
         import random
         responses = [
             "Perdón, se me colgó algo. Ya vuelvo con toda la info que necesitás 👍",
-            "Che, se me complicó el sistema. Dame un momento que lo soluciono 👍"
+            "Uy, se me complicó el sistema. Dame un momento que lo soluciono 👍"
         ]
         return f"HITL_ACTIVATED|{random.choice(responses)}"
 
@@ -322,7 +322,7 @@ async def escalate_to_human_support(
         'frustration': [
             "Dale, veo que esto te está complicando. Ya le paso el tema a mi supervisor para que te atienda personalmente",
             "Uh, perdón por la vuelta que te dimos. Ya escalé esto para que te contacte alguien del equipo",
-            "Che, mejor que te atienda directamente alguien más especializado. Ya aviso para que te llamen",
+            "Mejor que te atienda directamente alguien más especializado. Ya aviso para que te llamen",
         ],
         'missing_info': [
             "Mirá, mejor que hable con vos directamente alguien que tenga toda la info. Ya los contacto",
@@ -336,7 +336,7 @@ async def escalate_to_human_support(
         ],
         'technical_issue': [
             "Uy, se me complicó el sistema. Ya avisé al equipo técnico para que te contacten directamente",
-            "Che, tengo un problema técnico que me impide ayudarte bien. El equipo ya está al tanto",
+            "Tengo un problema técnico que me impide ayudarte bien. El equipo ya está al tanto",
             "Se me trabó algo importante. Ya escalé para que te atiendan como corresponde",
         ]
     }
@@ -462,7 +462,7 @@ async def get_product_info_with_context(
         responses = [
             "Dale, dejame que chequeo eso puntualmente y te confirmo si tenemos algo similar 👍",
             "Tengo que verificar bien el inventario para esa búsqueda. Ya te confirmo 👍",
-            "Che, déjame que reviso eso en detalle y te paso opciones disponibles 👍"
+            "Déjame que reviso eso en detalle y te paso opciones disponibles 👍"
         ]
         return random.choice(responses)
     
@@ -549,7 +549,7 @@ async def get_combos_with_context(wrapper: RunContextWrapper[RoyalAgentContext])
         responses = [
             "Dale, tengo que chequear los combos puntualmente. Dame un ratito y te confirmo todo 👍",
             "Los combos los tengo que verificar bien. En un momento te traigo las opciones disponibles 👍",
-            "Che, déjame que consulto los combos específicamente y te paso toda la información 👍"
+            "Déjame que consulto los combos específicamente y te paso toda la información 👍"
         ]
         return random.choice(responses)
     
@@ -582,7 +582,7 @@ async def get_combos_with_context(wrapper: RunContextWrapper[RoyalAgentContext])
         responses = [
             "Dale, tengo que chequear qué combos tenemos disponibles. Dame un momento 👍",
             "Los combos emprendedores los tengo que verificar. Ya te confirmo las opciones 👍",
-            "Che, déjame que reviso qué combos hay disponibles y te paso la info completa 👍"
+            "Déjame que reviso qué combos hay disponibles y te paso la info completa 👍"
         ]
         return random.choice(responses)
     
