@@ -49,14 +49,31 @@ class FollowUpDatabaseManager:
     """Gestor de base de datos para el sistema de seguimiento"""
     
     def __init__(self):
-        # Configuración de base de datos
-        self.db_config = {
-            'host': os.getenv('POSTGRES_HOST', 'localhost'),
-            'database': os.getenv('POSTGRES_DB', 'royal_bot'),
-            'user': os.getenv('POSTGRES_USER', 'postgres'),
-            'password': os.getenv('POSTGRES_PASSWORD', 'password'),
-            'port': os.getenv('POSTGRES_PORT', 5432)
-        }
+        # Usar DATABASE_URL si está disponible (Railway/Producción)
+        database_url = os.getenv('DATABASE_URL')
+        
+        if database_url:
+            # Parse DATABASE_URL para psycopg2
+            import urllib.parse as urlparse
+            url = urlparse.urlparse(database_url)
+            self.db_config = {
+                'database': url.path[1:],
+                'user': url.username,
+                'password': url.password,
+                'host': url.hostname,
+                'port': url.port
+            }
+            logger.info(f"✅ Usando DATABASE_URL para conexión PostgreSQL (host: {url.hostname})")
+        else:
+            # Fallback para desarrollo local
+            self.db_config = {
+                'host': os.getenv('POSTGRES_HOST', 'localhost'),
+                'database': os.getenv('POSTGRES_DB', 'royal_bot'),
+                'user': os.getenv('POSTGRES_USER', 'postgres'),
+                'password': os.getenv('POSTGRES_PASSWORD', 'password'),
+                'port': os.getenv('POSTGRES_PORT', 5432)
+            }
+            logger.info("📍 Usando configuración local de PostgreSQL")
         
         # Inicializar tabla si no existe
         self._init_database()

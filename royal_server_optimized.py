@@ -789,8 +789,149 @@ async def resume_bot_for_both_channels(phone: str, conversation_id: str) -> bool
     return True
 
 # =====================================================
-# BOT CONTROL FUNCTIONS
+# BOT CONTROL FUNCTIONS  
 # =====================================================
+
+def detect_bot_paused_tag(labels: list) -> bool:
+    """
+    Detecta si la etiqueta 'bot-paused' está presente en la lista de etiquetas
+    
+    Args:
+        labels: Lista de etiquetas de la conversación
+        
+    Returns:
+        True si bot-paused está presente, False si no
+    """
+    if not labels or not isinstance(labels, list):
+        return False
+        
+    for label in labels:
+        # Manejar diferentes formatos de etiqueta
+        label_name = ""
+        
+        if isinstance(label, dict):
+            label_name = label.get('title') or label.get('name') or label.get('label') or ""
+        elif isinstance(label, str):
+            label_name = label
+        
+        # Verificar si es la etiqueta bot-paused
+        if label_name.lower().strip() == 'bot-paused':
+            return True
+    
+    return False
+
+async def handle_conversation_updated(data: Dict) -> Dict:
+    """
+    Maneja eventos conversation_updated para detectar cambios en etiquetas bot-paused
+    
+    Args:
+        data: Datos del webhook de Chatwoot
+        
+    Returns:
+        Diccionario con el resultado del procesamiento
+    """
+    try:
+        conversation = data.get("conversation", {})
+        conversation_id = str(conversation.get("id", ""))
+        
+        if not conversation_id:
+            logger.warning("⚠️ conversation_updated sin ID de conversación")
+            return {"status": "error", "message": "Missing conversation ID"}
+        
+        # Extraer número de teléfono de la conversación
+        phone = None
+        contact_phone = conversation.get("contact_phone")
+        if contact_phone:
+            phone = contact_phone.replace("+", "").replace("-", "").replace(" ", "")
+        
+        # Buscar el número en contact_inbox si no está en contact_phone
+        if not phone:
+            contact_inbox = conversation.get("contact_inbox", {})
+            source_id = contact_inbox.get("source_id", "")
+            # source_id podría contener el número de teléfono
+            if source_id and source_id.replace("-", "").replace("+", "").isdigit():
+                phone = source_id.replace("-", "").replace("+", "")
+        
+        # Si aún no tenemos teléfono, buscar en additional_attributes  
+        if not phone:
+            attrs = conversation.get("additional_attributes", {})
+            if "phone_number" in attrs:
+                phone = attrs["phone_number"].replace("+", "").replace("-", "").replace(" ", "")
+        
+        logger.info(f"🏷️ Procesando conversation_updated - Conversación: {conversation_id}, Teléfono: {phone}")
+        
+        # Extraer etiquetas de la conversación
+        labels = conversation.get("labels", [])
+        if not labels:
+            # También intentar obtener de otros campos posibles
+            labels = conversation.get("cached_label_list", [])
+            if isinstance(labels, str):
+                # Si es string separado por comas, convertir a lista
+                labels = [{"title": label.strip()} for label in labels.split(",") if label.strip()]
+        
+        logger.info(f"🔍 Etiquetas encontradas para conversación {conversation_id}: {labels}")
+        
+        # Detectar si bot-paused está presente
+        has_bot_paused_tag = detect_bot_paused_tag(labels)
+        logger.info(f"🎯 Etiqueta bot-paused detectada: {has_bot_paused_tag}")
+        
+        # Determinar identificadores para el estado del bot
+        identifiers = []
+        if phone:
+            identifiers.append(phone)
+            # Crear vinculación si hay teléfono
+            link_conversation_to_phone(conversation_id, phone)
+        
+        # Siempre agregar identificador de conversación
+        conv_identifier = f"conv_{conversation_id}"
+        identifiers.append(conv_identifier)
+        
+        # Procesar cambio de estado del bot
+        actions_taken = []
+        
+        for identifier in identifiers:
+            # Obtener estado actual del bot para este identificador
+            current_state = await bot_state_manager.get_bot_state(identifier)
+            is_currently_paused = not current_state.get("active", True)
+            
+            logger.info(f"🔍 Estado actual para {identifier}: pausado={is_currently_paused}")
+            
+            if has_bot_paused_tag and not is_currently_paused:
+                # Pausar bot - etiqueta presente y bot no estaba pausado
+                success = await bot_state_manager.pause_bot(
+                    identifier, 
+                    reason="etiqueta_bot_paused",
+                    ttl=86400  # 24 horas por defecto
+                )
+                
+                if success:
+                    actions_taken.append(f"paused_{identifier}")
+                    logger.info(f"🔴 Bot pausado por etiqueta para {identifier}")
+                
+            elif not has_bot_paused_tag and is_currently_paused:
+                # Reactivar bot - etiqueta removida y bot estaba pausado
+                # Solo reactivar si fue pausado por etiqueta
+                if current_state.get("reason") == "etiqueta_bot_paused":
+                    success = await bot_state_manager.resume_bot(identifier)
+                    
+                    if success:
+                        actions_taken.append(f"resumed_{identifier}")
+                        logger.info(f"🟢 Bot reactivado por remoción de etiqueta para {identifier}")
+                else:
+                    logger.info(f"ℹ️ Bot pausado por otra razón ({current_state.get('reason')}), no reactivar automáticamente")
+        
+        return {
+            "status": "processed",
+            "conversation_id": conversation_id,
+            "phone": phone,
+            "has_bot_paused_tag": has_bot_paused_tag,
+            "actions_taken": actions_taken,
+            "identifiers": identifiers
+        }
+        
+    except Exception as e:
+        logger.error(f"❌ Error procesando conversation_updated: {e}")
+        return {"status": "error", "message": str(e)}
 
 async def handle_label_association(data: Dict) -> Dict:
     """
@@ -1108,6 +1249,13 @@ async def chatwoot_webhook(request: Request, background_tasks: BackgroundTasks):
         logger.info(f"🔍 DEBUG - Event: {event}, MsgType: {message_type}, Sender: {sender_type}, Private: {is_private}, Content: '{content}'")
         logger.info(f"🔍 DEBUG - Sender completo: {sender}")
         
+        # 🏷️ Handle conversation_updated events for bot-paused tag detection
+        if data.get("event") == "conversation_updated":
+            logger.info("🏷️ Evento conversation_updated detectado - procesando etiquetas...")
+            result = await handle_conversation_updated(data)
+            logger.info(f"🏷️ Resultado conversation_updated: {result}")
+            return result
+
         # Handle agent control commands (notes or messages from agents)
         if (data.get("event") == "message_created" and 
             data.get("sender", {}).get("type") == "user"):
@@ -2284,6 +2432,174 @@ async def shutdown_event():
         await advanced_queue.redis_client.close()
     
     logger.info("✅ Shutdown complete")
+
+# =====================================================
+# TEST ENDPOINTS FOR BOT-PAUSED TAG SYSTEM
+# =====================================================
+
+@app.post("/test/bot-paused-tag")
+async def test_bot_paused_tag_endpoint(request: Request):
+    """
+    Endpoint de prueba para simular eventos conversation_updated con etiquetas bot-paused
+    
+    Body esperado:
+    {
+        "conversation_id": "123",
+        "phone": "5491112345678", 
+        "has_bot_paused_tag": true/false,
+        "labels": [{"title": "bot-paused"}] // opcional
+    }
+    """
+    try:
+        data = await request.json()
+        
+        conversation_id = data.get("conversation_id", "test_123")
+        phone = data.get("phone", "5491112345678") 
+        has_tag = data.get("has_bot_paused_tag", False)
+        labels = data.get("labels", [])
+        
+        # Si no hay labels pero has_bot_paused_tag es True, crear la etiqueta
+        if has_tag and not labels:
+            labels = [{"title": "bot-paused"}]
+        
+        # Crear payload simulado de conversation_updated
+        simulated_webhook_data = {
+            "event": "conversation_updated",
+            "conversation": {
+                "id": conversation_id,
+                "contact_phone": f"+{phone}",
+                "labels": labels,
+                "contact_inbox": {
+                    "source_id": phone
+                },
+                "additional_attributes": {
+                    "phone_number": f"+{phone}"
+                }
+            }
+        }
+        
+        logger.info(f"🧪 TEST: Simulando conversation_updated para conversación {conversation_id}")
+        logger.info(f"🧪 TEST: Teléfono: {phone}, Bot-paused tag: {has_tag}")
+        
+        # Procesar usando la función existente
+        result = await handle_conversation_updated(simulated_webhook_data)
+        
+        return {
+            "status": "test_completed",
+            "simulated_data": simulated_webhook_data,
+            "processing_result": result,
+            "timestamp": datetime.now().isoformat()
+        }
+        
+    except Exception as e:
+        logger.error(f"❌ Error en test de bot-paused tag: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error en test: {str(e)}"
+        )
+
+@app.post("/test/conversation-webhook")
+async def test_conversation_webhook_endpoint(request: Request):
+    """
+    Endpoint de prueba para simular webhooks completos de conversation_updated
+    
+    Permite enviar payloads completos de Chatwoot para testing
+    """
+    try:
+        webhook_data = await request.json()
+        
+        # Validar que sea un evento conversation_updated
+        if webhook_data.get("event") != "conversation_updated":
+            return {
+                "status": "error",
+                "message": "Solo se aceptan eventos conversation_updated para este test"
+            }
+        
+        logger.info("🧪 TEST: Procesando webhook conversation_updated simulado")
+        
+        # Procesar usando el handler principal
+        result = await handle_conversation_updated(webhook_data)
+        
+        return {
+            "status": "webhook_test_completed",
+            "received_data": webhook_data,
+            "processing_result": result,
+            "timestamp": datetime.now().isoformat()
+        }
+        
+    except Exception as e:
+        logger.error(f"❌ Error en test de webhook conversation_updated: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error en test de webhook: {str(e)}"
+        )
+
+@app.get("/test/bot-paused-instructions")
+async def get_bot_paused_instructions(request: Request):
+    """
+    Endpoint que devuelve las instrucciones para usar el sistema bot-paused
+    """
+    return {
+        "sistema": "Control de Bot con Etiqueta bot-paused",
+        "descripcion": "Sistema simplificado para pausar/reactivar el bot desde Chatwoot",
+        
+        "uso": {
+            "pausar_bot": "Agregar etiqueta 'bot-paused' a la conversación en Chatwoot",
+            "reactivar_bot": "Remover etiqueta 'bot-paused' de la conversación en Chatwoot"
+        },
+        
+        "configuracion_webhook": {
+            "evento_requerido": "conversation_updated",
+            "url_webhook": f"{request.base_url}webhook/chatwoot",
+            "metodo": "POST"
+        },
+        
+        "etiqueta": {
+            "nombre": "bot-paused",
+            "tipo": "case-sensitive",
+            "formato": "Exactamente 'bot-paused' (sin espacios, con guión)"
+        },
+        
+        "funcionamiento": [
+            "1. Agente agrega etiqueta 'bot-paused' en Chatwoot",
+            "2. Webhook conversation_updated se dispara inmediatamente",
+            "3. Sistema detecta etiqueta y pausa bot para ese usuario", 
+            "4. Bot no responde mensajes del usuario",
+            "5. Agente maneja conversación manualmente",
+            "6. Agente remueve etiqueta 'bot-paused' cuando termine",
+            "7. Webhook se dispara nuevamente", 
+            "8. Sistema detecta que no hay etiqueta y reactiva bot",
+            "9. Bot vuelve a responder normalmente"
+        ],
+        
+        "endpoints_test": [
+            "POST /test/bot-paused-tag - Simular etiqueta bot-paused",
+            "POST /test/conversation-webhook - Simular webhook completo",
+            "GET /bot/status/{phone} - Ver estado actual del bot",
+            "GET /test/bot-paused-instructions - Estas instrucciones"
+        ],
+        
+        "ejemplos": {
+            "pausar_bot": {
+                "metodo": "POST",
+                "url": "/test/bot-paused-tag",
+                "body": {
+                    "conversation_id": "123", 
+                    "phone": "5491112345678",
+                    "has_bot_paused_tag": True
+                }
+            },
+            "reactivar_bot": {
+                "metodo": "POST", 
+                "url": "/test/bot-paused-tag",
+                "body": {
+                    "conversation_id": "123",
+                    "phone": "5491112345678", 
+                    "has_bot_paused_tag": False
+                }
+            }
+        }
+    }
 
 # =====================================================
 # MAIN EXECUTION
