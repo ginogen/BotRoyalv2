@@ -108,6 +108,10 @@ system_metrics = {
     'last_health_check': None
 }
 
+# Global message deduplication cache
+processed_messages = set()
+last_cleanup_time = datetime.now()
+
 # Bot state manager instance
 bot_state_manager: Optional[BotStateManager] = None
 
@@ -417,6 +421,31 @@ def link_conversation_to_phone(conversation_id: str, phone: str):
     global conversation_phone_mapping
     conversation_phone_mapping[conversation_id] = phone
     logger.info(f"🔗 Vinculando conversación {conversation_id} con teléfono {phone}")
+
+def is_duplicate_message(phone: str, content: str, source: str = "") -> bool:
+    """
+    Verifica si un mensaje ya fue procesado para evitar respuestas duplicadas
+    """
+    global processed_messages, last_cleanup_time
+    
+    # Limpiar cache viejo cada 5 minutos
+    now = datetime.now()
+    if (now - last_cleanup_time).total_seconds() > 300:  # 5 minutos
+        processed_messages.clear()
+        last_cleanup_time = now
+        logger.info("🧹 Cache de mensajes duplicados limpiado")
+    
+    # Crear clave única para el mensaje
+    message_key = f"{phone}:{content[:50]}:{source}"
+    message_hash = hash(message_key)
+    
+    if message_hash in processed_messages:
+        logger.warning(f"🔄 MENSAJE DUPLICADO DETECTADO: {phone} - '{content[:30]}...' desde {source}")
+        return True
+    
+    # Marcar como procesado
+    processed_messages.add(message_hash)
+    return False
 
 def get_phone_from_conversation(conversation_id: str) -> Optional[str]:
     """Obtener número de teléfono desde conversación de Chatwoot"""
@@ -1088,6 +1117,11 @@ async def chatwoot_webhook(request: Request, background_tasks: BackgroundTasks):
             conversation = data.get("conversation", {})
             content = data.get("content", "").strip()
             
+            # VERIFICAR DUPLICACIÓN EN CHATWOOT
+            contact_phone = conversation.get("contact_phone", "unknown")
+            if is_duplicate_message(contact_phone, content, "chatwoot"):
+                return {"status": "duplicate_ignored", "source": "chatwoot"}
+            
             if content and conversation.get("id"):
                 contact_id = data.get("sender", {}).get("id")
                 
@@ -1237,26 +1271,9 @@ async def evolution_webhook(request: Request, background_tasks: BackgroundTasks)
         logger.info(f"📱 Key object: {message_data_raw.get('key', {})}")
         
         if message_content and from_number:
-            # Generar ID único para prevenir procesamiento duplicado
-            message_id = message_data_raw.get("key", {}).get("id", "")
-            processing_key = f"{from_number}:{message_id}:{message_content[:20]}"
-            
-            # Verificar si ya procesamos este mensaje (cache simple en memoria)
-            if not hasattr(process_message_pipeline, '_processed_messages'):
-                process_message_pipeline._processed_messages = set()
-            
-            if processing_key in process_message_pipeline._processed_messages:
-                logger.warning(f"🔄 Mensaje duplicado ignorado: {from_number} - {message_content[:50]}...")
+            # VERIFICAR DUPLICACIÓN EN EVOLUTION API
+            if is_duplicate_message(from_number, message_content, "evolution"):
                 return {"status": "duplicate_ignored", "phone": from_number}
-            
-            # Marcar como procesado
-            process_message_pipeline._processed_messages.add(processing_key)
-            
-            # Limpiar cache viejo (mantener solo últimos 100)
-            if len(process_message_pipeline._processed_messages) > 100:
-                old_messages = list(process_message_pipeline._processed_messages)[:50]
-                for old in old_messages:
-                    process_message_pipeline._processed_messages.remove(old)
             
             logger.info(f"📱 PROCESANDO mensaje WhatsApp de {from_number}: '{message_content[:100]}...'")
             user_id = f"whatsapp_{from_number}"
