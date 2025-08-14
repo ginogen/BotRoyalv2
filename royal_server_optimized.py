@@ -44,7 +44,12 @@ try:
     # Importar sistema de seguimiento
     from royal_agents.follow_up_scheduler import start_follow_up_scheduler, stop_follow_up_scheduler
     from royal_agents.follow_up_system import get_users_for_followup
-except ImportError:
+except ImportError as e:
+    logger.error(f"❌ ERROR IMPORTANDO ROYAL_AGENTS: {e}")
+    logger.error(f"❌ Tipo de error: {type(e).__name__}")
+    import traceback
+    logger.error(f"❌ Stack trace completo:\n{traceback.format_exc()}")
+    
     # Fallback if royal_agents not available
     def run_contextual_conversation_sync(user_id: str, message: str) -> str:
         # No responder con mensajes técnicos - simplemente retornar None
@@ -1286,6 +1291,25 @@ async def root():
             "average_response_time": round(system_metrics['average_response_time'], 3)
         }
     }
+
+@app.get("/debug/royal-agents")
+async def debug_royal_agents():
+    """Debug endpoint to check royal_agents import status"""
+    try:
+        from royal_agents import run_contextual_conversation_sync
+        return {
+            "status": "success",
+            "message": "Royal agents imported successfully",
+            "function_available": True
+        }
+    except Exception as e:
+        import traceback
+        return {
+            "status": "error",
+            "error": str(e),
+            "error_type": type(e).__name__,
+            "traceback": traceback.format_exc()
+        }
 
 @app.get("/health")
 async def health_check():
