@@ -44,17 +44,17 @@ try:
     # Importar sistema de seguimiento
     from royal_agents.follow_up_scheduler import start_follow_up_scheduler, stop_follow_up_scheduler
     from royal_agents.follow_up_system import get_users_for_followup
+    ROYAL_AGENTS_AVAILABLE = True
 except ImportError as e:
-    logger.error(f"❌ ERROR IMPORTANDO ROYAL_AGENTS: {e}")
-    logger.error(f"❌ Tipo de error: {type(e).__name__}")
+    print(f"❌ ERROR IMPORTANDO ROYAL_AGENTS: {e}")
     import traceback
-    logger.error(f"❌ Stack trace completo:\n{traceback.format_exc()}")
+    print(f"❌ Stack trace:\n{traceback.format_exc()}")
+    ROYAL_AGENTS_AVAILABLE = False
     
     # Fallback if royal_agents not available
     def run_contextual_conversation_sync(user_id: str, message: str) -> str:
         # No responder con mensajes técnicos - simplemente retornar None
         # Esto evita mostrar mensajes confusos al usuario
-        logger.warning(f"⚠️ Royal agents no disponible para {user_id}, mensaje ignorado")
         return None
     
     def start_follow_up_scheduler(callback=None):
@@ -214,11 +214,17 @@ async def process_royal_message(user_id: str, message: str, message_data: Option
         logger.debug(f"✅ Worker: Bot activo para {user_id}, procesando mensaje...")
         
         # Process with Royal agent (using sync version for thread compatibility)
+        logger.info(f"🤖 Llamando a run_contextual_conversation_sync para {user_id}")
+        logger.info(f"🤖 Royal agents disponible: {ROYAL_AGENTS_AVAILABLE}")
+        
         response = run_contextual_conversation_sync(user_id, message)
+        
+        logger.info(f"🤖 Respuesta recibida: {response[:50] if response else 'None'}...")
         
         # ✨ NUEVO: Verificar si hay respuesta válida antes de enviar
         if response is None:
             processing_time = time.time() - start_time
+            logger.warning(f"⚠️ Royal agents no disponible para {user_id}, mensaje ignorado")
             logger.info(f"🔇 No response generated for {user_id} (bot paused or agents unavailable), processed in {processing_time:.2f}s")
             return None
         
