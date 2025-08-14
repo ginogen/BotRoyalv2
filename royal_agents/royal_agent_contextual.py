@@ -408,7 +408,7 @@ async def run_contextual_conversation(user_id: str, user_message: str) -> str:
         try:
             user_profile = {
                 "last_interaction": datetime.now().isoformat(),
-                "conversation_summary": context.get_conversation_summary()[:200],
+                "conversation_summary": context.conversation.get_context_summary_for_llm()[:200],
                 "response_detected": True
             }
             user_responded(user_id, user_profile)
@@ -444,7 +444,7 @@ async def run_contextual_conversation(user_id: str, user_message: str) -> str:
         user_profile = {
             # Datos básicos (existentes)
             "last_interaction": datetime.now().isoformat(),
-            "conversation_summary": context.get_conversation_summary()[:300],  # Aumentado a 300 chars
+            "conversation_summary": context.conversation.get_context_summary_for_llm()[:300],  # Aumentado a 300 chars
             "user_type": _extract_user_type_from_context(context),
             "interest": _extract_interest_from_context(context),
             "experience_level": _extract_experience_level_from_context(context),
@@ -458,7 +458,7 @@ async def run_contextual_conversation(user_id: str, user_message: str) -> str:
             "conversation_topics": _extract_conversation_topics_from_context(context),
             
             # Métricas adicionales
-            "conversation_length": len(context.get_conversation_summary()),
+            "conversation_length": len(context.conversation.get_context_summary_for_llm()),
             "interaction_count_at_followup": len(context.conversation.interaction_history),
             "conversation_started": context.conversation.conversation_started.isoformat(),
         }
@@ -496,7 +496,7 @@ def run_contextual_conversation_sync(user_id: str, user_message: str) -> str:
         try:
             user_profile = {
                 "last_interaction": datetime.now().isoformat(),
-                "conversation_summary": context.get_conversation_summary()[:200],
+                "conversation_summary": context.conversation.get_context_summary_for_llm()[:200],
                 "response_detected": True
             }
             user_responded(user_id, user_profile)
@@ -550,7 +550,7 @@ def run_contextual_conversation_sync(user_id: str, user_message: str) -> str:
         user_profile = {
             # Datos básicos (existentes)
             "last_interaction": datetime.now().isoformat(),
-            "conversation_summary": context.get_conversation_summary()[:300],  # Aumentado a 300 chars
+            "conversation_summary": context.conversation.get_context_summary_for_llm()[:300],  # Aumentado a 300 chars
             "user_type": _extract_user_type_from_context(context),
             "interest": _extract_interest_from_context(context),
             "experience_level": _extract_experience_level_from_context(context),
@@ -564,7 +564,7 @@ def run_contextual_conversation_sync(user_id: str, user_message: str) -> str:
             "conversation_topics": _extract_conversation_topics_from_context(context),
             
             # Métricas adicionales
-            "conversation_length": len(context.get_conversation_summary()),
+            "conversation_length": len(context.conversation.get_context_summary_for_llm()),
             "interaction_count_at_followup": len(context.conversation.interaction_history),
             "conversation_started": context.conversation.conversation_started.isoformat(),
         }
@@ -595,7 +595,7 @@ def cleanup_old_contexts():
 def _extract_user_type_from_context(context: RoyalAgentContext) -> str:
     """Extrae el tipo de usuario basado en el contexto de la conversación"""
     try:
-        conversation_text = context.get_conversation_summary().lower()
+        conversation_text = context.conversation.get_context_summary_for_llm().lower()
         
         # Palabras clave para identificar tipo de usuario
         if any(word in conversation_text for word in ["emprender", "emprendedor", "emprendedora", "arrancar", "empezar"]):
@@ -614,7 +614,7 @@ def _extract_user_type_from_context(context: RoyalAgentContext) -> str:
 def _extract_interest_from_context(context: RoyalAgentContext) -> str:
     """Extrae el interés principal del usuario basado en la conversación"""
     try:
-        conversation_text = context.get_conversation_summary().lower()
+        conversation_text = context.conversation.get_context_summary_for_llm().lower()
         
         # Contar menciones por categoría
         interests = {
@@ -645,7 +645,7 @@ def _extract_interest_from_context(context: RoyalAgentContext) -> str:
 def _extract_experience_level_from_context(context: RoyalAgentContext) -> str:
     """Extrae el nivel de experiencia del usuario"""
     try:
-        conversation_text = context.get_conversation_summary().lower()
+        conversation_text = context.conversation.get_context_summary_for_llm().lower()
         
         # Palabras clave para novatos
         beginner_keywords = ["empezar", "arrancar", "primera vez", "no sé", "nuevo", "nueva", "nunca", "como empiezo"]
@@ -670,7 +670,7 @@ def _extract_experience_level_from_context(context: RoyalAgentContext) -> str:
 def _extract_specific_products_from_context(context: RoyalAgentContext) -> List[str]:
     """Extrae productos específicos mencionados en la conversación"""
     try:
-        conversation_text = context.get_conversation_summary().lower()
+        conversation_text = context.conversation.get_context_summary_for_llm().lower()
         
         # Productos específicos con patrones de reconocimiento
         specific_products = {
@@ -727,7 +727,7 @@ def _extract_specific_products_from_context(context: RoyalAgentContext) -> List[
 def _extract_budget_from_context(context: RoyalAgentContext) -> Optional[str]:
     """Extrae presupuesto mencionado por el usuario"""
     try:
-        conversation_text = context.get_conversation_summary()
+        conversation_text = context.conversation.get_context_summary_for_llm()
         
         import re
         
@@ -771,7 +771,7 @@ def _extract_budget_from_context(context: RoyalAgentContext) -> Optional[str]:
 def _extract_objections_from_context(context: RoyalAgentContext) -> List[str]:
     """Extrae objeciones y dudas específicas expresadas por el usuario"""
     try:
-        conversation_text = context.get_conversation_summary().lower()
+        conversation_text = context.conversation.get_context_summary_for_llm().lower()
         
         # Objeciones comunes con patrones
         objections_patterns = {
@@ -798,7 +798,7 @@ def _extract_objections_from_context(context: RoyalAgentContext) -> List[str]:
 def _extract_questions_asked_from_context(context: RoyalAgentContext) -> List[str]:
     """Extrae preguntas específicas que hizo el usuario"""
     try:
-        conversation_text = context.get_conversation_summary().lower()
+        conversation_text = context.conversation.get_context_summary_for_llm().lower()
         
         # Preguntas frecuentes con patrones
         common_questions = {
@@ -828,11 +828,11 @@ def _extract_engagement_level_from_context(context: RoyalAgentContext) -> str:
     """Determina el nivel de engagement del usuario durante la conversación"""
     try:
         # Obtener métricas de la conversación
-        conversation_length = len(context.get_conversation_summary())
+        conversation_length = len(context.conversation.get_context_summary_for_llm())
         interaction_count = len(context.conversation.interaction_history)
         
         # Buscar indicadores de alto engagement
-        conversation_text = context.get_conversation_summary().lower()
+        conversation_text = context.conversation.get_context_summary_for_llm().lower()
         
         high_engagement_indicators = [
             "me interesa", "me gusta", "quiero saber", "contame más", 
@@ -863,7 +863,7 @@ def _extract_engagement_level_from_context(context: RoyalAgentContext) -> str:
 def _extract_conversation_topics_from_context(context: RoyalAgentContext) -> List[str]:
     """Extrae los temas principales de conversación"""
     try:
-        conversation_text = context.get_conversation_summary().lower()
+        conversation_text = context.conversation.get_context_summary_for_llm().lower()
         
         topics_patterns = {
             "combos emprendedores": ["combo emprendedor", "combo para empezar", "kit emprendedor"],
