@@ -38,32 +38,35 @@ from dynamic_worker_pool import initialize_worker_pool, shutdown_worker_pool, dy
 # Bot state management
 from bot_state_manager import BotStateManager
 
-# Royal agents import
+# Royal agents import - Intentar importación modular
+ROYAL_AGENTS_AVAILABLE = False
+
+# Paso 1: Intentar importar la función principal directamente
 try:
-    from royal_agents import run_contextual_conversation_sync
-    # Importar sistema de seguimiento
+    from royal_agents.royal_agent_contextual import run_contextual_conversation_sync
+    ROYAL_AGENTS_AVAILABLE = True
+    print("✅ ÉXITO: run_contextual_conversation_sync importado correctamente")
+except Exception as e:
+    print(f"❌ ERROR CRÍTICO importando run_contextual_conversation_sync: {e}")
+    import traceback
+    print(f"❌ Stack trace completo:\n{traceback.format_exc()}")
+    
+    # Fallback temporal con respuesta básica
+    def run_contextual_conversation_sync(user_id: str, user_message: str) -> str:
+        # Respuesta temporal mientras se soluciona el problema
+        return "Hola! El sistema está en mantenimiento momentáneo. Por favor intenta nuevamente en unos minutos o contacta a soporte."
+
+# Paso 2: Intentar importar follow_up (no crítico)
+try:
     from royal_agents.follow_up_scheduler import start_follow_up_scheduler, stop_follow_up_scheduler
     from royal_agents.follow_up_system import get_users_for_followup
-    ROYAL_AGENTS_AVAILABLE = True
-except ImportError as e:
-    print(f"❌ ERROR IMPORTANDO ROYAL_AGENTS: {e}")
-    import traceback
-    print(f"❌ Stack trace:\n{traceback.format_exc()}")
-    ROYAL_AGENTS_AVAILABLE = False
+    print("✅ Follow-up system importado correctamente")
+except Exception as e:
+    print(f"⚠️ WARNING: Follow-up system no disponible (no crítico): {e}")
     
-    # Fallback if royal_agents not available
-    class FollowUpScheduler:
-        """Mock FollowUpScheduler for when royal_agents is not available"""
-        pass
-    
-    def run_contextual_conversation_sync(user_id: str, user_message: str) -> str:
-        # No responder con mensajes técnicos - simplemente retornar string vacío
-        # Esto evita mostrar mensajes confusos al usuario
-        return ""
-    
+    # Fallbacks para follow-up
     def start_follow_up_scheduler(message_callback=None):
-        # Return a mock FollowUpScheduler instance
-        return FollowUpScheduler()
+        return None
     
     def stop_follow_up_scheduler():
         pass
@@ -1306,21 +1309,29 @@ async def root():
 @app.get("/debug/royal-agents")
 async def debug_royal_agents():
     """Debug endpoint to check royal_agents import status"""
+    import sys
+    
+    # Verificar si el módulo está cargado
+    royal_agents_loaded = 'royal_agents' in sys.modules
+    royal_agent_contextual_loaded = 'royal_agents.royal_agent_contextual' in sys.modules
+    
+    # Probar una llamada simple
+    test_response = None
     try:
-        from royal_agents import run_contextual_conversation_sync
-        return {
-            "status": "success",
-            "message": "Royal agents imported successfully",
-            "function_available": True
-        }
+        test_response = run_contextual_conversation_sync("test_user", "hola test")
     except Exception as e:
-        import traceback
-        return {
-            "status": "error",
-            "error": str(e),
-            "error_type": type(e).__name__,
-            "traceback": traceback.format_exc()
-        }
+        test_response = f"Error en llamada: {str(e)}"
+    
+    return {
+        "status": "debug_info",
+        "ROYAL_AGENTS_AVAILABLE": ROYAL_AGENTS_AVAILABLE,
+        "module_loaded": {
+            "royal_agents": royal_agents_loaded,
+            "royal_agent_contextual": royal_agent_contextual_loaded
+        },
+        "test_call_response": test_response[:100] if test_response else None,
+        "function_type": str(type(run_contextual_conversation_sync))
+    }
 
 @app.get("/health")
 async def health_check():
