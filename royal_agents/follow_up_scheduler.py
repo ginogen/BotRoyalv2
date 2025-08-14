@@ -3,7 +3,7 @@
 
 import asyncio
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Any, Optional, Callable
 import threading
 import time
@@ -130,7 +130,7 @@ class FollowUpScheduler:
         """
         try:
             # Calcular fecha de ejecución
-            run_date = datetime.now() + timedelta(hours=delay_hours)
+            run_date = datetime.now(timezone.utc) + timedelta(hours=delay_hours)
             
             # ID único para el job
             job_id = f"followup_{user_id}_{stage}_{int(time.time())}"
@@ -183,7 +183,7 @@ class FollowUpScheduler:
                     logger.error(f"❌ Error procesando follow-up para {user_followup.user_id}: {e}")
                     self.stats['errors'] += 1
             
-            self.stats['last_check'] = datetime.now()
+            self.stats['last_check'] = datetime.now(timezone.utc)
             
         except Exception as e:
             logger.error(f"❌ Error en check_and_process_followups: {e}")
@@ -262,7 +262,7 @@ class FollowUpScheduler:
                 # Identificar jobs de follow-up completados o antiguos
                 if job.id.startswith('followup_') and job.next_run_time:
                     # Si el job debería haber corrido hace más de 1 hora
-                    if job.next_run_time < datetime.now() - timedelta(hours=1):
+                    if job.next_run_time < datetime.now(timezone.utc) - timedelta(hours=1):
                         completed_jobs.append(job.id)
             
             # Remover jobs antiguos

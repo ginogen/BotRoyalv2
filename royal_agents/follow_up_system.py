@@ -5,7 +5,7 @@ import os
 import json
 import asyncio
 from typing import Dict, List, Any, Optional
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import logging
 import psycopg2
 from psycopg2.extras import RealDictCursor
@@ -192,7 +192,7 @@ class FollowUpDatabaseManager:
     def get_users_ready_for_followup(self) -> List[UserFollowUp]:
         """Obtiene usuarios listos para recibir el siguiente mensaje de seguimiento"""
         try:
-            current_time = datetime.now()
+            current_time = datetime.now(timezone.utc)
             users_ready = []
             
             with psycopg2.connect(**self.db_config) as conn:
@@ -270,7 +270,7 @@ class FollowUpDatabaseManager:
     
     def reset_to_stage_zero(self, user_id: str, user_profile: Optional[Dict] = None) -> bool:
         """Resetea un usuario al Día 0 (cuando responde)"""
-        current_time = datetime.now()
+        current_time = datetime.now(timezone.utc)
         
         # Obtener o crear nuevo seguimiento
         existing = self.get_user_followup(user_id)
@@ -330,7 +330,7 @@ class FollowUpDatabaseManager:
             # Actualizar seguimiento
             user_followup.last_stage_completed = current_stage
             user_followup.current_stage = next_stage
-            user_followup.stage_start_time = datetime.now()
+            user_followup.stage_start_time = datetime.now(timezone.utc)
             
             success = self.create_or_update_followup(user_followup)
             
