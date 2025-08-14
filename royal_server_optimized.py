@@ -283,11 +283,15 @@ async def send_response_to_channel(user_id: str, response: str, message_data: 'M
         return False
     
     try:
-        if message_data.source == MessageSource.EVOLUTION and message_data.phone:
+        # Los mensajes de FOLLOWUP se envían por el canal Evolution si tienen número de teléfono
+        if (message_data.source == MessageSource.EVOLUTION or message_data.source == MessageSource.FOLLOWUP) and message_data.phone:
             # Send to WhatsApp via Evolution API
             success = await send_evolution_message(message_data.phone, response)
             if success:
-                logger.info(f"📱 Response sent to WhatsApp: {user_id}")
+                if message_data.source == MessageSource.FOLLOWUP:
+                    logger.info(f"📱 Follow-up sent to WhatsApp: {user_id}")
+                else:
+                    logger.info(f"📱 Response sent to WhatsApp: {user_id}")
             else:
                 logger.error(f"❌ Failed to send WhatsApp response: {user_id}")
                 
@@ -2330,6 +2334,49 @@ async def search_business_info(q: str = "", category: str = ""):
 # FOLLOW-UP SYSTEM ENDPOINTS
 # =====================================================
 
+@app.post("/followup/test/{user_id}")
+async def test_followup_now(user_id: str):
+    """Endpoint de prueba para forzar envío de follow-up inmediatamente"""
+    try:
+        from royal_agents.follow_up_messages import get_followup_message_for_stage
+        
+        # Generar mensaje de prueba (usando stage 0 como ejemplo)
+        test_message = get_followup_message_for_stage(0)
+        
+        # Intentar enviar el mensaje usando el callback del scheduler
+        if follow_up_scheduler and hasattr(follow_up_scheduler, 'send_message_callback'):
+            callback = follow_up_scheduler.send_message_callback
+            success = callback(user_id, test_message)
+            
+            if success:
+                logger.info(f"✅ Test follow-up enviado a {user_id}")
+                return {
+                    "success": True,
+                    "message": "Follow-up de prueba enviado exitosamente",
+                    "user_id": user_id,
+                    "message_preview": test_message[:100] + "..."
+                }
+            else:
+                return {
+                    "success": False,
+                    "error": "No se pudo enviar el mensaje",
+                    "user_id": user_id
+                }
+        else:
+            return {
+                "success": False,
+                "error": "Scheduler no disponible",
+                "user_id": user_id
+            }
+            
+    except Exception as e:
+        logger.error(f"❌ Error en test follow-up: {e}")
+        return {
+            "success": False,
+            "error": str(e),
+            "user_id": user_id
+        }
+
 @app.get("/followup/stats")
 async def get_followup_stats():
     """Obtiene estadísticas del sistema de seguimiento"""
@@ -2546,10 +2593,17 @@ async def startup_event():
         def send_followup_message(user_id: str, message: str) -> bool:
             """Envía mensaje de follow-up a través del sistema de colas"""
             try:
+                # Extraer el número de teléfono del user_id si es de WhatsApp
+                phone = None
+                if user_id.startswith("whatsapp_"):
+                    phone = user_id.replace("whatsapp_", "")
+                    logger.debug(f"📱 Extracted phone number from user_id: {phone}")
+                
                 message_data = MessageData(
                     user_id=user_id,
                     message=message,
                     source=MessageSource.FOLLOWUP,
+                    phone=phone,  # Agregar el número de teléfono
                     priority=MessagePriority.HIGH,
                     metadata={
                         "is_followup": True,
