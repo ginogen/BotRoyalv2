@@ -8,13 +8,29 @@ from typing import Dict, List, Any, Optional
 from datetime import datetime, timedelta, timezone
 import logging
 import psycopg2
+import pytz
 from psycopg2.extras import RealDictCursor
 from dataclasses import dataclass
 from enum import Enum
 
 # Configurar logging
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.DEBUG)  # Cambiado a DEBUG para más detalle
 logger = logging.getLogger(__name__)
+
+# Timezone de Argentina/Córdoba
+ARG_TZ = pytz.timezone('America/Argentina/Cordoba')
+
+def ensure_argentina_tz(dt):
+    """Asegura que un datetime tenga timezone Argentina/Córdoba"""
+    if dt is None:
+        return None
+    
+    # Si no tiene timezone, asumimos que es hora local Argentina
+    if dt.tzinfo is None:
+        return ARG_TZ.localize(dt)
+    
+    # Si tiene timezone, convertimos a Argentina
+    return dt.astimezone(ARG_TZ)
 
 class FollowUpStage(Enum):
     """Etapas del sistema de seguimiento"""
@@ -135,11 +151,15 @@ class FollowUpDatabaseManager:
                     
                     row = cur.fetchone()
                     if row:
+                        # Normalizar fechas a timezone Argentina
+                        normalized_stage_start = ensure_argentina_tz(row['stage_start_time'])
+                        normalized_last_interaction = ensure_argentina_tz(row['last_interaction'])
+                        
                         return UserFollowUp(
                             user_id=row['user_id'],
                             current_stage=row['current_stage'],
-                            last_interaction=row['last_interaction'],
-                            stage_start_time=row['stage_start_time'],
+                            last_interaction=normalized_last_interaction,
+                            stage_start_time=normalized_stage_start,
                             is_active=row['is_active'],
                             user_profile=row['user_profile'],
                             interaction_count=row['interaction_count'],
@@ -192,7 +212,7 @@ class FollowUpDatabaseManager:
     def get_users_ready_for_followup(self) -> List[UserFollowUp]:
         """Obtiene usuarios listos para recibir el siguiente mensaje de seguimiento"""
         try:
-            current_time = datetime.now(timezone.utc)
+            current_time = datetime.now(ARG_TZ)
             users_ready = []
             
             with psycopg2.connect(**self.db_config) as conn:
@@ -207,20 +227,29 @@ class FollowUpDatabaseManager:
                     rows = cur.fetchall()
                     
                     for row in rows:
+                        # Normalizar fechas a timezone Argentina
+                        normalized_stage_start = ensure_argentina_tz(row['stage_start_time'])
+                        normalized_last_interaction = ensure_argentina_tz(row['last_interaction'])
+                        
                         user_followup = UserFollowUp(
                             user_id=row['user_id'],
                             current_stage=row['current_stage'],
-                            last_interaction=row['last_interaction'],
-                            stage_start_time=row['stage_start_time'],
+                            last_interaction=normalized_last_interaction,
+                            stage_start_time=normalized_stage_start,
                             is_active=row['is_active'],
                             user_profile=row['user_profile'],
                             interaction_count=row['interaction_count'],
                             last_stage_completed=row['last_stage_completed']
                         )
                         
+                        # Debug logging
+                        logger.debug(f"Usuario {user_followup.user_id}: stage={user_followup.current_stage}, "
+                                   f"stage_start={normalized_stage_start}, current_time={current_time}")
+                        
                         # Verificar si es momento de enviar mensaje
                         if self._should_send_followup(user_followup, current_time):
                             users_ready.append(user_followup)
+                            logger.info(f"✅ Usuario {user_followup.user_id} listo para follow-up etapa {user_followup.current_stage}")
                             
             logger.info(f"📊 Usuarios listos para follow-up: {len(users_ready)}")
             return users_ready
@@ -235,9 +264,17 @@ class FollowUpDatabaseManager:
         # Calcular tiempo desde el inicio de la etapa
         time_since_stage_start = current_time - user_followup.stage_start_time
         
+        # Debug logging
+        logger.debug(f"Checking followup for {user_followup.user_id}: "
+                    f"time_since_start={time_since_stage_start}, "
+                    f"stage={user_followup.current_stage}")
+        
         # Para etapa 0 (1 hora después)
         if user_followup.current_stage == 0:
-            return time_since_stage_start >= timedelta(hours=1)
+            should_send = time_since_stage_start >= timedelta(hours=1)
+            if should_send:
+                logger.info(f"⏰ Usuario {user_followup.user_id} ha esperado {time_since_stage_start} - enviando Stage 0")
+            return should_send
         
         # Para etapas numeradas (días)
         elif user_followup.current_stage <= 66:
@@ -330,7 +367,7 @@ class FollowUpDatabaseManager:
             # Actualizar seguimiento
             user_followup.last_stage_completed = current_stage
             user_followup.current_stage = next_stage
-            user_followup.stage_start_time = datetime.now(timezone.utc)
+            user_followup.stage_start_time = datetime.now(ARG_TZ)
             
             success = self.create_or_update_followup(user_followup)
             

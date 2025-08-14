@@ -7,6 +7,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Any, Optional, Callable
 import threading
 import time
+import pytz
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 from apscheduler.triggers.date import DateTrigger
@@ -24,6 +25,9 @@ from .follow_up_messages import get_followup_message_for_stage
 # Configurar logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# Timezone de Argentina/Córdoba
+ARG_TZ = pytz.timezone('America/Argentina/Cordoba')
 
 class FollowUpScheduler:
     """Scheduler principal para el sistema de seguimiento automático"""
@@ -74,10 +78,10 @@ class FollowUpScheduler:
                 self.scheduler.start()
                 self.is_running = True
                 
-                # Job principal que revisa cada 10 minutos si hay usuarios para follow-up
+                # Job principal que revisa cada 5 minutos si hay usuarios para follow-up
                 self.scheduler.add_job(
                     func=self._check_and_process_followups,
-                    trigger=IntervalTrigger(minutes=10),
+                    trigger=IntervalTrigger(minutes=5),
                     id='main_followup_checker',
                     name='Main Follow-up Checker',
                     replace_existing=True
@@ -130,7 +134,7 @@ class FollowUpScheduler:
         """
         try:
             # Calcular fecha de ejecución
-            run_date = datetime.now(timezone.utc) + timedelta(hours=delay_hours)
+            run_date = datetime.now(ARG_TZ) + timedelta(hours=delay_hours)
             
             # ID único para el job
             job_id = f"followup_{user_id}_{stage}_{int(time.time())}"
@@ -183,7 +187,7 @@ class FollowUpScheduler:
                     logger.error(f"❌ Error procesando follow-up para {user_followup.user_id}: {e}")
                     self.stats['errors'] += 1
             
-            self.stats['last_check'] = datetime.now(timezone.utc)
+            self.stats['last_check'] = datetime.now(ARG_TZ)
             
         except Exception as e:
             logger.error(f"❌ Error en check_and_process_followups: {e}")
@@ -262,7 +266,7 @@ class FollowUpScheduler:
                 # Identificar jobs de follow-up completados o antiguos
                 if job.id.startswith('followup_') and job.next_run_time:
                     # Si el job debería haber corrido hace más de 1 hora
-                    if job.next_run_time < datetime.now(timezone.utc) - timedelta(hours=1):
+                    if job.next_run_time < datetime.now(ARG_TZ) - timedelta(hours=1):
                         completed_jobs.append(job.id)
             
             # Remover jobs antiguos
