@@ -2343,29 +2343,43 @@ async def test_followup_now(user_id: str):
         # Generar mensaje de prueba (usando stage 0 como ejemplo)
         test_message = get_followup_message_for_stage(0)
         
-        # Intentar enviar el mensaje usando el callback del scheduler
-        if follow_up_scheduler and hasattr(follow_up_scheduler, 'send_message_callback'):
-            callback = follow_up_scheduler.send_message_callback
-            success = callback(user_id, test_message)
-            
-            if success:
-                logger.info(f"✅ Test follow-up enviado a {user_id}")
-                return {
-                    "success": True,
-                    "message": "Follow-up de prueba enviado exitosamente",
-                    "user_id": user_id,
-                    "message_preview": test_message[:100] + "..."
-                }
-            else:
-                return {
-                    "success": False,
-                    "error": "No se pudo enviar el mensaje",
-                    "user_id": user_id
-                }
+        # Extraer el número de teléfono del user_id si es de WhatsApp
+        phone = None
+        if user_id.startswith("whatsapp_"):
+            phone = user_id.replace("whatsapp_", "")
+            logger.debug(f"📱 Test: Extracted phone number from user_id: {phone}")
+        
+        # Crear el mensaje data directamente
+        message_data = MessageData(
+            user_id=user_id,
+            message=test_message,
+            source=MessageSource.FOLLOWUP,
+            phone=phone,
+            priority=MessagePriority.HIGH,
+            metadata={
+                "is_followup": True,
+                "is_test": True,
+                "timestamp": datetime.now().isoformat(),
+                "automated": True
+            }
+        )
+        
+        # Agregar a la cola de mensajes
+        success = await advanced_queue.add_message(message_data)
+        
+        if success:
+            logger.info(f"✅ Test follow-up enviado a cola para {user_id}")
+            return {
+                "success": True,
+                "message": "Follow-up de prueba enviado exitosamente a la cola",
+                "user_id": user_id,
+                "phone": phone,
+                "message_preview": test_message[:200] + "..."
+            }
         else:
             return {
                 "success": False,
-                "error": "Scheduler no disponible",
+                "error": "No se pudo agregar el mensaje a la cola",
                 "user_id": user_id
             }
             
