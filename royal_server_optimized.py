@@ -144,6 +144,9 @@ last_cleanup_time = datetime.now()
 # Bot state manager instance
 bot_state_manager: Optional[BotStateManager] = None
 
+# Main event loop for async operations from threads
+main_event_loop: Optional[asyncio.AbstractEventLoop] = None
+
 # Mapeo conversación <-> teléfono para sincronización entre canales
 conversation_phone_mapping = {}
 
@@ -2505,9 +2508,13 @@ async def get_followup_status(user_id: str):
 @app.on_event("startup")
 async def startup_event():
     """Initialize all systems on startup"""
-    global bot_state_manager
+    global bot_state_manager, main_event_loop
     
     logger.info("🚀 Starting Royal Bot - Maximum Efficiency Edition")
+    
+    # Guardar el event loop principal
+    main_event_loop = asyncio.get_running_loop()
+    logger.info("📍 Event loop principal guardado para operaciones async")
     
     # Initialize bot state manager
     logger.info("🤖 Initializing bot state manager...")
@@ -2552,12 +2559,14 @@ async def startup_event():
                 )
                 
                 # Agregar a la cola de alta prioridad
-                # Since we're in a sync context but need to call async, use asyncio
-                import asyncio
-                loop = asyncio.get_event_loop()
+                # Use the main event loop saved at startup
+                if main_event_loop is None:
+                    logger.error("❌ Main event loop not available")
+                    return False
+                
                 future = asyncio.run_coroutine_threadsafe(
                     advanced_queue.add_message(message_data),
-                    loop
+                    main_event_loop
                 )
                 success = future.result(timeout=5)  # Wait up to 5 seconds
                 logger.info(f"📤 Follow-up enviado a cola: {user_id} - Success: {success}")
