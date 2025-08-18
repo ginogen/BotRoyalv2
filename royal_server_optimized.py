@@ -51,20 +51,47 @@ except Exception as e:
     import traceback
     print(f"❌ Stack trace completo:\n{traceback.format_exc()}")
     
-    # Fallback con respuestas naturales - NUNCA mostrar "mantenimiento"
+    # Fallback con respuestas útiles - NUNCA mostrar "mantenimiento"
     def run_contextual_conversation_sync(user_id: str, user_message: str) -> str:
         import random
-        # Respuestas naturales que indican que el bot está ocupado pero disponible
-        busy_responses = [
-            "¡Hola! Dame un momento y ya estoy con vos 😊",
-            "¡Hola! Un segundito que ya te respondo...",
-            "¡Hola! Estoy procesando tu mensaje, dame un momento por favor",
-            "¡Hola! Ya casi estoy listo para ayudarte, un momento más...",
-            "¡Hola! Estoy aquí, dame un instante para responderte mejor",
-            "¡Hola! Un momento por favor, ya te atiendo 💛",
-            "¡Hola! Estoy con vos, solo dame un segundo más..."
-        ]
-        return random.choice(busy_responses)
+        
+        message_lower = user_message.lower()
+        
+        # Respuestas específicas según keywords
+        if any(word in message_lower for word in ['hola', 'buenos', 'buenas', 'hi', 'saludos']):
+            responses = [
+                "¡Hola! Soy Royalia de Royal Mayorista. ¿En qué puedo ayudarte? 😊",
+                "¡Buenas! Soy Royalia, te ayudo con todo lo que necesites de Royal 💛",
+                "¡Hola! ¿Cómo estás? Soy Royalia de Royal Mayorista, ¿en qué te puedo ayudar?"
+            ]
+        elif any(word in message_lower for word in ['catalogo', 'productos', 'que tienen', 'que venden']):
+            responses = [
+                "Tenemos joyas de plata 925, bijouterie, lentes, relojes, maquillaje e indumentaria al por mayor. Podés ver todo en https://royalmayorista.com.ar/shop/ 💎",
+                "Manejamos joyas, bijou, accesorios, maquillaje, indumentaria y más! Todo al por mayor en https://royalmayorista.com.ar/shop/ ✨"
+            ]
+        elif any(word in message_lower for word in ['precio', 'minimo', 'cuanto', 'cuesta']):
+            responses = [
+                "El mínimo de compra es $40.000 y desde $100.000 el envío es gratis a todo el país 📦",
+                "Trabajamos con un mínimo de $40.000. Desde $100.000 te hacemos el envío gratis 🚚"
+            ]
+        elif any(word in message_lower for word in ['envio', 'delivery', 'flete']):
+            responses = [
+                "Hacemos envíos a todo el país! Gratis desde $100.000 de compra 🚛",
+                "Enviamos a toda Argentina. El envío es gratis a partir de $100.000 📦"
+            ]
+        elif any(word in message_lower for word in ['whatsapp', 'contacto', 'telefono']):
+            responses = [
+                "Estás hablando conmigo por WhatsApp! También podés ver nuestra tienda en https://royalmayorista.com.ar 📱"
+            ]
+        else:
+            # Respuestas generales amigables
+            responses = [
+                "¡Hola! Soy Royalia de Royal Mayorista. ¿En qué puedo ayudarte? 😊",
+                "¡Buenas! ¿Te puedo ayudar con algo sobre nuestros productos? 💛",
+                "¡Hola! ¿Querés saber algo específico sobre Royal Mayorista? 🌟"
+            ]
+        
+        return random.choice(responses)
 
 # Paso 2: Intentar importar follow_up (no crítico)
 try:
