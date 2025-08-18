@@ -2680,11 +2680,15 @@ async def startup_event():
         def send_followup_message(user_id: str, message: str, stage: int = 0) -> bool:
             """Envía mensaje de follow-up a través del sistema de colas"""
             try:
+                logger.info(f"🔔 FOLLOW-UP CALLBACK llamado: user_id={user_id}, stage={stage}, message_length={len(message)}")
+                
                 # Extraer el número de teléfono del user_id si es de WhatsApp
                 phone = None
                 if user_id.startswith("whatsapp_"):
                     phone = user_id.replace("whatsapp_", "")
-                    logger.debug(f"📱 Extracted phone number from user_id: {phone}")
+                    logger.info(f"📱 Extracted phone number from user_id: {phone}")
+                else:
+                    logger.warning(f"⚠️ User ID doesn't start with 'whatsapp_': {user_id}")
                 
                 message_data = MessageData(
                     user_id=user_id,
@@ -2711,16 +2715,19 @@ async def startup_event():
                     main_event_loop
                 )
                 success = future.result(timeout=5)  # Wait up to 5 seconds
-                logger.info(f"📤 Follow-up enviado a cola: {user_id} - Stage: {followup_stage} - Success: {success}")
+                logger.info(f"📤 Follow-up enviado a cola: {user_id} - Stage: {stage} - Success: {success}")
                 return success
                 
             except Exception as e:
                 import traceback
                 error_details = traceback.format_exc()
-                logger.error(f"❌ Error enviando follow-up message para {user_id}:")
+                logger.error(f"❌ FOLLOW-UP CALLBACK ERROR para {user_id} (Stage {stage}):")
                 logger.error(f"   Tipo de error: {type(e).__name__}")
                 logger.error(f"   Mensaje: {str(e)}")
+                logger.error(f"   Extracted phone: {phone}")
+                logger.error(f"   Message length: {len(message)}")
                 logger.error(f"   Stack trace:\n{error_details}")
+                # Importante: retornar False para que el scheduler sepa que falló
                 return False
         
         # Inicializar scheduler con callback
