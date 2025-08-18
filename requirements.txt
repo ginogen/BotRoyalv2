@@ -20,8 +20,8 @@ python-dotenv>=1.0.0
 # AI AND AGENTS SYSTEM
 # =====================================================
 
-# OpenAI integration
-openai>=1.87.0
+# OpenAI integration - Fixed version compatibility
+openai==1.51.0
 openai-agents==0.0.19
 
 # Royal agents and MCP tools
