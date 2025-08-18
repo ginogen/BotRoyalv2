@@ -221,7 +221,7 @@ class FollowUpScheduler:
                 logger.error(f"❌ No se pudo obtener mensaje para etapa {stage}")
                 return
             
-            # Enviar mensaje usando callback con retry
+            # Enviar mensaje usando callback con retry mejorado
             if self.message_sender:
                 max_retries = 3
                 retry_delay = 2  # segundos
@@ -229,16 +229,31 @@ class FollowUpScheduler:
                 
                 for attempt in range(max_retries):
                     try:
-                        success = self.message_sender(user_id, message_content)
+                        # Pasar información sobre si es un retry y el stage actual
+                        # Para el primer intento, is_retry=False, para los demás is_retry=True
+                        is_retry = (attempt > 0)
+                        
+                        # Si el callback acepta parámetros adicionales, pasarlos
+                        # Verificar si el callback acepta los nuevos parámetros
+                        import inspect
+                        sig = inspect.signature(self.message_sender)
+                        params = list(sig.parameters.keys())
+                        
+                        if 'is_retry' in params and 'followup_stage' in params:
+                            # Callback actualizado con soporte para deduplicación
+                            success = self.message_sender(user_id, message_content, is_retry=is_retry, followup_stage=stage)
+                        else:
+                            # Callback antiguo, mantener compatibilidad
+                            success = self.message_sender(user_id, message_content)
                         
                         if success:
-                            # Avanzar a la siguiente etapa
-                            complete_followup_stage(user_id)
+                            # Solo avanzar etapa en el primer envío exitoso, no en reintentos
+                            if not is_retry:
+                                complete_followup_stage(user_id)
+                                self.stats['messages_sent'] += 1
                             
-                            self.stats['messages_sent'] += 1
                             self.stats['jobs_processed'] += 1
-                            
-                            logger.info(f"✅ Follow-up enviado exitosamente - Usuario: {user_id}, Etapa: {stage}")
+                            logger.info(f"✅ Follow-up {'reintentado y' if is_retry else ''} enviado exitosamente - Usuario: {user_id}, Etapa: {stage}")
                             break  # Salir del loop si fue exitoso
                         else:
                             if attempt < max_retries - 1:
@@ -249,7 +264,7 @@ class FollowUpScheduler:
                                 logger.error(f"❌ Error enviando mensaje a {user_id} después de {max_retries} intentos")
                                 self.stats['errors'] += 1
                     except Exception as e:
-                        logger.error(f"❌ Excepción en intento {attempt + 1} para {user_id}: {e}")
+                        logger.error(f"❌ Excepción en intento {attempt + 1} para {user_id}: {type(e).__name__}: {e}")
                         if attempt < max_retries - 1:
                             time.sleep(retry_delay)
                             retry_delay *= 2

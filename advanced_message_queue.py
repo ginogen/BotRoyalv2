@@ -342,9 +342,66 @@ class AdvancedMessageQueue:
     # =====================================================
     
     def _is_duplicate(self, message_data: MessageData) -> bool:
-        """Check if message is a recent duplicate"""
+        """Check if message is a recent duplicate with time-based window"""
+        
+        # Check in-memory hash first
         if message_data.message_hash in self.processed_hashes:
+            logger.debug(f"🔄 Duplicate found in memory: {message_data.message_hash}")
             return True
+        
+        # For follow-up messages, check by followup_id to prevent stage duplicates
+        if message_data.metadata.get("is_followup"):
+            followup_id = message_data.metadata.get("followup_id")
+            if followup_id and followup_id in self.processed_hashes:
+                logger.debug(f"🔄 Follow-up duplicate found: {followup_id}")
+                return True
+            # Add followup_id to hashes
+            if followup_id:
+                self.processed_hashes.add(followup_id)
+        
+        # Check database for recent messages (last 5 minutes)
+        if self.pg_pool:
+            try:
+                conn = self.pg_pool.getconn()
+                cursor = conn.cursor()
+                
+                # Check for same message hash in recent messages
+                cursor.execute("""
+                    SELECT queue_id FROM message_queue 
+                    WHERE message_hash = %s 
+                    AND created_at > NOW() - INTERVAL '5 minutes'
+                    AND status IN ('pending', 'processing')
+                    LIMIT 1
+                """, (message_data.message_hash,))
+                
+                if cursor.fetchone():
+                    logger.info(f"🔄 Duplicate found in database: {message_data.message_hash}")
+                    self.pg_pool.putconn(conn)
+                    return True
+                
+                # For follow-ups, also check by user and stage in metadata
+                if message_data.metadata.get("is_followup"):
+                    followup_stage = message_data.metadata.get("followup_stage", 0)
+                    cursor.execute("""
+                        SELECT queue_id FROM message_queue 
+                        WHERE user_id = %s 
+                        AND metadata->>'followup_stage' = %s
+                        AND created_at > NOW() - INTERVAL '30 minutes'
+                        AND status IN ('pending', 'processing', 'completed')
+                        LIMIT 1
+                    """, (message_data.user_id, str(followup_stage)))
+                    
+                    if cursor.fetchone():
+                        logger.info(f"🔄 Follow-up stage {followup_stage} already sent to {message_data.user_id}")
+                        self.pg_pool.putconn(conn)
+                        return True
+                
+                self.pg_pool.putconn(conn)
+                
+            except Exception as e:
+                logger.error(f"❌ Error checking duplicates in database: {e}")
+                if conn:
+                    self.pg_pool.putconn(conn)
         
         # Add to processed hashes
         self.processed_hashes.add(message_data.message_hash)
@@ -352,11 +409,12 @@ class AdvancedMessageQueue:
         # Periodic cleanup of old hashes
         self.hash_cleanup_counter += 1
         if self.hash_cleanup_counter >= 100:
-            # Keep only recent hashes (simple approach)
-            if len(self.processed_hashes) > 1000:
-                # Remove half the hashes (oldest ones first)
-                hashes_to_keep = list(self.processed_hashes)[500:]
-                self.processed_hashes = set(hashes_to_keep)
+            # Keep only recent 500 hashes
+            if len(self.processed_hashes) > 500:
+                # Convert to list, sort by insertion order (newer last), keep last 500
+                recent_hashes = list(self.processed_hashes)[-500:]
+                self.processed_hashes = set(recent_hashes)
+                logger.debug(f"🧹 Cleaned hash cache, kept {len(self.processed_hashes)} recent hashes")
             self.hash_cleanup_counter = 0
         
         return False
