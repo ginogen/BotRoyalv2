@@ -261,30 +261,53 @@ class FollowUpDatabaseManager:
     def _should_send_followup(self, user_followup: UserFollowUp, current_time: datetime) -> bool:
         """Determina si es momento de enviar un mensaje de seguimiento"""
         
+        # Definir intervalos entre etapas (cuánto esperar ENTRE cada etapa)
+        # La clave es la etapa actual, el valor es cuánto esperar hasta el próximo envío
+        stage_intervals = {
+            0: timedelta(hours=1),    # Etapa 0: esperar 1 hora
+            1: timedelta(days=1),      # Etapa 1 → 2: esperar 1 día
+            2: timedelta(days=2),      # Etapa 2 → 4: esperar 2 días
+            4: timedelta(days=3),      # Etapa 4 → 7: esperar 3 días
+            7: timedelta(days=3),      # Etapa 7 → 10: esperar 3 días
+            10: timedelta(days=4),     # Etapa 10 → 14: esperar 4 días
+            14: timedelta(days=4),     # Etapa 14 → 18: esperar 4 días
+            18: timedelta(days=8),     # Etapa 18 → 26: esperar 8 días
+            26: timedelta(days=10),    # Etapa 26 → 36: esperar 10 días
+            36: timedelta(days=10),    # Etapa 36 → 46: esperar 10 días
+            46: timedelta(days=10),    # Etapa 46 → 56: esperar 10 días
+            56: timedelta(days=10),    # Etapa 56 → 66: esperar 10 días
+            66: timedelta(days=15),    # Etapa 66 → mantenimiento: esperar 15 días
+            999: timedelta(days=15)    # Mantenimiento: cada 15 días
+        }
+        
         # Calcular tiempo desde el inicio de la etapa
         time_since_stage_start = current_time - user_followup.stage_start_time
         
-        # Debug logging
-        logger.debug(f"Checking followup for {user_followup.user_id}: "
-                    f"time_since_start={time_since_stage_start}, "
-                    f"stage={user_followup.current_stage}")
+        # Obtener el intervalo para la etapa actual
+        required_interval = stage_intervals.get(user_followup.current_stage)
         
-        # Para etapa 0 (1 hora después)
-        if user_followup.current_stage == 0:
-            should_send = time_since_stage_start >= timedelta(hours=1)
-            if should_send:
-                logger.info(f"⏰ Usuario {user_followup.user_id} ha esperado {time_since_stage_start} - enviando Stage 0")
-            return should_send
+        if required_interval is None:
+            logger.warning(f"⚠️ Etapa no definida: {user_followup.current_stage} para usuario {user_followup.user_id}")
+            return False
         
-        # Para etapas numeradas (días)
-        elif user_followup.current_stage <= 66:
-            return time_since_stage_start >= timedelta(days=user_followup.current_stage)
+        # Calcular si es tiempo de enviar
+        should_send = time_since_stage_start >= required_interval
         
-        # Para mantenimiento (cada 15 días después del día 66)
-        elif user_followup.current_stage == 999:
-            return time_since_stage_start >= timedelta(days=15)
+        # Logging mejorado
+        if should_send:
+            logger.info(f"✅ Usuario {user_followup.user_id} listo para follow-up:")
+            logger.info(f"   - Etapa actual: {user_followup.current_stage}")
+            logger.info(f"   - Tiempo esperado: {required_interval}")
+            logger.info(f"   - Tiempo transcurrido: {time_since_stage_start}")
+        else:
+            # Calcular tiempo restante
+            time_remaining = required_interval - time_since_stage_start
+            logger.debug(f"⏳ Usuario {user_followup.user_id} en etapa {user_followup.current_stage}:")
+            logger.debug(f"   - Tiempo transcurrido: {time_since_stage_start}")
+            logger.debug(f"   - Tiempo requerido: {required_interval}")
+            logger.debug(f"   - Tiempo restante: {time_remaining}")
         
-        return False
+        return should_send
     
     def deactivate_followup(self, user_id: str) -> bool:
         """Desactiva el seguimiento para un usuario"""
