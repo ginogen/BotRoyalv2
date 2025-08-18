@@ -200,26 +200,41 @@ async def process_royal_message(user_id: str, message: str, message_data: Option
         
         # Verificar por teléfono (prioritario)
         if phone and bot_state_manager:
-            is_active = await bot_state_manager.is_bot_active(phone)
-            if not is_active:
-                logger.info(f"🔇 Worker: Bot pausado para teléfono {phone}, mensaje ignorado silenciosamente")
-                return ""
+            try:
+                is_active = await bot_state_manager.is_bot_active(phone)
+                if not is_active:
+                    logger.info(f"🔇 Worker: Bot pausado para teléfono {phone}, mensaje ignorado silenciosamente")
+                    return ""
+            except Exception as e:
+                logger.warning(f"⚠️ Error verificando estado del bot para {phone}: {e}")
+                logger.info(f"✅ Asumiendo bot activo para {phone} debido a error de verificación")
+                # En caso de error, continuar procesando (fallback: bot activo)
         
         # Verificar por conversación si no hay teléfono
         elif conversation_id and bot_state_manager:
             conv_identifier = f"conv_{conversation_id}"
-            is_active = await bot_state_manager.is_bot_active(conv_identifier)
-            if not is_active:
-                logger.info(f"🔇 Worker: Bot pausado para conversación {conv_identifier}, mensaje ignorado silenciosamente")
-                return ""
+            try:
+                is_active = await bot_state_manager.is_bot_active(conv_identifier)
+                if not is_active:
+                    logger.info(f"🔇 Worker: Bot pausado para conversación {conv_identifier}, mensaje ignorado silenciosamente")
+                    return ""
+            except Exception as e:
+                logger.warning(f"⚠️ Error verificando estado del bot para {conv_identifier}: {e}")
+                logger.info(f"✅ Asumiendo bot activo para {conv_identifier} debido a error de verificación")
+                # En caso de error, continuar procesando (fallback: bot activo)
         
         # Verificar por user_id como último recurso (para casos legacy)
         elif user_id and not user_id.startswith("chatwoot_") and bot_state_manager:
             # Si el user_id parece ser un teléfono, verificar
-            is_active = await bot_state_manager.is_bot_active(user_id)
-            if not is_active:
-                logger.info(f"🔇 Worker: Bot pausado para user_id {user_id}, mensaje ignorado silenciosamente")
-                return ""
+            try:
+                is_active = await bot_state_manager.is_bot_active(user_id)
+                if not is_active:
+                    logger.info(f"🔇 Worker: Bot pausado para user_id {user_id}, mensaje ignorado silenciosamente")
+                    return ""
+            except Exception as e:
+                logger.warning(f"⚠️ Error verificando estado del bot para {user_id}: {e}")
+                logger.info(f"✅ Asumiendo bot activo para {user_id} debido a error de verificación")
+                # En caso de error, continuar procesando (fallback: bot activo)
         
         # Si llegamos aquí, el bot está activo - procesar normalmente
         logger.debug(f"✅ Worker: Bot activo para {user_id}, procesando mensaje...")
@@ -1506,15 +1521,21 @@ async def chatwoot_webhook(request: Request, background_tasks: BackgroundTasks):
                     
                     # Primero verificar por teléfono si está disponible
                     if phone:
-                        if bot_state_manager and not await bot_state_manager.is_bot_active(phone):
-                            bot_active = False
-                            logger.info(f"🔇 Bot pausado para teléfono {phone} (Chatwoot), mensaje ignorado")
+                        try:
+                            if bot_state_manager and not await bot_state_manager.is_bot_active(phone):
+                                bot_active = False
+                                logger.info(f"🔇 Bot pausado para teléfono {phone} (Chatwoot), mensaje ignorado")
+                        except Exception as e:
+                            logger.warning(f"⚠️ Error verificando estado para {phone}: {e} - asumiendo activo")
                     
                     # También verificar por conversación  
                     conv_identifier = f"conv_{conversation_id}"
-                    if bot_state_manager and not await bot_state_manager.is_bot_active(conv_identifier):
-                        bot_active = False
-                        logger.info(f"🔇 Bot pausado para conversación {conv_identifier} (Chatwoot), mensaje ignorado")
+                    try:
+                        if bot_state_manager and not await bot_state_manager.is_bot_active(conv_identifier):
+                            bot_active = False
+                            logger.info(f"🔇 Bot pausado para conversación {conv_identifier} (Chatwoot), mensaje ignorado")
+                    except Exception as e:
+                        logger.warning(f"⚠️ Error verificando estado para {conv_identifier}: {e} - asumiendo activo")
                     
                     if not bot_active:
                         return {"status": "bot_paused", "message": "ignored", "source": "chatwoot"}
@@ -1654,11 +1675,21 @@ async def evolution_webhook(request: Request, background_tasks: BackgroundTasks)
                 return control_response
             
             # Check if bot is active for this user (verificar ambos identificadores)
-            bot_active = await bot_state_manager.is_bot_active(from_number) if bot_state_manager else True
-            if conversation_id:
-                # También verificar por conversación si existe vinculación
-                conv_active = await bot_state_manager.is_bot_active(f"conv_{conversation_id}") if bot_state_manager else True
-                bot_active = bot_active and conv_active
+            bot_active = True  # Default to active
+            
+            if bot_state_manager:
+                try:
+                    bot_active = await bot_state_manager.is_bot_active(from_number)
+                except Exception as e:
+                    logger.warning(f"⚠️ Error verificando estado para {from_number}: {e} - asumiendo activo")
+                    bot_active = True
+                
+                if conversation_id and bot_active:  # Solo verificar conversación si el teléfono está activo
+                    try:
+                        conv_active = await bot_state_manager.is_bot_active(f"conv_{conversation_id}")
+                        bot_active = bot_active and conv_active
+                    except Exception as e:
+                        logger.warning(f"⚠️ Error verificando estado para conv_{conversation_id}: {e} - asumiendo activo")
             
             if not bot_active:
                 logger.info(f"🔇 Bot pausado para {from_number}, mensaje ignorado")
@@ -2641,7 +2672,12 @@ async def startup_event():
                 return success
                 
             except Exception as e:
-                logger.error(f"❌ Error enviando follow-up message: {e}")
+                import traceback
+                error_details = traceback.format_exc()
+                logger.error(f"❌ Error enviando follow-up message para {user_id}:")
+                logger.error(f"   Tipo de error: {type(e).__name__}")
+                logger.error(f"   Mensaje: {str(e)}")
+                logger.error(f"   Stack trace:\n{error_details}")
                 return False
         
         # Inicializar scheduler con callback

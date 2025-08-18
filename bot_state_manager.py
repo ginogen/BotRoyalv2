@@ -8,19 +8,26 @@ Permite pausar/reactivar el bot por usuario/conversación
 import redis.asyncio as redis
 from typing import Optional, Dict
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
+import time
+import asyncio
 
 logger = logging.getLogger(__name__)
 
 class BotStateManager:
     """
     Gestiona el estado del bot (activo/pausado) para cada usuario
-    usando Redis como almacenamiento persistente
+    usando Redis como almacenamiento persistente con fallback a cache local
     """
     
     def __init__(self, redis_url: str = "redis://localhost:6379"):
         self.redis_url = redis_url
         self.redis_client: Optional[redis.Redis] = None
+        # Cache local como fallback cuando Redis falla
+        self.local_cache: Dict[str, Dict] = {}
+        self.cache_expiry: Dict[str, datetime] = {}
+        self.redis_failures = 0
+        self.last_redis_check = datetime.now()
         
     async def initialize(self) -> bool:
         """Inicializar conexión con Redis"""
@@ -28,14 +35,25 @@ class BotStateManager:
             self.redis_client = await redis.from_url(
                 self.redis_url,
                 decode_responses=True,
-                socket_connect_timeout=5
+                socket_connect_timeout=2,  # Reducido de 5 a 2 segundos
+                socket_timeout=2,
+                retry_on_timeout=True,
+                max_connections=10
             )
-            await self.redis_client.ping()
+            # Test connection with timeout
+            await asyncio.wait_for(self.redis_client.ping(), timeout=2.0)
             logger.info("✅ BotStateManager: Redis conectado correctamente")
+            self.redis_failures = 0  # Reset failure counter
             return True
+        except asyncio.TimeoutError:
+            logger.error("❌ BotStateManager: Timeout conectando a Redis")
+            logger.warning("⚠️ BotStateManager funcionará con cache local temporal")
+            self.redis_client = None
+            return False
         except Exception as e:
             logger.error(f"❌ BotStateManager: Error conectando Redis - {e}")
-            logger.warning("⚠️ BotStateManager funcionará sin persistencia")
+            logger.warning("⚠️ BotStateManager funcionará con cache local temporal")
+            self.redis_client = None
             return False
     
     async def close(self):
@@ -43,6 +61,16 @@ class BotStateManager:
         if self.redis_client:
             await self.redis_client.close()
             logger.info("🔌 BotStateManager: Conexión Redis cerrada")
+    
+    def _clean_local_cache(self):
+        """Limpiar entradas expiradas del cache local"""
+        now = datetime.now()
+        expired_keys = [k for k, v in self.cache_expiry.items() if v < now]
+        for key in expired_keys:
+            self.local_cache.pop(key, None)
+            self.cache_expiry.pop(key, None)
+        if expired_keys:
+            logger.debug(f"🧹 Limpiado {len(expired_keys)} entradas expiradas del cache local")
     
     async def pause_bot(self, identifier: str, reason: str = "manual", ttl: int = 86400) -> bool:
         """
@@ -113,6 +141,7 @@ class BotStateManager:
     async def is_bot_active(self, identifier: str) -> bool:
         """
         Verificar si el bot está activo para un identificador
+        Con fallback a cache local si Redis falla
         
         Args:
             identifier: Número de teléfono o ID de conversación
@@ -120,24 +149,51 @@ class BotStateManager:
         Returns:
             True si el bot está activo, False si está pausado
         """
+        # Limpiar identificador
+        clean_id = identifier.replace("@s.whatsapp.net", "").replace("whatsapp_", "")
+        
+        # Primero intentar cache local si está vigente
+        if clean_id in self.local_cache:
+            if clean_id in self.cache_expiry and self.cache_expiry[clean_id] > datetime.now():
+                cached_state = self.local_cache[clean_id]
+                is_active = cached_state.get("status") != "paused"
+                logger.debug(f"📦 Usando cache local para {clean_id}: {'activo' if is_active else 'pausado'}")
+                return is_active
+        
+        # Si no hay Redis, usar solo cache local o asumir activo
         if not self.redis_client:
-            # Sin Redis, asumir que el bot está siempre activo
-            return True
+            # Verificar si necesitamos reintentar conexión a Redis
+            if datetime.now() - self.last_redis_check > timedelta(minutes=1):
+                self.last_redis_check = datetime.now()
+                await self.initialize()  # Intentar reconectar
+            
+            # Si sigue sin Redis, usar cache o asumir activo
+            if not self.redis_client:
+                return True
         
         try:
-            # Limpiar identificador
-            clean_id = identifier.replace("@s.whatsapp.net", "").replace("whatsapp_", "")
-            
             key = f"bot_state:{clean_id}"
-            state = await self.redis_client.get(key)
+            
+            # Usar timeout para evitar bloqueos largos
+            state = await asyncio.wait_for(
+                self.redis_client.get(key),
+                timeout=1.0  # 1 segundo máximo
+            )
             
             # Si no hay estado guardado, el bot está activo
             if not state:
+                # Guardar en cache local
+                self.local_cache[clean_id] = {"status": "active"}
+                self.cache_expiry[clean_id] = datetime.now() + timedelta(seconds=60)
                 return True
             
             # Parsear estado
             import json
             state_data = json.loads(state)
+            
+            # Guardar en cache local
+            self.local_cache[clean_id] = state_data
+            self.cache_expiry[clean_id] = datetime.now() + timedelta(seconds=60)
             
             # Bot está pausado si el status es "paused"
             is_active = state_data.get("status") != "paused"
@@ -145,10 +201,32 @@ class BotStateManager:
             if not is_active:
                 logger.debug(f"🔇 Bot pausado para {clean_id} - {state_data.get('reason')}")
             
+            # Reset failure counter on success
+            self.redis_failures = 0
+            
             return is_active
             
+        except asyncio.TimeoutError:
+            logger.warning(f"⏱️ Timeout verificando estado para {identifier} - asumiendo activo")
+            self.redis_failures += 1
+            
+            # Si hay muchos failures, desconectar Redis temporalmente
+            if self.redis_failures > 3:
+                logger.error("❌ Múltiples timeouts de Redis - desconectando temporalmente")
+                self.redis_client = None
+                self.redis_failures = 0
+            
+            return True  # Asumir activo en caso de timeout
+            
         except Exception as e:
-            logger.error(f"❌ Error verificando estado del bot para {identifier}: {e}")
+            logger.error(f"❌ Error verificando estado del bot para {identifier}: {type(e).__name__}: {str(e)}")
+            self.redis_failures += 1
+            
+            # Si hay muchos failures, desconectar Redis
+            if self.redis_failures > 3:
+                self.redis_client = None
+                self.redis_failures = 0
+            
             # En caso de error, asumir que el bot está activo
             return True
     

@@ -221,21 +221,40 @@ class FollowUpScheduler:
                 logger.error(f"❌ No se pudo obtener mensaje para etapa {stage}")
                 return
             
-            # Enviar mensaje usando callback
+            # Enviar mensaje usando callback con retry
             if self.message_sender:
-                success = self.message_sender(user_id, message_content)
+                max_retries = 3
+                retry_delay = 2  # segundos
+                success = False
                 
-                if success:
-                    # Avanzar a la siguiente etapa
-                    complete_followup_stage(user_id)
-                    
-                    self.stats['messages_sent'] += 1
-                    self.stats['jobs_processed'] += 1
-                    
-                    logger.info(f"✅ Follow-up enviado exitosamente - Usuario: {user_id}, Etapa: {stage}")
-                else:
-                    logger.error(f"❌ Error enviando mensaje a {user_id}")
-                    self.stats['errors'] += 1
+                for attempt in range(max_retries):
+                    try:
+                        success = self.message_sender(user_id, message_content)
+                        
+                        if success:
+                            # Avanzar a la siguiente etapa
+                            complete_followup_stage(user_id)
+                            
+                            self.stats['messages_sent'] += 1
+                            self.stats['jobs_processed'] += 1
+                            
+                            logger.info(f"✅ Follow-up enviado exitosamente - Usuario: {user_id}, Etapa: {stage}")
+                            break  # Salir del loop si fue exitoso
+                        else:
+                            if attempt < max_retries - 1:
+                                logger.warning(f"⚠️ Intento {attempt + 1}/{max_retries} falló para {user_id}, reintentando en {retry_delay}s...")
+                                time.sleep(retry_delay)
+                                retry_delay *= 2  # Backoff exponencial
+                            else:
+                                logger.error(f"❌ Error enviando mensaje a {user_id} después de {max_retries} intentos")
+                                self.stats['errors'] += 1
+                    except Exception as e:
+                        logger.error(f"❌ Excepción en intento {attempt + 1} para {user_id}: {e}")
+                        if attempt < max_retries - 1:
+                            time.sleep(retry_delay)
+                            retry_delay *= 2
+                        else:
+                            self.stats['errors'] += 1
             else:
                 logger.warning(f"⚠️ No hay callback configurado para enviar mensajes")
                 # Simular envío para testing

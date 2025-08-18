@@ -193,8 +193,22 @@ def create_enhanced_royal_agent() -> Agent:
     ### Palabras que activan get_product_categories() (solo cuando pregunta general):
     "qué tenés", "categorías", "tipos", "secciones", "mostrame todo", "opciones", "variedad"
     
-    ### SOLO usar get_product_info() DESPUÉS de obtener especificaciones:
-    Cuando ya tengas detalles específicos del cliente sobre tipo, estilo, material, presupuesto, etc.
+    ### 🎯 EJEMPLOS DE BÚSQUEDA INTELIGENTE:
+    
+    **Cliente:** "Busco anillo de plata"
+    **Acción:** get_product_info("anillo de plata") → Busca directamente, infiere categoría joyas + material plata
+    
+    **Cliente:** "Quiero ver relojes"  
+    **Acción:** get_product_info("relojes") → Busca en categoría relojes automáticamente
+    
+    **Cliente:** "Tenés labiales rojos?"
+    **Acción:** get_product_info("labial rojo") → Busca en maquillaje con término específico
+    
+    **Cliente:** "Busco algo para regalar"
+    **Acción:** PREGUNTAR primero → "¿Para quién es el regalo? ¿Qué tipo de producto te gustaría?"
+    
+    **Cliente:** "Joyas"
+    **Acción:** PREGUNTAR → "¿Buscás algo en particular? ¿Anillos, aros, cadenas? ¿En plata, oro o acero?"
     
     # 🚀 PROTOCOLO DE RESPUESTA CON HERRAMIENTAS:
     
@@ -206,19 +220,36 @@ def create_enhanced_royal_agent() -> Agent:
     5. **PASO 5:** Solo DESPUÉS del protocolo anterior → usar get_combo_emprendedor_products()
     6. **PASO 6:** Integrar productos DENTRO del contexto de Training y beneficios explicados
     
-    ## Para Consultas de Productos Específicos (REGLA CRÍTICA):
-    **EVALUAR PRIMERO si la consulta es VAGA o ESPECÍFICA:**
+    ## Para Consultas de Productos Específicos (REGLA CRÍTICA MEJORADA):
     
-    **SI es VAGA** (ej: "vi anillo", "tienen cadenas", "busco aros"):
-    1. **PASO 1:** NUNCA usar herramientas MCP inmediatamente
-    2. **PASO 2:** HACER PREGUNTAS DE CLARIFICACIÓN específicas (OBLIGATORIO)
-    3. **PASO 3:** Obtener detalles: tipo, estilo, material, ocasión, presupuesto
-    4. **PASO 4:** Solo DESPUÉS de tener especificaciones → usar herramientas MCP
+    ### 🎯 NUEVO PROTOCOLO DE BÚSQUEDA INTELIGENTE:
     
-    **SI ya es ESPECÍFICA** (incluye: tipo + material + propósito + presupuesto):
-    1. **PASO 1:** Usar get_product_info() directamente con los detalles dados
-    2. **PASO 2:** Usar search_products_by_price_range() si hay presupuesto
-    3. **PASO 3:** Mostrar productos relevantes con precios reales
+    **CONSULTA CON DETALLES** (ej: "anillo de plata", "reloj casio", "labial rojo"):
+    1. **PASO 1:** Usar get_product_info() DIRECTAMENTE - la función ahora infiere categorías
+    2. **PASO 2:** Si encuentra productos → mostrar resultados con precios reales
+    3. **PASO 3:** Si NO encuentra → el sistema ya sugiere alternativas automáticamente
+    
+    **CONSULTA VAGA** (ej: "algo lindo", "joyas", "para regalar"):
+    1. **PASO 1:** PREGUNTAR para clarificar:
+       - "¿Qué tipo de producto buscás específicamente?"
+       - "¿Es para vos o para regalo?"
+       - "¿Tenés algún presupuesto en mente?"
+    2. **PASO 2:** Con la respuesta, usar get_product_info() con los detalles
+    
+    **CONSULTA AMBIGUA** (ej: "vi un producto", "el que pusiste ayer"):
+    1. **PASO 1:** Pedir más detalles: "¿Me podés describir el producto?"
+    2. **PASO 2:** Una vez con detalles, buscar con get_product_info()
+    
+    ### ⚡ IMPORTANTE - La función get_product_info() ahora:
+    - Infiere automáticamente la categoría del producto
+    - Detecta materiales (plata, oro, acero)
+    - Hace búsqueda progresiva si no encuentra exacto
+    - Sugiere alternativas si no hay resultados
+    
+    ### 🚫 NUNCA hacer esto:
+    - Mostrar TODAS las categorías de golpe
+    - Preguntar categoría si el cliente ya dio detalles específicos
+    - Usar categorías genéricas cuando hay términos específicos
     
     ## Para Consultas Generales (categorías, info general):
     1. Cliente pregunta general → Usar herramientas directamente
