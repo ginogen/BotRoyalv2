@@ -66,37 +66,59 @@ class FollowUpDatabaseManager:
     """Gestor de base de datos para el sistema de seguimiento"""
     
     def __init__(self):
-        # Usar DATABASE_URL si está disponible (Railway/Producción)
-        database_url = os.getenv('DATABASE_URL')
+        self.db_config = None
+        self.initialized = False
         
-        if database_url:
-            # Parse DATABASE_URL para psycopg2
-            import urllib.parse as urlparse
-            url = urlparse.urlparse(database_url)
-            self.db_config = {
-                'database': url.path[1:],
-                'user': url.username,
-                'password': url.password,
-                'host': url.hostname,
-                'port': url.port
-            }
-            logger.info(f"✅ Usando DATABASE_URL para conexión PostgreSQL (host: {url.hostname})")
-        else:
-            # Fallback para desarrollo local
-            self.db_config = {
-                'host': os.getenv('POSTGRES_HOST', 'localhost'),
-                'database': os.getenv('POSTGRES_DB', 'royal_bot'),
-                'user': os.getenv('POSTGRES_USER', 'postgres'),
-                'password': os.getenv('POSTGRES_PASSWORD', 'password'),
-                'port': os.getenv('POSTGRES_PORT', 5432)
-            }
-            logger.info("📍 Usando configuración local de PostgreSQL")
+        try:
+            # Usar DATABASE_URL si está disponible (Railway/Producción)
+            database_url = os.getenv('DATABASE_URL')
+            
+            if database_url:
+                # Parse DATABASE_URL para psycopg2
+                import urllib.parse as urlparse
+                url = urlparse.urlparse(database_url)
+                self.db_config = {
+                    'database': url.path[1:],
+                    'user': url.username,
+                    'password': url.password,
+                    'host': url.hostname,
+                    'port': url.port
+                }
+                logger.info(f"✅ Usando DATABASE_URL para conexión PostgreSQL (host: {url.hostname})")
+            else:
+                # Fallback para desarrollo local
+                self.db_config = {
+                    'host': os.getenv('POSTGRES_HOST', 'localhost'),
+                    'database': os.getenv('POSTGRES_DB', 'royal_bot'),
+                    'user': os.getenv('POSTGRES_USER', 'postgres'),
+                    'password': os.getenv('POSTGRES_PASSWORD', 'password'),
+                    'port': os.getenv('POSTGRES_PORT', 5432)
+                }
+                logger.info("📍 Usando configuración local de PostgreSQL")
+            
+            # Intentar inicializar tabla - pero no fallar si no se puede conectar
+            self._init_database()
+            
+        except Exception as e:
+            logger.warning(f"⚠️ Follow-up database manager initialization failed: {e}")
+            logger.info("🔄 Database will be initialized on first use")
         
-        # Inicializar tabla si no existe
-        self._init_database()
-        
+    def _ensure_initialized(self):
+        """Asegura que la base de datos esté inicializada"""
+        if not self.initialized and self.db_config:
+            try:
+                self._init_database()
+                self.initialized = True
+            except Exception as e:
+                logger.warning(f"⚠️ Failed to initialize follow-up database: {e}")
+                return False
+        return self.initialized
+    
     def _init_database(self):
         """Inicializa la tabla de seguimiento si no existe"""
+        if not self.db_config:
+            raise Exception("Database configuration not available")
+            
         try:
             with psycopg2.connect(**self.db_config) as conn:
                 with conn.cursor() as cur:
@@ -179,6 +201,10 @@ class FollowUpDatabaseManager:
     
     def get_user_followup(self, user_id: str) -> Optional[UserFollowUp]:
         """Obtiene el estado de seguimiento de un usuario"""
+        if not self._ensure_initialized():
+            logger.warning("Follow-up database not available")
+            return None
+            
         try:
             with psycopg2.connect(**self.db_config) as conn:
                 with conn.cursor(cursor_factory=RealDictCursor) as cur:
@@ -211,6 +237,10 @@ class FollowUpDatabaseManager:
     
     def create_or_update_followup(self, user_followup: UserFollowUp) -> bool:
         """Crea o actualiza el seguimiento de un usuario"""
+        if not self._ensure_initialized():
+            logger.warning("Follow-up database not available")
+            return False
+            
         try:
             with psycopg2.connect(**self.db_config) as conn:
                 with conn.cursor() as cur:
@@ -249,6 +279,10 @@ class FollowUpDatabaseManager:
     
     def get_users_ready_for_followup(self) -> List[UserFollowUp]:
         """Obtiene usuarios listos para recibir el siguiente mensaje de seguimiento"""
+        if not self._ensure_initialized():
+            logger.warning("Follow-up database not available")
+            return []
+            
         try:
             current_time = datetime.now(ARG_TZ)
             users_ready = []
@@ -548,7 +582,54 @@ class FollowUpDatabaseManager:
             return False
 
 # Instancia global del gestor de base de datos
-db_manager = FollowUpDatabaseManager()
+try:
+    db_manager = FollowUpDatabaseManager()
+    logger.info("✅ Follow-up database manager initialized successfully")
+except Exception as e:
+    logger.error(f"❌ Failed to initialize follow-up database manager: {e}")
+    # Crear un mock manager que no haga nada
+    class MockFollowUpDatabaseManager:
+        def __init__(self):
+            self.initialized = False
+            
+        def _ensure_initialized(self):
+            return False
+            
+        def get_user_followup(self, user_id: str):
+            return None
+            
+        def create_or_update_followup(self, user_followup):
+            return False
+            
+        def get_users_ready_for_followup(self):
+            return []
+            
+        def mark_user_processing(self, user_id: str):
+            return False
+            
+        def clear_user_processing(self, user_id: str):
+            return False
+            
+        def check_message_already_sent(self, user_id: str, stage: int, message_hash: str):
+            return False
+            
+        def record_message_sent(self, user_id: str, stage: int, message_content: str):
+            return False
+            
+        def cleanup_old_sent_messages(self, days: int = 7):
+            return 0
+            
+        def deactivate_followup(self, user_id: str):
+            return False
+            
+        def reset_to_stage_zero(self, user_id: str, user_profile=None):
+            return False
+            
+        def advance_to_next_stage(self, user_id: str):
+            return False
+    
+    db_manager = MockFollowUpDatabaseManager()
+    logger.warning("⚠️ Using mock follow-up database manager")
 
 # Funciones de conveniencia para usar desde otros módulos
 def activate_followup_for_user(user_id: str, user_profile: Optional[Dict] = None) -> bool:

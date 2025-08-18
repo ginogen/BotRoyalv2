@@ -71,8 +71,13 @@ try:
     from royal_agents.follow_up_scheduler import start_follow_up_scheduler, stop_follow_up_scheduler
     from royal_agents.follow_up_system import get_users_for_followup
     print("✅ Follow-up system importado correctamente")
+    FOLLOW_UP_AVAILABLE = True
 except Exception as e:
     print(f"⚠️ WARNING: Follow-up system no disponible (no crítico): {e}")
+    import traceback
+    print(f"🔍 Traceback: {traceback.format_exc()}")
+    
+    FOLLOW_UP_AVAILABLE = False
     
     # Fallbacks para follow-up
     def start_follow_up_scheduler(message_callback=None):
@@ -2645,30 +2650,14 @@ async def startup_event():
     logger.info("⏰ Initializing follow-up scheduler...")
     try:
         # Callback para enviar mensajes de follow-up
-<<<<<<< HEAD
         def send_followup_message(user_id: str, message: str, stage: int = 0) -> bool:
             """Envía mensaje de follow-up a través del sistema de colas"""
-=======
-        def send_followup_message(user_id: str, message: str, is_retry: bool = False, followup_stage: int = 0) -> bool:
-            """Envía mensaje de follow-up a través del sistema de colas con deduplicación"""
->>>>>>> 12739dd65122a80da6282118b16db8eba2894273
             try:
-                # Si es un retry, no agregar a la cola nuevamente
-                if is_retry:
-                    logger.info(f"⏭️ Saltando agregado a cola para retry de {user_id}")
-                    # En un retry, solo reportamos éxito si el mensaje ya está en proceso
-                    # Esto evita que se sigan agregando duplicados
-                    return True
-                
                 # Extraer el número de teléfono del user_id si es de WhatsApp
                 phone = None
                 if user_id.startswith("whatsapp_"):
                     phone = user_id.replace("whatsapp_", "")
                     logger.debug(f"📱 Extracted phone number from user_id: {phone}")
-                
-                # Crear identificador único para este follow-up específico
-                # Esto ayuda a prevenir duplicados del mismo mensaje de follow-up
-                followup_id = f"followup_{user_id}_stage{followup_stage}_{datetime.now().strftime('%Y%m%d')}"
                 
                 message_data = MessageData(
                     user_id=user_id,
@@ -2678,18 +2667,11 @@ async def startup_event():
                     priority=MessagePriority.HIGH,
                     metadata={
                         "is_followup": True,
-                        "followup_id": followup_id,
-                        "followup_stage": followup_stage,
                         "timestamp": datetime.now().isoformat(),
                         "automated": True,
                         "stage": stage  # Agregar el stage para mejor deduplicación
                     }
                 )
-                
-                # Verificar si este follow-up ya fue enviado recientemente
-                if is_duplicate_message(user_id, f"FOLLOWUP_STAGE_{followup_stage}", "followup"):
-                    logger.warning(f"🔄 Follow-up duplicado detectado para {user_id} stage {followup_stage}, ignorando")
-                    return True  # Retornar True para no causar reintentos
                 
                 # Agregar a la cola de alta prioridad
                 # Use the main event loop saved at startup
