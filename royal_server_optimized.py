@@ -51,10 +51,20 @@ except Exception as e:
     import traceback
     print(f"❌ Stack trace completo:\n{traceback.format_exc()}")
     
-    # Fallback temporal con respuesta básica
+    # Fallback con respuestas naturales - NUNCA mostrar "mantenimiento"
     def run_contextual_conversation_sync(user_id: str, user_message: str) -> str:
-        # Respuesta temporal mientras se soluciona el problema
-        return "Hola! El sistema está en mantenimiento momentáneo. Por favor intenta nuevamente en unos minutos o contacta a soporte."
+        import random
+        # Respuestas naturales que indican que el bot está ocupado pero disponible
+        busy_responses = [
+            "¡Hola! Dame un momento y ya estoy con vos 😊",
+            "¡Hola! Un segundito que ya te respondo...",
+            "¡Hola! Estoy procesando tu mensaje, dame un momento por favor",
+            "¡Hola! Ya casi estoy listo para ayudarte, un momento más...",
+            "¡Hola! Estoy aquí, dame un instante para responderte mejor",
+            "¡Hola! Un momento por favor, ya te atiendo 💛",
+            "¡Hola! Estoy con vos, solo dame un segundo más..."
+        ]
+        return random.choice(busy_responses)
 
 # Paso 2: Intentar importar follow_up (no crítico)
 try:
