@@ -27,13 +27,49 @@ def get_mcp_config() -> Dict[str, Any]:
             'log_level': os.getenv('MCP_LOG_LEVEL', 'info')
         },
         
-        # Mapeo de categorías Royal -> WooCommerce
+        # Mapeo de categorías Royal -> WooCommerce mejorado
         'category_mapping': {
             'joyas': ['jewelry', 'joyas', 'plata', 'oro'],
             'relojes': ['watches', 'relojes', 'casio'],
             'maquillaje': ['makeup', 'cosmetics', 'belleza'],
             'indumentaria': ['clothing', 'ropa', 'apparel'],
-            'accesorios': ['accessories', 'accesorios']
+            'accesorios': ['accessories', 'accesorios'],
+            'bijou': ['bijouterie', 'bijou', 'insumos'],
+            'belleza': ['beauty', 'cuidado-personal'],
+            'calzados': ['shoes', 'calzado', 'sandalias'],
+            'electronica': ['electronics', 'tech', 'gadgets']
+        },
+        
+        # Mapeo inteligente de términos para inferencia
+        'smart_inference': {
+            'product_terms': {
+                # Términos de producto → categorías posibles
+                'anillo': ['joyas', 'plata', 'oro', 'acero'],
+                'aros': ['joyas', 'plata', 'oro', 'acero'],
+                'cadena': ['joyas', 'plata', 'oro', 'acero'],
+                'pulsera': ['joyas', 'plata', 'oro', 'acero', 'bijou'],
+                'collar': ['joyas', 'plata', 'oro'],
+                'dije': ['joyas', 'plata', 'oro'],
+                'reloj': ['relojes', 'accesorios'],
+                'labial': ['maquillaje', 'belleza'],
+                'sombra': ['maquillaje'],
+                'remera': ['indumentaria'],
+                'pantalon': ['indumentaria'],
+                'lentes': ['accesorios'],
+                'billetera': ['accesorios', 'marroquineria'],
+                'zapatos': ['calzados'],
+                'sandalia': ['calzados'],
+                'auricular': ['electronica']
+            },
+            'material_terms': {
+                # Materiales → categorías relacionadas
+                'plata': 'joyas',
+                '925': 'joyas',
+                'oro': 'joyas',
+                'acero': 'joyas',
+                'cuero': 'accesorios',
+                'tela': 'indumentaria'
+            }
         },
         
         # Configuración de respuestas

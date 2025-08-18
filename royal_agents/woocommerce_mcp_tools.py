@@ -119,15 +119,98 @@ class WooCommerceMCPClient:
 # Instancia global del cliente
 wc_client = WooCommerceMCPClient()
 
+async def infer_category_from_query(query: str) -> Dict[str, Any]:
+    """
+    Infiere categoría y términos de búsqueda de la consulta del usuario.
+    Analiza el query para extraer tipo de producto, material y categoría probable.
+    """
+    query_lower = query.lower()
+    
+    # Diccionario de términos clave → categorías y materiales
+    product_types = {
+        'joyas': ['anillo', 'anillos', 'aro', 'aros', 'cadena', 'cadenas', 'pulsera', 'pulseras', 
+                  'dije', 'dijes', 'collar', 'collares', 'medalla', 'medallon', 'abretiros'],
+        'bijou': ['bijouterie', 'bijou', 'insumos', 'armar', 'bases', 'piedras'],
+        'relojes': ['reloj', 'relojes', 'casio', 'smartwatch', 'pulsera hora'],
+        'maquillaje': ['labial', 'labiales', 'sombra', 'sombras', 'maquillaje', 'makeup', 
+                       'brocha', 'brochas', 'esmalte', 'esmaltes', 'rimel', 'delineador'],
+        'belleza': ['crema', 'cremas', 'aceite', 'aceites', 'mascarilla', 'serum', 'perfume'],
+        'indumentaria': ['ropa', 'remera', 'remeras', 'pantalon', 'pantalones', 'vestido', 
+                         'vestidos', 'campera', 'camperas', 'buzo', 'buzos', 'jean', 'jeans'],
+        'accesorios': ['lentes', 'anteojos', 'gafas', 'cinturon', 'cinturones', 'billetera',
+                       'cartera', 'mochila', 'bolso', 'llavero', 'vincha', 'hebilla'],
+        'calzados': ['zapato', 'zapatos', 'sandalia', 'sandalias', 'zapatilla', 'zapatillas',
+                     'bota', 'botas', 'ojotas', 'calzado'],
+        'electronica': ['auricular', 'auriculares', 'cargador', 'cable', 'power bank', 'parlante']
+    }
+    
+    materials = {
+        'plata': ['plata', '925', 'plata 925', 'plata ley'],
+        'oro': ['oro', '18k', '18 kilates', 'dorado', 'gold', 'enchapado'],
+        'acero': ['acero', 'quirurgico', 'quirúrgico', 'inoxidable', 'steel']
+    }
+    
+    # Detectar categoría principal
+    detected_category = None
+    detected_product_type = None
+    detected_material = None
+    
+    # Buscar tipo de producto
+    for category, keywords in product_types.items():
+        for keyword in keywords:
+            if keyword in query_lower:
+                detected_category = category
+                detected_product_type = keyword
+                logger.info(f"   Detectado tipo de producto: {keyword} → categoría: {category}")
+                break
+        if detected_category:
+            break
+    
+    # Buscar material
+    for material, keywords in materials.items():
+        for keyword in keywords:
+            if keyword in query_lower:
+                detected_material = material
+                logger.info(f"   Detectado material: {material}")
+                break
+        if detected_material:
+            break
+    
+    # Si detectamos material de joyería pero no categoría, asumir joyas
+    if detected_material and not detected_category:
+        detected_category = 'joyas'
+        logger.info(f"   Material {detected_material} detectado → asumiendo categoría: joyas")
+    
+    # Extraer términos de búsqueda más específicos
+    search_terms = query
+    
+    # Si encontramos categoría y material, buscar más específicamente
+    if detected_product_type and detected_material:
+        search_terms = f"{detected_product_type} {detected_material}"
+    elif detected_product_type:
+        search_terms = detected_product_type
+    
+    result = {
+        'category': detected_category,
+        'material': detected_material,
+        'product_type': detected_product_type,
+        'search_terms': search_terms,
+        'original_query': query,
+        'requires_clarification': detected_category is None
+    }
+    
+    logger.info(f"   Inferencia completa: {result}")
+    return result
+
 @function_tool
 async def get_product_info(product_name: str = "", product_id: str = "", category: str = "") -> str:
     """
-    Obtiene información de productos de WooCommerce.
+    Obtiene información de productos de WooCommerce con búsqueda inteligente.
     
     Args:
-        product_name: Nombre del producto a buscar
+        product_name: Nombre del producto a buscar (puede incluir tipo y material)
         product_id: ID específico del producto
-        category: Categoría de productos (joyas, relojes, maquillaje, etc.)
+        category: Categoría de productos (opcional, se infiere si no se proporciona)
     """
     
     logger.info(f"🔍 GET_PRODUCT_INFO llamada:")
@@ -135,13 +218,34 @@ async def get_product_info(product_name: str = "", product_id: str = "", categor
     logger.info(f"   product_id: '{product_id}'")
     logger.info(f"   category: '{category}'")
     
-    params = {}
-    if product_name:
-        params['search'] = product_name
+    # Si hay un ID específico, buscar directamente
     if product_id:
-        params['include'] = product_id
-    if category:
-        params['category'] = category
+        params = {'include': product_id}
+    else:
+        # Usar inferencia inteligente si tenemos product_name
+        if product_name and not category:
+            inference = await infer_category_from_query(product_name)
+            
+            # Usar los términos de búsqueda inferidos
+            params = {'search': inference['search_terms']}
+            
+            # Si se detectó una categoría, agregarla
+            if inference['category']:
+                category = inference['category']
+                logger.info(f"   Categoría inferida: {category}")
+                
+                # Si detectamos material específico, refinar la búsqueda
+                if inference['material']:
+                    # Para joyas, buscar con material específico
+                    if category == 'joyas':
+                        params['search'] = f"{inference['product_type'] or 'joya'} {inference['material']}"
+                        logger.info(f"   Búsqueda refinada: {params['search']}")
+        else:
+            params = {}
+            if product_name:
+                params['search'] = product_name
+            if category:
+                params['category'] = category
     
     # Mapeo de categorías Royal a WooCommerce
     category_mapping = {
@@ -149,10 +253,14 @@ async def get_product_info(product_name: str = "", product_id: str = "", categor
         'relojes': 'watches', 
         'maquillaje': 'makeup',
         'indumentaria': 'clothing',
-        'accesorios': 'accessories'
+        'accesorios': 'accessories',
+        'bijou': 'bijouterie',
+        'belleza': 'beauty',
+        'calzados': 'shoes',
+        'electronica': 'electronics'
     }
     
-    if category.lower() in category_mapping:
+    if category and category.lower() in category_mapping:
         params['category'] = category_mapping[category.lower()]
         logger.info(f"   Categoría mapeada: {category} -> {category_mapping[category.lower()]}")
     
@@ -167,9 +275,38 @@ async def get_product_info(product_name: str = "", product_id: str = "", categor
     
     logger.info(f"📦 Productos encontrados: {len(products)}")
     
+    # Si no encontramos productos con búsqueda específica, intentar búsqueda más amplia
+    if not products and product_name:
+        logger.info("   No se encontraron productos, intentando búsqueda ampliada...")
+        
+        # Si habíamos inferido una categoría, intentar sin ella
+        if 'category' in params:
+            params_broad = {'search': product_name}
+            result_broad = await wc_client.make_request('products', params_broad)
+            
+            if not isinstance(result_broad, dict) or 'error' not in result_broad:
+                products = result_broad if isinstance(result_broad, list) else result_broad.get('products', [])
+                logger.info(f"   Búsqueda ampliada encontró: {len(products)} productos")
+        
+        # Si aún no hay resultados, intentar con términos parciales
+        if not products and ' ' in product_name:
+            # Buscar por la palabra más relevante (generalmente el tipo de producto)
+            main_term = product_name.split()[0]
+            params_partial = {'search': main_term}
+            result_partial = await wc_client.make_request('products', params_partial)
+            
+            if not isinstance(result_partial, dict) or 'error' not in result_partial:
+                products = result_partial if isinstance(result_partial, list) else result_partial.get('products', [])
+                logger.info(f"   Búsqueda parcial con '{main_term}' encontró: {len(products)} productos")
+    
     if not products:
-        logger.info(f"   No se encontraron productos para: {product_name or category}")
-        return f"No encontré productos que coincidan con '{product_name or category}'"
+        # Mensaje más útil basado en lo que buscábamos
+        if product_name and 'plata' in product_name.lower():
+            return f"❌ No encontré productos de plata que coincidan con '{product_name}'.\n\n💡 **Te puedo ayudar con:**\n• Ver todo el catálogo de joyas de plata\n• Buscar un tipo específico (anillos, aros, cadenas)\n• Mostrarte los combos para emprendedores\n\n¿Qué preferís?"
+        elif product_name:
+            return f"❌ No encontré productos que coincidan exactamente con '{product_name}'.\n\n💡 **Probá especificando:**\n• El tipo exacto de producto\n• El material o categoría\n• O decime 'mostrame todo de [categoría]'\n\n¿Cómo te puedo ayudar?"
+        else:
+            return f"No encontré productos en la categoría '{category}'"
     
     # Log del primer producto para debug
     if len(products) > 0:

@@ -22,7 +22,7 @@ python-dotenv>=1.0.0
 
 # OpenAI integration
 openai>=1.87.0
-openai-agents>=0.1.0
+openai-agents==0.0.19
 
 # Royal agents and MCP tools
 mcp>=0.2.0
