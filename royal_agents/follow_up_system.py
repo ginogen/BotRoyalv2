@@ -4,6 +4,7 @@
 import os
 import json
 import asyncio
+import hashlib
 from typing import Dict, List, Any, Optional
 from datetime import datetime, timedelta, timezone
 import logging
@@ -111,6 +112,8 @@ class FollowUpDatabaseManager:
                             user_profile JSONB DEFAULT '{}',
                             interaction_count INTEGER DEFAULT 0,
                             last_stage_completed INTEGER DEFAULT NULL,
+                            processing_started_at TIMESTAMP WITH TIME ZONE DEFAULT NULL,
+                            last_check_time TIMESTAMP WITH TIME ZONE DEFAULT NULL,
                             created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
                             updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
                         )
@@ -130,6 +133,41 @@ class FollowUpDatabaseManager:
                     cur.execute("""
                         CREATE INDEX IF NOT EXISTS idx_user_follow_ups_stage_start_time 
                         ON user_follow_ups(stage_start_time)
+                    """)
+                    
+                    # Agregar columnas nuevas si no existen (para migraciones)
+                    cur.execute("""
+                        DO $$ 
+                        BEGIN
+                            IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+                                         WHERE table_name='user_follow_ups' AND column_name='processing_started_at') THEN
+                                ALTER TABLE user_follow_ups ADD COLUMN processing_started_at TIMESTAMP WITH TIME ZONE DEFAULT NULL;
+                            END IF;
+                            
+                            IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+                                         WHERE table_name='user_follow_ups' AND column_name='last_check_time') THEN
+                                ALTER TABLE user_follow_ups ADD COLUMN last_check_time TIMESTAMP WITH TIME ZONE DEFAULT NULL;
+                            END IF;
+                        END $$;
+                    """)
+                    
+                    # Crear tabla para cache de mensajes enviados (evitar duplicados)
+                    cur.execute("""
+                        CREATE TABLE IF NOT EXISTS follow_up_sent_messages (
+                            id SERIAL PRIMARY KEY,
+                            user_id VARCHAR(255) NOT NULL,
+                            stage INTEGER NOT NULL,
+                            message_hash VARCHAR(64) NOT NULL,
+                            sent_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                            created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                            UNIQUE(user_id, stage, message_hash)
+                        )
+                    """)
+                    
+                    # Índice para limpieza de mensajes antiguos
+                    cur.execute("""
+                        CREATE INDEX IF NOT EXISTS idx_follow_up_sent_messages_sent_at 
+                        ON follow_up_sent_messages(sent_at)
                     """)
                     
                     conn.commit()
@@ -217,12 +255,16 @@ class FollowUpDatabaseManager:
             
             with psycopg2.connect(**self.db_config) as conn:
                 with conn.cursor(cursor_factory=RealDictCursor) as cur:
-                    # Buscar usuarios activos
+                    # Buscar usuarios activos con lock para evitar duplicados
+                    # SKIP LOCKED permite que otros procesos tomen otros registros
                     cur.execute("""
                         SELECT * FROM user_follow_ups 
                         WHERE is_active = true
+                        AND (processing_started_at IS NULL 
+                             OR processing_started_at < %s)
                         ORDER BY stage_start_time ASC
-                    """)
+                        FOR UPDATE SKIP LOCKED
+                    """, (current_time - timedelta(minutes=5),))
                     
                     rows = cur.fetchall()
                     
@@ -309,6 +351,45 @@ class FollowUpDatabaseManager:
         
         return should_send
     
+    def mark_user_processing(self, user_id: str) -> bool:
+        """Marca un usuario como en procesamiento para evitar duplicados"""
+        try:
+            with psycopg2.connect(**self.db_config) as conn:
+                with conn.cursor() as cur:
+                    cur.execute("""
+                        UPDATE user_follow_ups 
+                        SET processing_started_at = %s, 
+                            last_check_time = %s,
+                            updated_at = CURRENT_TIMESTAMP
+                        WHERE user_id = %s
+                    """, (datetime.now(ARG_TZ), datetime.now(ARG_TZ), user_id))
+                    
+                    conn.commit()
+                    return True
+                    
+        except Exception as e:
+            logger.error(f"❌ Error marcando usuario en procesamiento {user_id}: {e}")
+            return False
+    
+    def clear_user_processing(self, user_id: str) -> bool:
+        """Limpia la marca de procesamiento de un usuario"""
+        try:
+            with psycopg2.connect(**self.db_config) as conn:
+                with conn.cursor() as cur:
+                    cur.execute("""
+                        UPDATE user_follow_ups 
+                        SET processing_started_at = NULL,
+                            updated_at = CURRENT_TIMESTAMP
+                        WHERE user_id = %s
+                    """, (user_id,))
+                    
+                    conn.commit()
+                    return True
+                    
+        except Exception as e:
+            logger.error(f"❌ Error limpiando procesamiento para {user_id}: {e}")
+            return False
+    
     def deactivate_followup(self, user_id: str) -> bool:
         """Desactiva el seguimiento para un usuario"""
         try:
@@ -362,6 +443,67 @@ class FollowUpDatabaseManager:
         
         return success
     
+    def check_message_already_sent(self, user_id: str, stage: int, message_hash: str) -> bool:
+        """Verifica si un mensaje ya fue enviado para evitar duplicados"""
+        try:
+            with psycopg2.connect(**self.db_config) as conn:
+                with conn.cursor() as cur:
+                    # Verificar si existe en las últimas 2 horas
+                    cur.execute("""
+                        SELECT COUNT(*) FROM follow_up_sent_messages 
+                        WHERE user_id = %s 
+                        AND stage = %s 
+                        AND sent_at > %s
+                    """, (user_id, stage, datetime.now(ARG_TZ) - timedelta(hours=2)))
+                    
+                    count = cur.fetchone()[0]
+                    return count > 0
+                    
+        except Exception as e:
+            logger.error(f"❌ Error verificando mensaje duplicado: {e}")
+            return False
+    
+    def record_message_sent(self, user_id: str, stage: int, message_content: str) -> bool:
+        """Registra un mensaje enviado para evitar duplicados"""
+        try:
+            # Generar hash del mensaje
+            message_hash = hashlib.sha256(f"{user_id}:{stage}:{message_content[:100]}".encode()).hexdigest()[:64]
+            
+            with psycopg2.connect(**self.db_config) as conn:
+                with conn.cursor() as cur:
+                    cur.execute("""
+                        INSERT INTO follow_up_sent_messages (user_id, stage, message_hash, sent_at)
+                        VALUES (%s, %s, %s, %s)
+                        ON CONFLICT (user_id, stage, message_hash) DO NOTHING
+                    """, (user_id, stage, message_hash, datetime.now(ARG_TZ)))
+                    
+                    conn.commit()
+                    return True
+                    
+        except Exception as e:
+            logger.error(f"❌ Error registrando mensaje enviado: {e}")
+            return False
+    
+    def cleanup_old_sent_messages(self, days: int = 7) -> int:
+        """Limpia mensajes antiguos del cache"""
+        try:
+            with psycopg2.connect(**self.db_config) as conn:
+                with conn.cursor() as cur:
+                    cur.execute("""
+                        DELETE FROM follow_up_sent_messages 
+                        WHERE sent_at < %s
+                    """, (datetime.now(ARG_TZ) - timedelta(days=days),))
+                    
+                    deleted_count = cur.rowcount
+                    conn.commit()
+                    
+                    logger.info(f"🧹 Limpiados {deleted_count} mensajes antiguos del cache")
+                    return deleted_count
+                    
+        except Exception as e:
+            logger.error(f"❌ Error limpiando mensajes antiguos: {e}")
+            return 0
+    
     def advance_to_next_stage(self, user_id: str) -> bool:
         """Avanza un usuario a la siguiente etapa"""
         try:
@@ -395,6 +537,8 @@ class FollowUpDatabaseManager:
             success = self.create_or_update_followup(user_followup)
             
             if success:
+                # Limpiar marca de procesamiento al avanzar de etapa
+                self.clear_user_processing(user_id)
                 logger.info(f"📈 Usuario {user_id} avanzado de etapa {current_stage} a {next_stage}")
             
             return success

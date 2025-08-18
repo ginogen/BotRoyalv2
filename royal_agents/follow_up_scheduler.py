@@ -37,7 +37,7 @@ class FollowUpScheduler:
         Inicializa el scheduler
         
         Args:
-            message_sender_callback: Función para enviar mensajes (debe aceptar user_id, message)
+            message_sender_callback: Función para enviar mensajes (debe aceptar user_id, message, stage)
         """
         # Configurar scheduler
         executors = {
@@ -93,6 +93,15 @@ class FollowUpScheduler:
                     trigger=IntervalTrigger(hours=6),
                     id='cleanup_jobs',
                     name='Cleanup Old Jobs',
+                    replace_existing=True
+                )
+                
+                # Job de limpieza de mensajes enviados cada 24 horas
+                self.scheduler.add_job(
+                    func=self._cleanup_sent_messages,
+                    trigger=IntervalTrigger(hours=24),
+                    id='cleanup_sent_messages',
+                    name='Cleanup Sent Messages Cache',
                     replace_existing=True
                 )
                 
@@ -171,6 +180,10 @@ class FollowUpScheduler:
             # Procesar cada usuario
             for user_followup in users_ready:
                 try:
+                    # Marcar usuario como en procesamiento INMEDIATAMENTE
+                    db_manager.mark_user_processing(user_followup.user_id)
+                    logger.info(f"🔒 Usuario {user_followup.user_id} marcado como en procesamiento")
+                    
                     # Evitar duplicados con cache
                     cache_key = f"{user_followup.user_id}_{user_followup.current_stage}"
                     
@@ -182,9 +195,15 @@ class FollowUpScheduler:
                         
                         # Pequeña pausa entre mensajes
                         time.sleep(2)
+                    else:
+                        logger.info(f"⏭️ Usuario {user_followup.user_id} ya en cache, saltando")
+                        # Limpiar marca de procesamiento si estaba en cache
+                        db_manager.clear_user_processing(user_followup.user_id)
                         
                 except Exception as e:
                     logger.error(f"❌ Error procesando follow-up para {user_followup.user_id}: {e}")
+                    # Limpiar marca de procesamiento en caso de error
+                    db_manager.clear_user_processing(user_followup.user_id)
                     self.stats['errors'] += 1
             
             self.stats['last_check'] = datetime.now(ARG_TZ)
@@ -203,11 +222,22 @@ class FollowUpScheduler:
             
             if not user_followup or not user_followup.is_active:
                 logger.info(f"⏭️ Saltando follow-up - Usuario {user_id} no está activo o no existe")
+                # Limpiar marca de procesamiento
+                db_manager.clear_user_processing(user_id)
                 return
             
             # Verificar que la etapa coincida (por si hubo cambios)
             if user_followup.current_stage != stage:
                 logger.info(f"⏭️ Saltando follow-up - Usuario {user_id} cambió de etapa {stage} a {user_followup.current_stage}")
+                # Limpiar marca de procesamiento
+                db_manager.clear_user_processing(user_id)
+                return
+            
+            # Verificar si el mensaje ya fue enviado recientemente
+            if db_manager.check_message_already_sent(user_id, stage, ""):
+                logger.info(f"⏭️ Mensaje ya enviado recientemente para {user_id} en etapa {stage}")
+                # Avanzar etapa de todas formas para no quedar atascado
+                complete_followup_stage(user_id)
                 return
             
             # Obtener mensaje para la etapa
@@ -219,13 +249,18 @@ class FollowUpScheduler:
             
             if not message_content:
                 logger.error(f"❌ No se pudo obtener mensaje para etapa {stage}")
+                # Limpiar marca de procesamiento
+                db_manager.clear_user_processing(user_id)
                 return
             
             # Enviar mensaje usando callback
             if self.message_sender:
-                success = self.message_sender(user_id, message_content)
+                success = self.message_sender(user_id, message_content, stage)
                 
                 if success:
+                    # Registrar mensaje enviado ANTES de avanzar etapa
+                    db_manager.record_message_sent(user_id, stage, message_content)
+                    
                     # Avanzar a la siguiente etapa
                     complete_followup_stage(user_id)
                     
@@ -235,6 +270,8 @@ class FollowUpScheduler:
                     logger.info(f"✅ Follow-up enviado exitosamente - Usuario: {user_id}, Etapa: {stage}")
                 else:
                     logger.error(f"❌ Error enviando mensaje a {user_id}")
+                    # Limpiar marca de procesamiento en caso de error
+                    db_manager.clear_user_processing(user_id)
                     self.stats['errors'] += 1
             else:
                 logger.warning(f"⚠️ No hay callback configurado para enviar mensajes")
@@ -281,6 +318,14 @@ class FollowUpScheduler:
                 
         except Exception as e:
             logger.error(f"❌ Error en cleanup: {e}")
+    
+    def _cleanup_sent_messages(self):
+        """Limpia mensajes antiguos del cache de base de datos"""
+        try:
+            deleted_count = db_manager.cleanup_old_sent_messages(days=7)
+            logger.info(f"🧹 Limpiados {deleted_count} mensajes antiguos del cache de follow-up")
+        except Exception as e:
+            logger.error(f"❌ Error limpiando mensajes enviados: {e}")
     
     def _log_stats(self):
         """Log de estadísticas del sistema"""
@@ -350,12 +395,12 @@ class FollowUpScheduler:
             return 0
 
 # Funciones de callback por defecto para integración
-def default_message_sender(user_id: str, message: str) -> bool:
+def default_message_sender(user_id: str, message: str, stage: int = 0) -> bool:
     """
     Callback por defecto para envío de mensajes.
     Esta función debe ser sobrescrita por la implementación real.
     """
-    logger.info(f"📧 DEFAULT SENDER - Usuario: {user_id}")
+    logger.info(f"📧 DEFAULT SENDER - Usuario: {user_id}, Stage: {stage}")
     logger.info(f"📝 Mensaje: {message[:100]}...")
     return True
 

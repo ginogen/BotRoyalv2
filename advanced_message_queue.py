@@ -91,7 +91,12 @@ class MessageData:
     def __post_init__(self):
         """Generate message hash for deduplication"""
         if not self.message_hash:
-            content = f"{self.user_id}:{self.message}:{self.source.value}"
+            # Para follow-ups, incluir metadata en el hash para mejor deduplicación
+            if self.source == MessageSource.FOLLOWUP and self.metadata:
+                stage = self.metadata.get('stage', '')
+                content = f"{self.user_id}:{self.message[:100]}:{self.source.value}:stage_{stage}"
+            else:
+                content = f"{self.user_id}:{self.message}:{self.source.value}"
             self.message_hash = hashlib.sha256(content.encode()).hexdigest()[:16]
     
     def to_dict(self) -> Dict[str, Any]:
@@ -343,6 +348,41 @@ class AdvancedMessageQueue:
     
     def _is_duplicate(self, message_data: MessageData) -> bool:
         """Check if message is a recent duplicate"""
+        # Verificación especial para follow-ups
+        if message_data.source == MessageSource.FOLLOWUP:
+            # Para follow-ups, verificar duplicados en base de datos con ventana de tiempo más amplia
+            try:
+                conn = self.pg_pool.getconn()
+                cursor = conn.cursor()
+                
+                # Buscar mensajes similares en las últimas 2 horas
+                cursor.execute("""
+                    SELECT COUNT(*) FROM message_queue 
+                    WHERE user_id = %s 
+                    AND source = %s
+                    AND message_hash = %s
+                    AND created_at > %s
+                    AND status IN ('pending', 'processing', 'completed')
+                """, (
+                    message_data.user_id, 
+                    MessageSource.FOLLOWUP.value,
+                    message_data.message_hash,
+                    datetime.now() - timedelta(hours=2)
+                ))
+                
+                count = cursor.fetchone()[0]
+                self.pg_pool.putconn(conn)
+                
+                if count > 0:
+                    logger.info(f"🔄 Follow-up duplicado detectado en DB para {message_data.user_id}")
+                    return True
+                    
+            except Exception as e:
+                logger.error(f"❌ Error verificando duplicado follow-up: {e}")
+                if conn:
+                    self.pg_pool.putconn(conn)
+        
+        # Verificación estándar en memoria
         if message_data.message_hash in self.processed_hashes:
             return True
         

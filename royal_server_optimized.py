@@ -2604,7 +2604,7 @@ async def startup_event():
     logger.info("⏰ Initializing follow-up scheduler...")
     try:
         # Callback para enviar mensajes de follow-up
-        def send_followup_message(user_id: str, message: str) -> bool:
+        def send_followup_message(user_id: str, message: str, stage: int = 0) -> bool:
             """Envía mensaje de follow-up a través del sistema de colas"""
             try:
                 # Extraer el número de teléfono del user_id si es de WhatsApp
@@ -2622,7 +2622,8 @@ async def startup_event():
                     metadata={
                         "is_followup": True,
                         "timestamp": datetime.now().isoformat(),
-                        "automated": True
+                        "automated": True,
+                        "stage": stage  # Agregar el stage para mejor deduplicación
                     }
                 )
                 
