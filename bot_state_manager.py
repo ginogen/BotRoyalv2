@@ -207,14 +207,18 @@ class BotStateManager:
             return is_active
             
         except asyncio.TimeoutError:
-            logger.warning(f"⏱️ Timeout verificando estado para {identifier} - asumiendo activo")
+            logger.debug(f"⏱️ Timeout verificando estado para {identifier} - asumiendo activo")
             self.redis_failures += 1
             
             # Si hay muchos failures, desconectar Redis temporalmente
             if self.redis_failures > 3:
-                logger.error("❌ Múltiples timeouts de Redis - desconectando temporalmente")
+                logger.warning("❌ Múltiples timeouts de Redis - usando solo cache local")
                 self.redis_client = None
                 self.redis_failures = 0
+            
+            # Guardar en cache local para evitar futuras consultas a Redis
+            self.local_cache[clean_id] = {"status": "active"}
+            self.cache_expiry[clean_id] = datetime.now() + timedelta(minutes=5)
             
             return True  # Asumir activo en caso de timeout
             

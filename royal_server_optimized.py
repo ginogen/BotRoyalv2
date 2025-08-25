@@ -460,6 +460,43 @@ async def send_evolution_message(phone: str, message: str) -> bool:
         return False
 
 # =====================================================
+# DIRECT MESSAGE PROCESSOR (BACKUP)
+# =====================================================
+
+async def process_message_direct(user_id: str, message: str, source: MessageSource, conversation_id: Optional[str] = None, phone: Optional[str] = None, priority: MessagePriority = MessagePriority.NORMAL, metadata: Optional[Dict] = None) -> bool:
+    """
+    Direct message processing bypass - when workers fail, process immediately
+    """
+    logger.warning(f"⚡ DIRECT PROCESSING for {user_id}: {message[:30]}... (bypassing queue)")
+    
+    try:
+        # Create temporary message data
+        temp_message_data = MessageData(
+            user_id=user_id,
+            message=message,
+            source=source,
+            conversation_id=conversation_id,
+            priority=priority,
+            metadata=metadata or {}
+        )
+        
+        # Process directly
+        response = await process_royal_message(user_id, message, temp_message_data)
+        
+        # Send response directly
+        if response:
+            await send_response_to_channel(temp_message_data, response)
+            logger.info(f"✅ DIRECT processing successful for {user_id}")
+            return True
+        else:
+            logger.error(f"❌ DIRECT processing failed - no response for {user_id}")
+            return False
+            
+    except Exception as e:
+        logger.error(f"❌ DIRECT processing error for {user_id}: {e}")
+        return False
+
+# =====================================================
 # MESSAGE PROCESSING PIPELINE
 # =====================================================
 
@@ -497,10 +534,60 @@ async def process_message_pipeline(
     if success:
         system_metrics['messages_queued'] += 1
         logger.info(f"📥 Message queued: {user_id} via {source.value}")
+        
+        # Set up backup processing in case workers are not consuming
+        asyncio.create_task(backup_processing_monitor(message_data))
+        
     else:
         logger.warning(f"⚠️ Message not queued (duplicate?): {user_id}")
+        # If queue fails, process directly as backup
+        logger.warning(f"⚡ Queue failed, trying direct processing for {user_id}")
+        backup_success = await process_message_direct(user_id, message, source, conversation_id, phone, priority, metadata)
+        return backup_success
     
     return success
+
+# =====================================================
+# BACKUP PROCESSING MONITOR
+# =====================================================
+
+async def backup_processing_monitor(message_data: MessageData):
+    """
+    Monitor if a message gets processed within reasonable time.
+    If not, process it directly as backup.
+    """
+    # Wait 30 seconds for normal processing
+    await asyncio.sleep(30)
+    
+    try:
+        # Check if message is still in queue (not processed)
+        queue_stats = await advanced_queue.get_queue_stats()
+        
+        # Simple check: if queue depth is high and hasn't decreased, workers might be stuck
+        if queue_stats.queue_depth > 10:
+            logger.warning(f"🚨 High queue depth ({queue_stats.queue_depth}), triggering backup processing for {message_data.user_id}")
+            
+            # Process directly as backup
+            success = await process_message_direct(
+                message_data.user_id,
+                message_data.message,
+                message_data.source,
+                message_data.conversation_id,
+                message_data.phone,
+                message_data.priority,
+                message_data.metadata
+            )
+            
+            if success:
+                logger.info(f"🎯 BACKUP processing rescued message for {message_data.user_id}")
+                # Mark original message as completed in queue
+                try:
+                    await advanced_queue.complete_message(message_data.queue_id, True)
+                except:
+                    pass  # Ignore errors if message was already processed
+            
+    except Exception as e:
+        logger.error(f"❌ Backup monitor error for {message_data.user_id}: {e}")
 
 # =====================================================
 # BACKGROUND TASKS

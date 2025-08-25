@@ -198,13 +198,16 @@ class Worker:
     async def _work_cycle(self):
         """Single work cycle - get and process one message"""
         # Get next message from queue
+        logger.debug(f"👷 Worker {self.worker_id} checking for messages...")
         message = await advanced_queue.get_next_message(self.worker_id)
         
         if not message:
             self.metrics.status = WorkerStatus.IDLE
+            logger.debug(f"💤 Worker {self.worker_id} idle - no messages")
             return
         
         # Process the message
+        logger.info(f"🚀 Worker {self.worker_id} processing message from {message.user_id}: {message.message[:50]}...")
         self.metrics.status = WorkerStatus.BUSY
         self.metrics.current_message_id = message.queue_id
         self.metrics.task_started_at = datetime.now()
@@ -222,6 +225,7 @@ class Worker:
                 message  # Pass the full message data
             )
             success = True
+            logger.info(f"✅ Worker {self.worker_id} completed processing for {message.user_id}")
             
         except Exception as e:
             error = str(e)

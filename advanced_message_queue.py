@@ -288,16 +288,25 @@ class AdvancedMessageQueue:
     async def get_next_message(self, worker_id: str, timeout: float = 5.0) -> Optional[MessageData]:
         """Get next message with priority ordering"""
         
+        logger.debug(f"🔍 Worker {worker_id} requesting next message")
+        
         # Try Redis first for hot messages
         message = await self._get_from_redis_queue()
         if message:
+            logger.info(f"📤 Found message in Redis for worker {worker_id}: {message.user_id}")
             return await self._mark_processing(message, worker_id)
+        else:
+            logger.debug(f"📭 No messages found in Redis for worker {worker_id}")
         
         # Fallback to database with priority ordering
         message = await self._get_from_db_queue()
         if message:
+            logger.info(f"📤 Found message in DB for worker {worker_id}: {message.user_id}")
             return await self._mark_processing(message, worker_id)
+        else:
+            logger.debug(f"📭 No messages found in DB for worker {worker_id}")
         
+        logger.debug(f"⭕ No messages available for worker {worker_id}")
         return None
     
     async def complete_message(self, queue_id: str, success: bool = True, 
