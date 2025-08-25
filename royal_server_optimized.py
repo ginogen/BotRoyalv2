@@ -2500,8 +2500,12 @@ async def test_followup_now(user_id: str):
     try:
         from royal_agents.follow_up_messages import get_followup_message_for_stage
         
-        # Generar mensaje de prueba (usando stage 0 como ejemplo)
-        test_message = get_followup_message_for_stage(0)
+        # Generar mensaje de prueba usando IA contextual (stage 0 como ejemplo)
+        test_message = await get_followup_message_for_stage(
+            stage=0, 
+            user_id=user_id, 
+            use_ai_generation=True
+        )
         
         # Extraer el número de teléfono del user_id si es de WhatsApp
         phone = None

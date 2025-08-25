@@ -79,7 +79,7 @@ class FollowUpScheduler:
                 
                 # Job principal que revisa cada 5 minutos si hay usuarios para follow-up
                 self.scheduler.add_job(
-                    func=self._check_and_process_followups,
+                    func=self._check_and_process_followups_sync,
                     trigger=IntervalTrigger(minutes=5),
                     id='main_followup_checker',
                     name='Main Follow-up Checker',
@@ -158,7 +158,7 @@ class FollowUpScheduler:
             
             # Programar job
             self.scheduler.add_job(
-                func=self._send_followup_message,
+                func=self._send_followup_message_sync,
                 trigger=DateTrigger(run_date=run_date),
                 args=[user_id, stage],
                 id=job_id,
@@ -171,7 +171,29 @@ class FollowUpScheduler:
         except Exception as e:
             logger.error(f"❌ Error programando follow-up para {user_id}: {e}")
     
-    def _check_and_process_followups(self):
+    def _check_and_process_followups_sync(self):
+        """Wrapper sincrónico para el job del scheduler"""
+        try:
+            # Ejecutar la función async en el loop actual o crear uno nuevo
+            loop = None
+            try:
+                loop = asyncio.get_event_loop()
+                if loop.is_running():
+                    # Si el loop ya está ejecutándose, crear una nueva tarea
+                    asyncio.create_task(self._check_and_process_followups())
+                else:
+                    # Si el loop existe pero no está ejecutándose
+                    loop.run_until_complete(self._check_and_process_followups())
+            except RuntimeError:
+                # No hay loop, crear uno nuevo
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                loop.run_until_complete(self._check_and_process_followups())
+                loop.close()
+        except Exception as e:
+            logger.error(f"❌ Error en wrapper sincrónico: {e}")
+    
+    async def _check_and_process_followups(self):
         """Job principal que revisa y procesa usuarios listos para follow-up"""
         try:
             logger.info("🔍 Revisando usuarios para follow-up automático...")
@@ -193,11 +215,11 @@ class FollowUpScheduler:
                     # Los usuarios ya están marcados como en procesamiento por get_users_ready_for_followup
                     # Procesar el mensaje directamente
                     logger.info(f"📤 Llamando _send_followup_message para {user_followup.user_id}")
-                    self._send_followup_message(user_followup.user_id, user_followup.current_stage)
+                    await self._send_followup_message(user_followup.user_id, user_followup.current_stage)
                     logger.info(f"✅ Completado procesamiento para {user_followup.user_id}")
                     
                     # Pequeña pausa entre mensajes
-                    time.sleep(2)
+                    await asyncio.sleep(2)
                         
                 except Exception as e:
                     logger.error(f"❌ Error procesando follow-up para {user_followup.user_id}: {e}")
@@ -211,7 +233,26 @@ class FollowUpScheduler:
             logger.error(f"❌ Error en check_and_process_followups: {e}")
             self.stats['errors'] += 1
     
-    def _send_followup_message(self, user_id: str, stage: int):
+    def _send_followup_message_sync(self, user_id: str, stage: int):
+        """Wrapper sincrónico para envío de mensajes desde scheduler"""
+        try:
+            # Ejecutar la función async 
+            loop = None
+            try:
+                loop = asyncio.get_event_loop()
+                if loop.is_running():
+                    asyncio.create_task(self._send_followup_message(user_id, stage))
+                else:
+                    loop.run_until_complete(self._send_followup_message(user_id, stage))
+            except RuntimeError:
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                loop.run_until_complete(self._send_followup_message(user_id, stage))
+                loop.close()
+        except Exception as e:
+            logger.error(f"❌ Error en wrapper de mensaje: {e}")
+    
+    async def _send_followup_message(self, user_id: str, stage: int):
         """Envía un mensaje de seguimiento a un usuario específico"""
         processing_cleared = False
         
@@ -241,11 +282,11 @@ class FollowUpScheduler:
                     processing_cleared = True
                 return
             
-            # Obtener mensaje para la etapa
-            message_content = get_followup_message_for_stage(
+            # Obtener mensaje para la etapa usando IA contextual
+            message_content = await get_followup_message_for_stage(
                 stage=stage, 
-                user_profile=user_followup.user_profile,
-                interaction_count=user_followup.interaction_count
+                user_id=user_id,
+                use_ai_generation=True
             )
             
             if not message_content:

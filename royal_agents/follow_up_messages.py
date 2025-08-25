@@ -1,837 +1,799 @@
-# Plantillas de Mensajes para Sistema de Seguimiento de 14 Etapas
-# Cada mensaje mantiene la personalidad de Royalia con enfoque de ventas
+# Sistema de Mensajes Contextuales con IA para Seguimiento de 14 Etapas
+# Genera mensajes únicos basados en el contexto real de cada conversación
 
 import random
 from typing import Dict, List, Optional, Any
 from datetime import datetime
 import logging
+import json
+import asyncio
+
+# Import para contexto conversacional
+from hybrid_context_manager import hybrid_context_manager, ConversationMemory
 
 logger = logging.getLogger(__name__)
 
-class FollowUpMessageTemplates:
-    """Gestiona todas las plantillas de mensajes para el sistema de seguimiento"""
+class FollowUpStagePrompts:
+    """Sistema de prompts para generar mensajes contextuales con IA para cada etapa"""
     
     def __init__(self):
-        # Plantillas por etapa con múltiples variaciones
-        self.templates = {
-            0: self._get_stage_0_templates(),   # 1 hora después
-            1: self._get_stage_1_templates(),   # Día 1
-            2: self._get_stage_2_templates(),   # Día 2
-            4: self._get_stage_4_templates(),   # Día 4
-            7: self._get_stage_7_templates(),   # Día 7
-            10: self._get_stage_10_templates(), # Día 10
-            14: self._get_stage_14_templates(), # Día 14
-            18: self._get_stage_18_templates(), # Día 18
-            26: self._get_stage_26_templates(), # Día 26
-            36: self._get_stage_36_templates(), # Día 36
-            46: self._get_stage_46_templates(), # Día 46
-            56: self._get_stage_56_templates(), # Día 56
-            66: self._get_stage_66_templates(), # Día 66
-            999: self._get_maintenance_templates() # Mantenimiento (cada 15 días)
+        # Base personality prompt para Royalia
+        self.base_personality = """
+Eres Royalia, una emprendedora exitosa que ayuda a otras mujeres a emprender con productos de calidad (joyas, maquillaje, indumentaria). 
+
+Tu personalidad:
+- Empática y genuinamente preocupada por el éxito de las demás
+- Directa pero cálida, nunca agresiva
+- Compartes experiencias reales y testimonios
+- Usas emojis naturalmente 
+- Motivadora pero realista sobre los desafíos
+- Orientada a resultados concretos
+
+Tu negocio:
+- Combos emprendedores desde $40.000
+- Margen de ganancia hasta 150%
+- Productos probados que se venden bien
+- Acompañamiento completo para emprendedoras
+- Enfoque en recuperación rápida de inversión
+"""
+
+        # Prompts específicos por etapa
+        self.stage_prompts = {
+            0: self._get_stage_0_prompt(),   # 1 hora después
+            1: self._get_stage_1_prompt(),   # Día 1
+            2: self._get_stage_2_prompt(),   # Día 2
+            4: self._get_stage_4_prompt(),   # Día 4
+            7: self._get_stage_7_prompt(),   # Día 7
+            10: self._get_stage_10_prompt(), # Día 10
+            14: self._get_stage_14_prompt(), # Día 14
+            18: self._get_stage_18_prompt(), # Día 18
+            26: self._get_stage_26_prompt(), # Día 26
+            36: self._get_stage_36_prompt(), # Día 36
+            46: self._get_stage_46_prompt(), # Día 46
+            56: self._get_stage_56_prompt(), # Día 56
+            66: self._get_stage_66_prompt(), # Día 66
+            999: self._get_maintenance_prompt() # Mantenimiento
         }
-        
-        # Variables de personalización
-        self.user_variables = [
-            "emprendedora", "revendedora", "clienta", "amiga"
-        ]
-        
-        # Productos destacados por tipo
-        self.product_highlights = {
-            "joyas": ["anillos de plata 925", "aros con cristales", "pulseras ajustables"],
-            "maquillaje": ["labiales de larga duración", "bases líquidas", "paletas de sombras"],
-            "indumentaria": ["remeras oversized", "jeans de moda", "accesorios trendy"],
-            "general": ["combos emprendedores", "productos más vendidos", "novedades de temporada"]
-        }
+
+    def _get_stage_0_prompt(self) -> str:
+        return """
+ETAPA 0 - SEGUIMIENTO INMEDIATO (1 hora después)
+
+OBJETIVO: Mantener el momentum y la conexión emocional fresca de la conversación inicial.
+
+TONO: Cálido, entusiasta, como continuando una charla entre amigas.
+
+ELEMENTOS CLAVE:
+- Referenciar específicamente temas discutidos en la conversación previa
+- Mostrar que recordás detalles importantes
+- Crear urgencia suave basada en oportunidades actuales
+- Ofrecer combos específicos según intereses expresados
+- Incluir call-to-action claro pero no presionante
+
+ESTRUCTURA SUGERIDA:
+1. Saludo personalizado referenciando la charla previa
+2. Conexión emocional con algo específico que mencionó
+3. Información de valor relacionada a sus intereses
+4. Propuesta concreta con precios
+5. Llamada a la acción amigable
+
+Genera un mensaje que suene como si Royalia estuviera continuando naturalmente la conversación que tuvieron hace una hora.
+"""
+
+    def _get_stage_1_prompt(self) -> str:
+        return """
+ETAPA 1 - REFUERZO DE INTERÉS (Día 1)
+
+OBJETIVO: Reforzar el interés y crear momentum hacia la acción, usando elementos de la conversación previa.
+
+TONO: Motivador, con energía positiva, incluir elementos de urgencia y oportunidad.
+
+ELEMENTOS CLAVE:
+- Referenciar la conversación del día anterior
+- Crear sensación de oportunidad perdida si no actúa
+- Mostrar resultados concretos de otras emprendedoras
+- Combos específicos con números exactos de inversión/retorno
+- Urgencia basada en temporadas/tendencias
+
+El mensaje debe sonar como si Royalia siguiera pensando en ella después de la conversación de ayer.
+"""
+
+    def _get_stage_2_prompt(self) -> str:
+        return """
+ETAPA 2 - PRUEBA SOCIAL Y MOTIVACIÓN (Día 2)
+
+OBJETIVO: Usar testimonios y casos de éxito para superar dudas y motivar la acción.
+
+TONO: Inspirador, con historias reales, manteniendo calidez personal.
+
+ELEMENTOS CLAVE:
+- Historia específica de una emprendedora exitosa
+- Números concretos de resultados
+- Abordar dudas comunes sin mencionar si ella las expresó
+- Mostrar que el éxito es replicable
+
+El mensaje debe transmitir que si otras pueden, ella también puede.
+"""
+
+    def _get_stage_4_prompt(self) -> str:
+        return """
+ETAPA 4 - CREACIÓN DE URGENCIA (Día 4)
+
+OBJETIVO: Intensificar la urgencia y abordar directamente la postergación.
+
+TONO: Más directo pero manteniendo empatía, con urgencia palpable.
+
+ELEMENTOS CLAVE:
+- Abordar el tema de la postergación directamente
+- Crear urgencia basada en temporadas/oportunidades
+- Mostrar el costo de oportunidad de esperar
+
+Debe generar una sensación de "ahora o nunca" sin ser agresivo.
+"""
+
+    def _get_stage_7_prompt(self) -> str:
+        return """
+ETAPA 7 - MOMENTO DECISIVO (Día 7 - Una semana)
+
+OBJETIVO: Momento de verdad. Separar a las que realmente quieren emprender de las que solo hablan.
+
+TONO: Directo, honesto, desafiante pero respetuoso.
+
+ELEMENTOS CLAVE:
+- Confrontar directamente la diferencia entre hablar y actuar
+- Referenciar la semana que pasó desde la conversación inicial
+- Crear una dicotomía clara: actuar o seguir postergando
+
+El mensaje debe ser un wake-up call respetuoso pero firme.
+"""
+
+    def _get_stage_10_prompt(self) -> str:
+        return """
+ETAPA 10 - COMPARACIÓN INTERNA (Día 10)
+
+OBJETIVO: Crear reflexión sobre el tiempo perdido versus el progreso que podría haber tenido.
+
+TONO: Reflexivo, ligeramente confrontativo pero no agresivo.
+
+ELEMENTOS CLAVE:
+- Mostrar qué hubiera logrado si hubiera empezado hace 10 días
+- Comparar con resultados de clientas que sí empezaron
+- No juzgar pero sí mostrar las consecuencias de postergar
+"""
+
+    def _get_stage_14_prompt(self) -> str:
+        return """
+ETAPA 14 - ULTIMÁTUM ELEGANTE (Día 14 - 2 semanas)
+
+OBJETIVO: Dar un ultimátum respetuoso pero claro. Decidir si continúa o se despide.
+
+TONO: Firme, directo, pero con cariño. Ultimátum elegante.
+
+ELEMENTOS CLAVE:
+- Marcar las 2 semanas transcurridas
+- Plantear claramente las dos opciones: emprender o despedirse
+- Sin drama pero con firmeza
+
+El mensaje debe ser definitorio pero respetuoso.
+"""
+
+    def _get_stage_18_prompt(self) -> str:
+        return """
+ETAPA 18 - CASO DE ÉXITO ESPECÍFICO (Día 18)
+
+OBJETIVO: Último intento con caso de éxito muy específico y detallado.
+
+TONO: Narrativo, inspirador, con detalles concretos.
+
+ELEMENTOS CLAVE:
+- Historia día a día de una emprendedora exitosa en 18 días
+- Números muy específicos y creíbles
+- Comparación implícita con su situación
+
+El mensaje debe inspirar con hechos concretos, no con promesas vagas.
+"""
+
+    def _get_stage_26_prompt(self) -> str:
+        return """
+ETAPA 26 - REFLEXIÓN DEL MES (Día 26)
+
+OBJETIVO: Hacer un balance del mes transcurrido y dar otra oportunidad.
+
+TONO: Reflexivo, curioso, sin presión, exploratorio.
+
+ELEMENTOS CLAVE:
+- Marcar el mes transcurrido
+- Curiosidad genuina sobre qué pasó en su mente
+- Tres opciones posibles sin juicio
+
+El mensaje debe ser exploratorio y comprensivo.
+"""
+
+    def _get_stage_36_prompt(self) -> str:
+        return """
+ETAPA 36 - MÁS DE UN MES (Día 36)
+
+OBJETIVO: Último mensaje activo, dar opción de salida o compromiso real.
+
+TONO: Realista, directo pero no agresivo, con perspectiva.
+
+ELEMENTOS CLAVE:
+- Marcar el tiempo transcurrido (más de un mes)
+- Mostrar resultados de quienes sí actuaron
+- Aceptar que quizás no es el momento para ella
+
+El mensaje debe ser liberador pero dar una última oportunidad clara.
+"""
+
+    def _get_stage_46_prompt(self) -> str:
+        return """
+ETAPA 46 - CIERRE RESPETUOSO (Día 46)
+
+OBJETIVO: Cerrar elegantemente o definir situación específica.
+
+TONO: Respetuoso, firme, definitorio pero cariñoso.
+
+ELEMENTOS CLAVE:
+- Reconocer el tiempo invertido en el seguimiento
+- Aceptar que 46 días es tiempo suficiente para decidir
+- Pregunta directa sobre continuar o parar
+
+El mensaje debe ser definitorio pero lleno de respeto.
+"""
+
+    def _get_stage_56_prompt(self) -> str:
+        return """
+ETAPA 56 - BALANCE DE 2 MESES (Día 56)
+
+OBJETIVO: Hacer balance de 2 meses y explorar cambios en su situación.
+
+TONO: Analítico, reflexivo, esperanzado pero realista.
+
+ELEMENTOS CLAVE:
+- Balance claro: 2 meses atrás vs hoy
+- Explorar si cambió algo en su situación
+- Opciones específicas de cambios posibles
+
+El mensaje debe ser evaluativo y exploratorio.
+"""
+
+    def _get_stage_66_prompt(self) -> str:
+        return """
+ETAPA 66 - DESPEDIDA DE SERIE ACTIVA (Día 66)
+
+OBJETIVO: Cerrar elegantemente la serie activa de mensajes y pasar a mantenimiento.
+
+TONO: Cariñoso, agradecido, esperanzado, sin presión.
+
+ELEMENTOS CLAVE:
+- Marcar que es el último mensaje activo
+- Agradecimiento genuino por el tiempo compartido
+- Explicar la transición a mensajes de mantenimiento
+
+El mensaje debe ser una hermosa despedida que deje la puerta abierta.
+"""
+
+    def _get_maintenance_prompt(self) -> str:
+        return """
+ETAPA MANTENIMIENTO - CONTACTO SUAVE (Cada 15 días)
+
+OBJETIVO: Mantener contacto amigable sin presión, compartir novedades, mantener relación.
+
+TONO: Amigable, casual, informativo, sin agenda oculta.
+
+ELEMENTOS CLAVE:
+- Saludo natural y cálido
+- Novedades del negocio o productos
+- Pregunta genuina por su situación
+- Referencia sutil al tema emprendimiento sin presión
+
+El mensaje debe sentirse como el contacto natural entre conocidas, sin agenda comercial obvia.
+"""
+
+    def get_prompt_for_stage(self, stage: int) -> Optional[str]:
+        """Obtiene el prompt específico para una etapa"""
+        return self.stage_prompts.get(stage)
     
-    def _get_stage_0_templates(self) -> List[Dict[str, Any]]:
-        """Plantillas para Stage 0 - 1 hora después de la conversación"""
-        return [
-            {
-                "message": """¡Hola de nuevo! 👋
+    def get_all_stages(self) -> List[int]:
+        """Obtiene todas las etapas disponibles"""
+        return list(self.stage_prompts.keys())
 
-{conversation_opener} y quería seguir ayudándote con tu emprendimiento. {questions_reference}
 
-¿Ya tuviste oportunidad de pensar en qué rubro te gustaría arrancar? 
-
-**Recordá que tenemos:**
-• Combos emprendedores listos para vender
-• Mínimo desde $40.000 
-• Margen de ganancia hasta 150%
-
-{budget_reference}, podés arrancar con productos que incluyen justo {specific_products}.
-
-{personalized_cta}
-
-¡Estoy acá para acompañarte en este paso!{objection_response}""",
-                "cta": "¿Con qué rubro arrancamos?",
-                "urgency": "low"
-            },
-            {
-                "message": """¿Todo bien? 😊
-
-Te escribo rapidito porque me encanta ayudar a emprendedoras como vos que están decididas a crecer.
-
-**¿Sabías que nuestras emprendedoras que arrancan esta semana ya están vendiendo en 2-3 días?**
-
-Es porque empezamos con los productos que más se mueven:
-✨ Joyas que no se oxidan
-💄 Maquillaje de calidad
-👕 Ropa que está de moda
-
-**¿Te animo a dar el paso hoy?** En menos de una semana podés estar generando tus primeras ventas.
-
-Contame, ¿qué es lo que más te tienta para arrancar? 💎""",
-                "cta": "¡Vamos a armarte tu primer kit!",
-                "urgency": "medium"
-            },
-            {
-                "message": """¡Hola! Me alegra que hayamos charlado 💛
-
-Quería contarte algo que me parece súper importante:
-
-**Las emprendedoras que arrancan ESTA semana tienen una ventaja:** están llegando justo para la temporada más fuerte de ventas.
-
-En Royal tenemos todo listo para que puedas:
-🚀 Empezar con productos probados
-📈 Tener margen de ganancia real (150%)
-💪 Recuperar tu inversión rápido
-
-**¿Te copa que armemos tu kit de arranque ahora?** 
-
-Con $40.000 ya podés empezar y en 2 semanas estar facturando el doble 📊""",
-                "cta": "¡Quiero mi kit de arranque!",
-                "urgency": "high"
-            }
-        ]
-    
-    def _get_stage_1_templates(self) -> List[Dict[str, Any]]:
-        """Plantillas para Stage 1 - Día 1"""
-        return [
-            {
-                "message": """Buenos días! ☀️
-
-{conversation_opener} y me quedé con muchas ganas de ayudarte a arrancarlo. {questions_reference}
-
-**¿Sabés qué me pasa seguido?** Muchas emprendedoras me dicen "ay, ojalá hubiera empezado antes" cuando ven lo bien que les va.
-
-**La diferencia entre empezar HOY o el mes que viene son $50.000+ en ventas que te perdés.**
-
-Tengo algunos combos que se están agotando rapidísimo porque son los favoritos con {specific_products}:
-
-🔥 Combo Joyas Trendy - $45.000 (recuperás $110.000 en ventas)
-💄 Combo Maquillaje Esencial - $42.000 (recuperás $105.000 en ventas)  
-👑 Combo Emprendedora Total - $65.000 (recuperás $165.000 en ventas)
-
-{budget_reference}, cualquiera de estos combos te permite arrancar con todo lo que necesitás.{objection_response}
-
-{personalized_cta}""",
-                "cta": "¡Quiero empezar ya!",
-                "urgency": "high"
-            },
-            {
-                "message": """¡Hola! ¿Cómo estás? 😊
-
-Te escribo porque ayer me contaste que querías emprender y hoy tengo una propuesta que te va a encantar.
-
-**¿Viste que muchas veces postergamos cosas importantes?** Con el emprendimiento pasa lo mismo, pero cada día que pasa es dinero que no ganamos.
-
-**Calculá esto:** Si arrancás hoy con $40.000, en un mes podés estar facturando $100.000+. Si esperás un mes más... perdés esos $100.000.
-
-**Los combos que más se venden esta semana:**
-• Anillos ajustables (se venden solos)
-• Labiales de larga duración (toda mujer los compra)  
-• Aros con cristales (regalo perfecto)
-
-¿Te copa que te arme un mix con esos productos que SÉ que se van a vender?""",
-                "cta": "¡Sí, armámelo!",
-                "urgency": "medium"
-            }
-        ]
-    
-    def _get_stage_2_templates(self) -> List[Dict[str, Any]]:
-        """Plantillas para Stage 2 - Día 2"""
-        return [
-            {
-                "message": """¡Hola! 💛
-
-Ya hace 2 días que charlamos sobre tu emprendimiento y quería compartirte algo que me motiva un montón.
-
-**Ayer una clienta que empezó hace 3 semanas me escribió:** "Royalia, no puedo creer que en 20 días ya recuperé toda mi inversión y encima gané $30.000 extra"
-
-**¿Sabés por qué le fue tan bien?** 
-✅ Empezó con productos de alta rotación
-✅ No se complicó eligiendo, confió en nuestra experiencia
-✅ Arrancó SIN miedo
-
-**Vos tenés el mismo potencial.** 
-
-Los productos que más están funcionando ahora:
-🔥 Conjuntos de aros (se venden de a pares)
-💋 Kits de maquillaje (alta ganancia)
-💍 Anillos trendy (los más pedidos)
-
-¿Te animo a dar el paso hoy? Te juro que en 3 semanas me vas a agradecer 🚀""",
-                "cta": "¡Sí, quiero empezar!",
-                "urgency": "high"
-            },
-            {
-                "message": """¿Qué tal? 😊
-
-**Pregunta honesta:** ¿Qué es lo que más te frena para arrancar tu emprendimiento?
-
-Porque en estos años hablé con miles de emprendedoras y las excusas siempre son las mismas:
-❌ "No sé qué elegir" → Te armamos el combo perfecto
-❌ "Y si no se vende" → Elegimos productos de alta rotación
-❌ "Es mucha plata" → Empezás con $40.000 y lo multiplicás
-❌ "No tengo experiencia" → Te acompañamos en todo
-
-**La verdad:** TODAS las excusas tienen solución. El único riesgo real es NO empezar.
-
-¿Te parece que charlemos 5 minutos y resolvemos juntas todas tus dudas? 💪""",
-                "cta": "¡Sí, charlemos!",
-                "urgency": "low"
-            }
-        ]
-    
-    def _get_stage_4_templates(self) -> List[Dict[str, Any]]:
-        """Plantillas para Stage 4 - Día 4"""
-        return [
-            {
-                "message": """¡Hola! ¿Cómo venís? 👋
-
-**4 días charlamos sobre tu emprendimiento** y quería contarte algo que me pasó recién.
-
-Una emprendedora me escribió: *"Royalia, pensé 2 semanas si arrancar o no. Cuando finalmente me decidí, en la primera semana vendí $80.000. Me arrepiento de haber dudado tanto tiempo"*
-
-**¿Te suena conocido esto de dudar?** Es súper normal, pero cada día que pasa perdés oportunidades de venta.
-
-**Mirá lo que está pasando ahora:**
-🔥 Las fiestas de fin de año se acercan (más ventas)
-💍 Los regalos de cumpleaños aumentan
-💄 El maquillaje para eventos se dispara
-
-**¿No es el momento perfecto para arrancar?**
-
-Te tengo 3 combos que están funcionando de 10:
-• Combo Fiestas ($48.000 → vendes $125.000)
-• Combo Regalos Ideales ($45.000 → vendes $115.000)  
-• Combo Todo en Uno ($65.000 → vendes $170.000)
-
-¿Cuál te copa más para empezar YA?""",
-                "cta": "¡Elijo mi combo!",
-                "urgency": "high"
-            }
-        ]
-    
-    def _get_stage_7_templates(self) -> List[Dict[str, Any]]:
-        """Plantillas para Stage 7 - Día 7 (semana después)"""
-        return [
-            {
-                "message": """¡Una semana! ⏰
-
-{time_reference} que charlamos sobre tu emprendimiento y me quedé con la duda... {questions_reference}
-
-**¿Seguís con la idea de arrancar o ya te desanimaste?**
-
-Porque te voy a ser súper honesta: la mayoría de las personas habla, habla, habla sobre emprender, pero nunca DA EL PASO.
-
-**Las que SÍ lo dan, después de 6 meses me escriben:** "Gracias Royalia, cambié mi vida económica"
-
-**¿Sabés cuál es la diferencia entre las que lo logran y las que se quedan hablando?**
-
-**Las que lo logran ACTÚAN. Punto.**
-
-No esperan el momento perfecto. No buscan más excusas. No postergan más.
-
-**ACTÚAN.**
-
-{objection_response}
-
-**¿Vos sos de las que ACTÚAN o de las que hablan?**
-
-Si sos de las que actúan, escribime ahora y en 30 minutos tenés tu combo con {specific_products} listo.
-
-{budget_reference} podés arrancar HOY MISMO.
-
-Si sos de las que hablan... nos vemos en unos meses cuando te vuelva a tentar la idea 🤷‍♀️
-
-**¿Cuál elegís?**""",
-                "cta": "SOY DE LAS QUE ACTÚAN",
-                "urgency": "high"
-            }
-        ]
-    
-    def _get_stage_10_templates(self) -> List[Dict[str, Any]]:
-        """Plantillas para Stage 10 - Día 10"""
-        return [
-            {
-                "message": """10 días... 🤔
-
-**¿Te digo algo que me llama la atención?**
-
-Hace 10 días me escribiste interesada en emprender. Charlamos, te dije todo lo que necesitabas saber...
-
-**¿Y después? Silencio.**
-
-**Fijate esta foto que me mandó una clienta ayer** → [SIMULACIÓN: foto de ventas exitosas]
-
-Ella empezó hace exactamente 10 días. SÍ, 10 días.
-
-**¿Sabés cuánto facturó en estos 10 días? $95.000**
-
-Con una inversión inicial de $45.000.
-
-**Mientras vos pensás, ella factura.**
-
-**No te juzgo, eh.** Cada una tiene sus tiempos. Pero quería que supieras que:
-
-• Los productos siguen estando disponibles
-• Los precios siguen siendo los mismos  
-• La oportunidad sigue ahí
-
-**La única diferencia es que cada día vale plata.**
-
-¿Seguís interesada o ya cambió tu situación?""",
-                "cta": "Sí, sigo interesada",
-                "urgency": "medium"
-            }
-        ]
-    
-    def _get_stage_14_templates(self) -> List[Dict[str, Any]]:
-        """Plantillas para Stage 14 - Día 14 (2 semanas)"""
-        return [
-            {
-                "message": """2 semanas exactas. 📅
-
-**¿Sabés qué me pregunto?** Si en estas 2 semanas hubieras empezado tu emprendimiento, ¿cuánto estarías facturando hoy?
-
-Te voy a ser súper directa porque me importás:
-
-**Una emprendedora que empiece hoy, en 2 semanas ya recuperó su inversión.**
-
-**Una que empezó hace 2 semanas, hoy está ganando $50.000+ por mes extra.**
-
-**¿Y una que sigue pensándolo?** Sigue donde mismo.
-
-**No te escribo para presionarte.** Te escribo porque genuinamente creo que tenés potencial y me da bronca ver potencial desperdiciado.
-
-**¿Quiere decir que es tarde?** Para nada.
-
-Pero quiere decir que **CADA DÍA que pasa es plata que no entra a tu bolsillo.**
-
-Si realmente querés emprender:
-✅ Te ayudo ahora
-✅ Elegimos productos juntas  
-✅ En 3 días tenés tu stock
-✅ En 1 semana empezás a vender
-
-Si no querés emprender:
-❌ Te dejo de escribir
-❌ Nos despedimos como amigas
-❌ Sin drama
-
-**¿Qué elegís? ¿Emprendemos juntas o nos despedimos?**""",
-                "cta": "Emprendemos juntas",
-                "urgency": "high"
-            }
-        ]
-    
-    def _get_stage_18_templates(self) -> List[Dict[str, Any]]:
-        """Plantillas para Stage 18 - Día 18"""
-        return [
-            {
-                "message": """18 días pensándolo... 💭
-
-**¿Te cuento qué hizo una clienta en estos 18 días?**
-
-Día 1: Me escribió como vos
-Día 2: Hizo su primer pedido ($42.000)
-Día 5: Recibió su stock
-Día 7: Vendió los primeros productos ($25.000)
-Día 10: Hizo su segundo pedido ($65.000) 
-Día 14: Vendió $50.000 más
-**Día 18 (hoy): Me escribió que ya ganó $85.000 limpios**
-
-**Mientras vos pensás, ella ganó $85.000.**
-
-**Sin juzgarte,** pero quería que vieras la diferencia entre pensar y hacer.
-
-**La buena noticia:** Podés empezar mañana mismo si querés.
-**La mala noticia:** Cada día que pasa, otra emprendedora toma tu lugar en el mercado.
-
-**¿Seguimos con el emprendimiento o ya no te interesa más?**
-
-Contestame con sinceridad para saber si te sigo acompañando o no 😊""",
-                "cta": "Sí, quiero empezar",
-                "urgency": "medium"
-            }
-        ]
-    
-    def _get_stage_26_templates(self) -> List[Dict[str, Any]]:
-        """Plantillas para Stage 26 - Día 26"""
-        return [
-            {
-                "message": """¡Un mes! 📆
-
-Hace casi un mes que hablamos de tu emprendimiento por primera vez.
-
-**¿Sabés qué me da curiosidad?** Qué pasó en tu cabeza durante este mes.
-
-**Porque han pasado 3 cosas:**
-
-1️⃣ Te decidiste emprender con otra empresa
-2️⃣ Seguís con la idea pero algo te frena
-3️⃣ Ya no te interesa el tema
-
-**Si es la opción 1:** Te felicito sinceramente 👏 Lo importante es que hayas dado el paso.
-
-**Si es la opción 2:** Entiendo perfectamente. A veces necesitamos más tiempo. ¿Querés que charlemos qué es lo que específicamente te frena?
-
-**Si es la opción 3:** Todo bien, cambiar de idea es válido. Solo avisame para no seguir escribiéndote 😊
-
-**¿Cuál es tu situación?**
-
-**PD:** Por si te sirve, tengo 3 clientas que empezaron este mes pasando POR LA MISMA DUDA que vos. Hoy todas están súper contentas con los resultados.
-
-A veces solo necesitamos el empujoncito correcto 💪""",
-                "cta": "Contame tu situación",
-                "urgency": "low"
-            }
-        ]
-    
-    def _get_stage_36_templates(self) -> List[Dict[str, Any]]:
-        """Plantillas para Stage 36 - Día 36"""
-        return [
-            {
-                "message": """Más de un mes... 🤯
-
-**¿Te digo algo loco?** 
-
-En el tiempo que llevamos "en contacto" (36 días), una de mis clientas ya recuperó su inversión inicial 3 VECES.
-
-**Empezó con $45.000. Hoy ya facturó $180.000.**
-
-**No te lo digo para hacerte sentir mal.** Te lo digo porque quizás no te das cuenta del POTENCIAL que estás dejando pasar.
-
-**Pero bueno...** quizás el emprendimiento no es para vos en este momento de tu vida.
-
-**Y está PERFECTO.** No todo el mundo está listo para emprender en cualquier momento.
-
-**Capaz ahora tenés otras prioridades:**
-• Trabajo full time muy demandante
-• Situación personal compleja
-• Otros proyectos que te consumen tiempo
-
-**Si es así, solo avisame para dejar de escribirte** y que no sientas que te "persigo" 😅
-
-**Pero si AÚN tenés ganas y algo específico te frena...**
-
-**Escribime una sola palabra: "GANAS"**
-
-Y charlamos puntualmente qué es lo que pasa.
-
-¿Dale?""",
-                "cta": "GANAS",
-                "urgency": "low"
-            }
-        ]
-    
-    def _get_stage_46_templates(self) -> List[Dict[str, Any]]:
-        """Plantillas para Stage 46 - Día 46"""
-        return [
-            {
-                "message": """46 días de seguimiento... ⏳
-
-**¿Sabés qué?** Respeto tu tiempo y tus decisiones.
-
-**46 días es suficiente tiempo** para que una persona se decida sobre algo que le interesa de verdad.
-
-**Si fuera TAN importante para vos, ya hubieras empezado.**
-
-**Y está súper bien así.** Cada una tiene sus prioridades y sus momentos.
-
-**Te voy a hacer la última pregunta directa:**
-
-**¿Querés que te deje de escribir sobre el emprendimiento?**
-
-Si me decís que SÍ, te dejo tranquila y nos despedimos como amigas.
-
-Si me decís que NO, seguimos charlando pero necesito saber QUÉ específicamente te frena para poder ayudarte de verdad.
-
-**No hay respuesta incorrecta,** pero necesito una respuesta honesta.
-
-¿Dale? 😊""",
-                "cta": "Dame tu respuesta honesta",
-                "urgency": "low"
-            }
-        ]
-    
-    def _get_stage_56_templates(self) -> List[Dict[str, Any]]:
-        """Plantillas para Stage 56 - Día 56"""
-        return [
-            {
-                "message": """2 meses charlando... 📊
-
-**Está bueno hacer un balance, ¿no te parece?**
-
-**Hace 2 meses:** Te interesaba emprender, hiciste consultas, te pasé info completa.
-
-**Hoy:** Seguimos en el mismo lugar.
-
-**No está mal, eh.** A veces las cosas no se dan y punto.
-
-**Pero quería preguntarte algo importante:**
-
-**¿Cambió algo en tu situación que haga que ahora SÍ puedas/quieras emprender?**
-
-**Por ejemplo:**
-✅ Te organizaste mejor con los tiempos
-✅ Mejoraste tu situación económica  
-✅ Se resolvieron temas personales
-✅ Encontraste la motivación que te faltaba
-
-**Si cambió algo y querés intentarlo → Escribime "CAMBIÓ"**
-
-**Si todo sigue igual → Escribime "IGUAL"**
-
-**De acuerdo a tu respuesta veo cómo seguimos** 😊
-
-Sin presiones, solo quiero saber cómo estás.""",
-                "cta": "CAMBIÓ o IGUAL",
-                "urgency": "low"
-            }
-        ]
-    
-    def _get_stage_66_templates(self) -> List[Dict[str, Any]]:
-        """Plantillas para Stage 66 - Día 66 (final de secuencia)"""
-        return [
-            {
-                "message": """66 días... El último mensaje de la serie 📮
-
-**¿Sabés qué me pasa?** Que realmente me importa que te vaya bien.
-
-**En estos 66 días te acompañé** con info, propuestas, seguimiento... porque creí (y sigo creyendo) que tenés potencial.
-
-**Pero también entiendo** que a veces las cosas no se dan. Y está perfecto.
-
-**Este es mi último mensaje "activo" sobre el emprendimiento.**
-
-**A partir de acá:**
-• Te voy a escribir cada tanto (cada 15 días aprox) solo para mantener el contacto
-• Te voy a contar novedades, productos nuevos, promos especiales  
-• PERO no te voy a insistir más con el emprendimiento
-
-**Si en algún momento TE NACE emprender, escribime.**
-**Si nunca te nace, también está perfecto.**
-
-**¿Te parece bien así?**
-
-**PD:** Fue un placer conocerte y charlar con vos estos días. Genuinamente te deseo lo mejor en todos tus proyectos 💛
-
-**PD2:** La puerta de Royal siempre está abierta para vos 🚪✨""",
-                "cta": "¡Gracias por todo!",
-                "urgency": "low"
-            }
-        ]
-    
-    def _get_maintenance_templates(self) -> List[Dict[str, Any]]:
-        """Plantillas para modo mantenimiento (cada 15 días después del día 66)"""
-        return [
-            {
-                "message": """¡Hola! ¿Cómo andás? 😊
-
-**Solo un saludito rápido** para contarte las novedades de Royal.
-
-**Productos que están pegando fuerte:**
-🔥 Nueva línea de {specific_products} (salen como pan caliente)
-💄 Labiales matte que duran TODO el día
-👑 Conjuntos de aros que están súper trendy
-
-**Promo del mes:** Combos con 15% extra de descuento
-
-**¿Todo bien con vos?** ¿Algún proyecto nuevo en puerta?
-
-**PD:** Si algún día te pinta arrancar con el emprendimiento, recordá que {time_reference} hablamos sobre {interest} y me quedé con ganas de ayudarte 😉""",
-                "cta": "¡Hola! Todo bien",
-                "urgency": "low"
-            },
-            {
-                "message": """¡Holaa! Saludito de Royalia 👋
-
-**¿Viste las nuevas tendencias?** Están entrando productos súper innovadores.
-
-**Lo que más se está vendiendo:**
-✨ Joyería minimalista (súper trendy)
-💫 Maquillaje vegano (boom total)
-🌟 Accesorios sustentables
-
-**Si querés te mando el catálogo actualizado** para que veas las novedades, ¡sin compromiso!
-
-**¿Te copa?**
-
-**PD:** ¿Cómo viene tu año? ¡Espero que súper bien!""",
-                "cta": "¡Sí, mandame el catálogo!",
-                "urgency": "low"
-            },
-            {
-                "message": """¿Qué tal? 🌟
-
-**Te acordás que hace un tiempo charlamos sobre emprendimiento?**
-
-**No te escribo para insistir,** solo para contarte que seguimos creciendo y ayudando a emprendedoras.
-
-**Esta semana:** 3 clientas nuevas empezaron y ya están súper contentas con sus primeras ventas.
-
-**¿Sabés qué me pone contenta?** Ver cómo cambian sus vidas. Posta.
-
-**Si algún día te nace la idea de nuevo, acá estoy** para acompañarte como a ellas.
-
-**¿Todo bien con vos?** 💛""",
-                "cta": "¡Sí, todo bien!",
-                "urgency": "low"
-            }
-        ]
-
-# SISTEMA DE PERSONALIZACIÓN AVANZADA
-class MessagePersonalizer:
-    """Sistema de personalización avanzada para mensajes de follow-up"""
+class ContextExtractor:
+    """Extrae información relevante del contexto conversacional para generar mensajes más naturales"""
     
     @staticmethod
-    def get_time_reference(stage: int) -> str:
-        """Obtiene referencia temporal según la etapa"""
-        time_references = {
-            0: "hace una hora",
-            1: "ayer",
-            2: "hace dos días", 
-            4: "hace unos días",
-            7: "la semana pasada",
-            10: "hace una semana y media",
-            14: "hace dos semanas",
-            18: "hace casi tres semanas",
-            26: "el mes pasado",
-            36: "hace más de un mes",
-            46: "hace un mes y medio",
-            56: "hace dos meses",
-            66: "hace más de dos meses",
-            999: "hace un tiempo"
-        }
-        return time_references.get(stage, "hace un tiempo")
+    def extract_conversation_summary(context: ConversationMemory) -> str:
+        """Extrae un resumen de la conversación para usar en el prompt de IA"""
+        if not context.interaction_history:
+            return "No hay historial de conversación disponible."
+        
+        # Tomar las últimas 5 interacciones más relevantes
+        recent_interactions = context.interaction_history[-5:]
+        
+        conversation_summary = "HISTORIAL DE CONVERSACIÓN:\n"
+        for interaction in recent_interactions:
+            role = interaction.get('role', 'unknown')
+            message = interaction.get('message', '')[:200]  # Limitar longitud
+            timestamp = interaction.get('timestamp', '')
+            
+            conversation_summary += f"- {role.upper()}: {message}\n"
+        
+        return conversation_summary
     
     @staticmethod
-    def get_conversation_opener(user_profile: Dict, stage: int) -> str:
-        """Genera opening personalizado basado en el perfil"""
-        time_ref = MessagePersonalizer.get_time_reference(stage)
+    def extract_user_interests(context: ConversationMemory) -> str:
+        """Extrae intereses específicos del usuario"""
+        interests = []
         
-        # Usar temas específicos de conversación si están disponibles
-        topics = user_profile.get("conversation_topics", [])
-        if topics:
-            main_topic = topics[0].replace("_", " ")
-            return f"Me quedé pensando en nuestra charla {time_ref} sobre {main_topic}"
+        # De productos mostrados recientemente
+        if context.recent_products:
+            product_categories = list(set([p.category for p in context.recent_products if p.category]))
+            interests.extend(product_categories)
         
-        # Fallback con interés general
-        interest = user_profile.get("interest", "emprendimiento")
-        if interest != "general":
-            return f"Me quedé pensando en nuestra charla {time_ref} sobre {interest}"
+        # De intereses de productos
+        if context.product_interests:
+            interests.extend(context.product_interests)
         
-        return f"Me quedé pensando en nuestra charla {time_ref}"
+        # Del perfil de usuario
+        if context.user_profile:
+            user_interest = context.user_profile.get('interest')
+            if user_interest:
+                interests.append(user_interest)
+        
+        return f"INTERESES IDENTIFICADOS: {', '.join(set(interests))}" if interests else "No se identificaron intereses específicos."
     
     @staticmethod
-    def get_specific_products_text(user_profile: Dict) -> str:
-        """Genera texto sobre productos específicos mencionados"""
-        specific_products = user_profile.get("specific_products", [])
-        
-        if len(specific_products) >= 2:
-            return f"los {specific_products[0]} y {specific_products[1]}"
-        elif len(specific_products) == 1:
-            return f"los {specific_products[0]}"
-        else:
-            # Fallback según interés general
-            interest = user_profile.get("interest", "general")
-            fallbacks = {
-                "joyas": "anillos y aros",
-                "maquillaje": "labiales y bases",
-                "indumentaria": "remeras y jeans",
-                "relojes": "relojes de moda",
-                "general": "productos más vendidos"
-            }
-            return fallbacks.get(interest, "productos que te interesan")
-    
-    @staticmethod
-    def get_budget_reference(user_profile: Dict) -> str:
-        """Obtiene referencia al presupuesto mencionado"""
-        budget = user_profile.get("budget_mentioned")
+    def extract_budget_info(context: ConversationMemory) -> str:
+        """Extrae información sobre presupuesto mencionado"""
+        budget = context.budget_range
         if budget:
-            return f"Con el presupuesto de {budget} que mencionaste"
-        else:
-            return "Con el mínimo de $40.000"
+            return f"PRESUPUESTO MENCIONADO: {budget}"
+        return "No se mencionó presupuesto específico."
     
     @staticmethod
-    def get_personalized_cta(user_profile: Dict) -> str:
-        """Genera CTA personalizado según perfil"""
-        engagement = user_profile.get("engagement_level", "medio")
-        experience = user_profile.get("experience_level", "intermedio")
+    def extract_objections_and_questions(context: ConversationMemory) -> str:
+        """Extrae objeciones o preguntas específicas del historial"""
+        if not context.interaction_history:
+            return "No se identificaron objeciones o preguntas específicas."
         
-        if engagement == "alto" and experience == "empezando":
-            return "¿Te animo a dar el paso hoy mismo? 🚀"
-        elif engagement == "alto":
-            return "¿Arrancamos con tu pedido ahora? 💪"
-        elif experience == "empezando":
-            return "¿Te parece que charlemos y armamos algo juntas? 😊"
-        else:
-            return "¿Seguís interesada en emprender? 💛"
-    
-    @staticmethod  
-    def get_objection_response(user_profile: Dict) -> str:
-        """Genera respuesta a objeciones específicas mencionadas"""
-        objections = user_profile.get("objections", [])
+        # Buscar mensajes del usuario que contengan preguntas o dudas
+        user_messages = [i for i in context.interaction_history if i.get('role') == 'user']
         
-        if not objections:
-            return ""
+        objections_found = []
+        questions_found = []
         
-        objection_responses = {
-            "no sé qué elegir": "Por eso armamos los combos emprendedores, para que no tengas que elegir uno por uno.",
-            "es mucha inversión": "Te entiendo, pero pensá que con $40.000 podés generar $100.000+ en ventas.",  
-            "no tengo experiencia": "¡Perfecto! Eso significa que te vamos a acompañar desde cero hasta que seas una genia vendiendo.",
-            "no sé si se vende": "Te doy un dato: el 95% de las emprendedoras que empiezan con nosotros recuperan su inversión en el primer mes.",
-            "tengo miedo de perder": "Es normal tener esa sensación. Por eso empezás con productos que SÍ o SÍ se venden.",
-        }
+        for msg in user_messages[-3:]:  # Últimas 3 interacciones del usuario
+            message = msg.get('message', '').lower()
+            
+            # Detectar preguntas
+            if '?' in message:
+                questions_found.append(message[:100])
+            
+            # Detectar objeciones comunes
+            objection_keywords = ['pero', 'sin embargo', 'no sé si', 'me da miedo', 'no tengo', 'es caro', 'mucha plata']
+            for keyword in objection_keywords:
+                if keyword in message:
+                    objections_found.append(message[:100])
+                    break
         
-        main_objection = objections[0]
-        response = objection_responses.get(main_objection, "")
+        result = ""
+        if questions_found:
+            result += f"PREGUNTAS IDENTIFICADAS: {'; '.join(questions_found)}\n"
+        if objections_found:
+            result += f"OBJECIONES IDENTIFICADAS: {'; '.join(objections_found)}\n"
         
-        if response:
-            return f"\n\n{response}"
-        
-        return ""
-    
-    @staticmethod
-    def get_questions_reference(user_profile: Dict) -> str:
-        """Referencia a preguntas específicas que hizo el usuario"""
-        questions = user_profile.get("questions_asked", [])
-        
-        if not questions:
-            return ""
-        
-        question_references = {
-            "cuánto necesito para empezar": "cuando me preguntaste cuánto necesitás para arrancar",
-            "qué productos se venden más": "cuando me consultaste qué productos tienen mejor salida",
-            "cuánto gano por producto": "cuando me preguntaste sobre la rentabilidad",
-            "cómo funciona el envío": "cuando me preguntaste sobre los envíos",
-            "tienen local físico": "cuando me preguntaste por nuestros locales",
-        }
-        
-        main_question = questions[0]
-        reference = question_references.get(main_question, "")
-        
-        if reference:
-            return f"Especialmente {reference}."
-        
-        return ""
+        return result if result else "No se identificaron objeciones o preguntas específicas."
 
-def get_followup_message_for_stage(stage: int, user_profile: Optional[Dict] = None, 
-                                 interaction_count: int = 0) -> Optional[str]:
+
+class AIMessageGenerator:
+    """Generador de mensajes usando IA basado en contexto conversacional real"""
+    
+    def __init__(self):
+        # Inicializar sistema de prompts
+        self.prompt_system = FollowUpStagePrompts()
+        self.context_extractor = ContextExtractor()
+        
+        # Cache para mensajes generados (evitar regenerar el mismo mensaje)
+        self.message_cache = {}
+        self.cache_max_size = 1000  # Límite de cache para evitar memoria excesiva
+        
+        # Contador de intentos fallidos para mejorar fallbacks
+        self.ai_failure_count = 0
+        self.ai_failure_threshold = 5  # Después de 5 fallos, usar más templates
+        
+        # Configuración de IA
+        self.model = "gpt-4o-mini"
+        self.max_tokens = 500
+        self.temperature = 0.7
+        
+        # Backup templates para casos donde IA falla
+        self.backup_templates = {
+            0: "¡Hola! Me quedé pensando en nuestra charla sobre tu emprendimiento. ¿Ya pensaste en qué productos te gustaría arrancar? Con $40.000 podés empezar con productos que tienen hasta 150% de ganancia. ¿Te animo a dar el paso? 🚀",
+            1: "¡Buenos días! Ayer charlamos sobre tu emprendimiento y me quedé con ganas de ayudarte. Las emprendedoras que arrancan esta semana tienen ventaja para la temporada fuerte. ¿Querés que te arme un combo perfecto para empezar?",
+            7: "Una semana desde que charlamos... ¿Seguís con ganas de emprender o ya te desanimaste? Porque te voy a ser honesta: la diferencia entre las que lo logran y las que se quedan hablando es que las primeras ACTÚAN. ¿Vos sos de las que actúan? 💪",
+            14: "2 semanas exactas. Si hubieras empezado hace 2 semanas, hoy estarías facturando. No te escribo para presionarte, pero cada día que pasa es plata que no entra. ¿Emprendemos juntas o nos despedimos? ❤️",
+            66: "66 días... Mi último mensaje activo. Fue un placer acompañarte todo este tiempo. A partir de ahora solo te escribiré cada tanto para mantener contacto. La puerta de Royal siempre está abierta para vos 🚪✨",
+            999: "¡Hola! ¿Cómo andás? Solo un saludito para contarte las novedades. Tenemos productos nuevos que están funcionando bárbaro. Si algún día te pinta emprender, acá estoy 😊"
+        }
+        
+        logger.info("🤖 AIMessageGenerator inicializado con sistema de IA")
+    
+    async def generate_contextualized_message(self, stage: int, user_id: str, 
+                                           context: ConversationMemory) -> Optional[str]:
+        """Genera mensaje contextualizado usando IA"""
+        try:
+            # Verificar cache primero
+            cache_key = f"{user_id}_{stage}_{context.last_interaction.isoformat()}"
+            if cache_key in self.message_cache:
+                logger.info(f"💾 Usando mensaje cacheado para {user_id}, etapa {stage}")
+                return self.message_cache[cache_key]
+            
+            # Limpiar cache si está muy lleno
+            if len(self.message_cache) > self.cache_max_size:
+                self._clean_cache()
+            
+            # Obtener prompt base para la etapa
+            stage_prompt = self.prompt_system.get_prompt_for_stage(stage)
+            if not stage_prompt:
+                logger.warning(f"⚠️ No hay prompt para etapa {stage}")
+                return self._get_backup_message(stage, user_id, context)
+            
+            # Extraer contexto conversacional
+            conversation_context = self._build_conversation_context(context)
+            
+            # Construir prompt completo para IA
+            full_prompt = f"""{self.prompt_system.base_personality}
+
+{stage_prompt}
+
+CONTEXTO DE LA CONVERSACIÓN:
+{conversation_context}
+
+INSTRUCCIONES FINALES:
+- Genera un mensaje natural que suene como Royalia
+- Usa la información del contexto para personalizar
+- Mantén el objetivo y tono de la etapa
+- Máximo 200 palabras
+- Incluí emojis naturalmente (sin abusar)
+- El mensaje debe fluir como continuación natural de la conversación
+
+GENERA EL MENSAJE DE FOLLOW-UP:"""
+            
+            # Verificar si debemos usar IA o fallback por fallos anteriores
+            if self.ai_failure_count >= self.ai_failure_threshold:
+                logger.info(f"🔄 Usando fallback por {self.ai_failure_count} fallos de IA")
+                return self._get_backup_message(stage, user_id, context)
+            
+            # Generar mensaje usando IA
+            generated_message = await self._call_ai_to_generate(full_prompt)
+            
+            if generated_message:
+                # Reset failure counter en caso de éxito
+                self.ai_failure_count = 0
+                
+                # Guardar en cache
+                self.message_cache[cache_key] = generated_message
+                logger.info(f"✅ Mensaje generado con IA para {user_id}, etapa {stage}")
+                return generated_message
+            else:
+                # Incrementar contador de fallos
+                self.ai_failure_count += 1
+                logger.warning(f"⚠️ IA falló para etapa {stage} (fallo #{self.ai_failure_count}), usando backup")
+                return self._get_backup_message(stage, user_id, context)
+                
+        except Exception as e:
+            logger.error(f"❌ Error generando mensaje con IA para etapa {stage}: {e}")
+            return self._get_backup_message(stage, user_id, context)
+    
+    def _build_conversation_context(self, context: ConversationMemory) -> str:
+        """Construye contexto conversacional para el prompt de IA"""
+        context_parts = []
+        
+        # Historial de conversación
+        conversation_summary = self.context_extractor.extract_conversation_summary(context)
+        context_parts.append(conversation_summary)
+        
+        # Intereses del usuario
+        user_interests = self.context_extractor.extract_user_interests(context)
+        context_parts.append(user_interests)
+        
+        # Información de presupuesto
+        budget_info = self.context_extractor.extract_budget_info(context)
+        context_parts.append(budget_info)
+        
+        # Objeciones y preguntas
+        objections = self.context_extractor.extract_objections_and_questions(context)
+        context_parts.append(objections)
+        
+        # Información adicional del perfil
+        if context.user_profile:
+            profile_info = f"PERFIL DEL USUARIO: {json.dumps(context.user_profile, indent=2)}"
+            context_parts.append(profile_info)
+        
+        return "\n\n".join(context_parts)
+    
+    async def _call_ai_to_generate(self, prompt: str) -> Optional[str]:
+        """Llama a la IA para generar el mensaje"""
+        try:
+            import openai
+            import os
+            
+            # Configurar cliente OpenAI
+            client = openai.AsyncOpenAI(api_key=os.getenv('OPENAI_API_KEY'))
+            
+            response = await client.chat.completions.create(
+                model=self.model,
+                messages=[
+                    {
+                        "role": "system",
+                        "content": "Eres Royalia, experta en generar mensajes de follow-up contextualizados para emprendedoras. Genera mensajes naturales, cálidos pero efectivos."
+                    },
+                    {
+                        "role": "user",
+                        "content": prompt
+                    }
+                ],
+                max_tokens=self.max_tokens,
+                temperature=self.temperature
+            )
+            
+            if response.choices and response.choices[0].message:
+                generated_text = response.choices[0].message.content
+                if generated_text and len(generated_text.strip()) > 10:
+                    return generated_text.strip()
+            
+            return None
+            
+        except Exception as e:
+            logger.error(f"❌ Error llamando a OpenAI: {e}")
+            return None
+    
+    def _get_backup_message(self, stage: int, user_id: str, context: ConversationMemory) -> str:
+        """Obtiene mensaje de backup cuando IA falla"""
+        # Obtener template base
+        base_message = self.backup_templates.get(stage)
+        
+        if not base_message:
+            # Template genérico si no hay específico
+            if stage <= 7:
+                base_message = "¡Hola! ¿Seguís con ganas de emprender? Me encantaría ayudarte a arrancar con los productos perfectos para vos 😊"
+            elif stage <= 30:
+                base_message = "¿Cómo andás? Hace un tiempo charlamos sobre emprendimiento. ¿Cambió algo en tu situación? 🤔"
+            else:
+                base_message = "¡Hola! Solo un saludito para mantenernos en contacto. ¿Todo bien? 💛"
+        
+        # Personalización básica
+        try:
+            # Personalizar según intereses si están disponibles
+            if context.product_interests:
+                interest = context.product_interests[0]
+                base_message = base_message.replace("productos perfectos", f"productos de {interest}")
+            
+            # Personalizar según experiencia
+            if hasattr(context, 'is_entrepreneur') and context.is_entrepreneur:
+                base_message = base_message.replace("emprendimiento", "expandir tu negocio")
+                
+        except Exception as e:
+            logger.warning(f"⚠️ Error en personalización básica: {e}")
+        
+        return base_message
+    
+    def _clean_cache(self):
+        """Limpia el cache eliminando la mitad de las entradas más antiguas"""
+        try:
+            if not self.message_cache:
+                return
+            
+            # Obtener todas las claves y eliminar la mitad más antigua
+            cache_keys = list(self.message_cache.keys())
+            items_to_remove = len(cache_keys) // 2
+            
+            for key in cache_keys[:items_to_remove]:
+                self.message_cache.pop(key, None)
+            
+            logger.info(f"🧹 Cache limpiado: eliminadas {items_to_remove} entradas, quedan {len(self.message_cache)}")
+            
+        except Exception as e:
+            logger.error(f"❌ Error limpiando cache: {e}")
+    
+    def get_cache_stats(self) -> Dict[str, Any]:
+        """Obtiene estadísticas del cache y sistema de fallos"""
+        return {
+            "cache_size": len(self.message_cache),
+            "cache_max_size": self.cache_max_size,
+            "ai_failure_count": self.ai_failure_count,
+            "ai_failure_threshold": self.ai_failure_threshold,
+            "using_fallback_mode": self.ai_failure_count >= self.ai_failure_threshold
+        }
+    
+    def reset_failure_count(self):
+        """Resetea el contador de fallos de IA (útil para recovery)"""
+        self.ai_failure_count = 0
+        logger.info("🔄 Contador de fallos de IA reseteado")
+
+
+# FUNCIONES PRINCIPALES PARA USO DEL SISTEMA
+
+async def get_followup_message_for_stage(stage: int, user_id: str, 
+                                       use_ai_generation: bool = True) -> Optional[str]:
     """
-    Obtiene un mensaje personalizado para una etapa específica con personalización avanzada
+    Obtiene un mensaje personalizado para una etapa específica usando IA o templates
     
     Args:
         stage: Número de etapa (0, 1, 2, 4, 7, etc.)
-        user_profile: Perfil del usuario para personalización
-        interaction_count: Número de interacciones previas
+        user_id: ID del usuario para obtener contexto
+        use_ai_generation: Si usar IA para generar mensaje o templates
     
     Returns:
-        Mensaje personalizado o None si no hay plantilla para esa etapa
+        Mensaje personalizado o None si no se puede generar
     """
     try:
-        templates = FollowUpMessageTemplates()
-        personalizer = MessagePersonalizer()
+        # Obtener contexto del usuario
+        context = await hybrid_context_manager.get_context(user_id)
         
-        if stage not in templates.templates:
-            logger.warning(f"⚠️ No hay plantilla para etapa {stage}")
-            return None
-        
-        # Obtener plantillas de la etapa
-        stage_templates = templates.templates[stage]
-        
-        # Seleccionar plantilla (con variación según interacciones)
-        if interaction_count > 0:
-            # Para usuarios con interacciones previas, usar variaciones diferentes
-            template_index = interaction_count % len(stage_templates)
-        else:
-            template_index = 0
-        
-        selected_template = stage_templates[template_index]
-        message = selected_template["message"]
-        
-        # PERSONALIZACIÓN AVANZADA si hay perfil disponible
-        if user_profile:
-            # Variables de reemplazo dinámico
-            replacements = {
-                "{time_reference}": personalizer.get_time_reference(stage),
-                "{conversation_opener}": personalizer.get_conversation_opener(user_profile, stage),
-                "{specific_products}": personalizer.get_specific_products_text(user_profile),
-                "{budget_reference}": personalizer.get_budget_reference(user_profile),
-                "{personalized_cta}": personalizer.get_personalized_cta(user_profile),
-                "{objection_response}": personalizer.get_objection_response(user_profile),
-                "{questions_reference}": personalizer.get_questions_reference(user_profile),
-                "{user_type}": user_profile.get("user_type", "emprendedora"),
-                "{interest}": user_profile.get("interest", "productos"),
-                "{experience_level}": user_profile.get("experience_level", "empezando"),
-            }
+        if use_ai_generation:
+            # Generar mensaje usando IA con contexto completo (instancia global)
+            ai_generator = get_global_ai_generator()
+            message = await ai_generator.generate_contextualized_message(stage, user_id, context)
             
-            # Aplicar reemplazos si las variables existen en el mensaje
-            for variable, value in replacements.items():
-                if variable in message and value:
-                    message = message.replace(variable, value)
-            
-            # Personalización básica según perfil (mantenemos la lógica existente)
-            if user_profile.get("interest") == "joyas":
-                message = message.replace("productos más vendidos", "anillos y aros que se venden solos")
-            elif user_profile.get("interest") == "maquillaje":  
-                message = message.replace("productos más vendidos", "labiales y bases que todas quieren")
-            elif user_profile.get("interest") == "indumentaria":
-                message = message.replace("productos más vendidos", "ropa trendy que está súper de moda")
-            
-            # Personalizar trato según experiencia
-            if user_profile.get("experience_level") == "empezando":
-                message = message.replace("emprendedora", "futura emprendedora")
-            
-        logger.info(f"✅ Mensaje personalizado generado para etapa {stage}, interacciones: {interaction_count}")
-        return message
+            if message:
+                logger.info(f"✅ Mensaje generado con IA para usuario {user_id}, etapa {stage}")
+                return message
+            else:
+                logger.warning(f"⚠️ IA falló, intentando con templates para etapa {stage}")
+        
+        # Fallback a sistema de templates mejorado
+        return await get_followup_message_with_templates(stage, user_id, context)
         
     except Exception as e:
         logger.error(f"❌ Error generando mensaje para etapa {stage}: {e}")
         return None
 
-def get_message_preview_for_stage(stage: int) -> Optional[str]:
-    """Obtiene una vista previa del mensaje para una etapa (para testing)"""
-    message = get_followup_message_for_stage(stage)
-    if message:
-        return message[:150] + "..." if len(message) > 150 else message
-    return None
+
+async def get_followup_message_with_templates(stage: int, user_id: str, 
+                                            context: ConversationMemory) -> Optional[str]:
+    """
+    Sistema de templates mejorado que usa el contexto conversacional
+    
+    Args:
+        stage: Número de etapa
+        user_id: ID del usuario
+        context: Contexto conversacional del usuario
+    
+    Returns:
+        Mensaje personalizado usando templates
+    """
+    try:
+        # Usar el sistema anterior de templates como fallback
+        templates = AIMessageGenerator()
+        
+        # Obtener template base
+        base_message = templates.backup_templates.get(stage)
+        
+        if not base_message:
+            logger.warning(f"⚠️ No hay template para etapa {stage}")
+            return None
+        
+        # Personalizar con contexto disponible
+        personalized_message = base_message
+        
+        # Personalización básica según contexto
+        if context.product_interests:
+            main_interest = context.product_interests[0]
+            if main_interest in ["joyas", "maquillaje", "indumentaria"]:
+                personalized_message = personalized_message.replace(
+                    "productos perfectos", 
+                    f"productos de {main_interest}"
+                )
+        
+        # Personalización según presupuesto si está disponible
+        if context.budget_range:
+            personalized_message = personalized_message.replace(
+                "$40.000", 
+                context.budget_range
+            )
+        
+        # Referencia a conversación previa si existe
+        if context.interaction_history:
+            last_interaction = context.interaction_history[-1]
+            if last_interaction.get('role') == 'user':
+                last_message = last_interaction.get('message', '')[:50]
+                if len(last_message) > 10:
+                    personalized_message = f"Me quedé pensando en lo que me dijiste: '{last_message}'...\n\n" + personalized_message
+        
+        logger.info(f"✅ Mensaje personalizado con templates para usuario {user_id}, etapa {stage}")
+        return personalized_message
+        
+    except Exception as e:
+        logger.error(f"❌ Error en templates para etapa {stage}: {e}")
+        return None
+
+
+# INSTANCIA GLOBAL DEL GENERADOR DE IA (Singleton pattern)
+_global_ai_generator: Optional[AIMessageGenerator] = None
+
+def get_global_ai_generator() -> AIMessageGenerator:
+    """Obtiene la instancia global del generador de IA (patrón singleton)"""
+    global _global_ai_generator
+    if _global_ai_generator is None:
+        _global_ai_generator = AIMessageGenerator()
+    return _global_ai_generator
 
 def get_all_available_stages() -> List[int]:
     """Retorna todas las etapas disponibles"""
-    templates = FollowUpMessageTemplates()
-    return list(templates.templates.keys())
+    prompt_system = FollowUpStagePrompts()
+    return prompt_system.get_all_stages()
+
+def get_ai_cache_stats() -> Dict[str, Any]:
+    """Obtiene estadísticas del cache global de IA"""
+    generator = get_global_ai_generator()
+    return generator.get_cache_stats()
+
+def reset_ai_failure_count():
+    """Resetea el contador de fallos de IA global"""
+    generator = get_global_ai_generator()
+    generator.reset_failure_count()
+
+
+# FUNCIÓN DE COMPATIBILIDAD PARA API ANTIGUA
+def get_followup_message_for_stage_sync(stage: int, user_profile: Optional[Dict] = None, 
+                                      interaction_count: int = 0) -> Optional[str]:
+    """
+    Función de compatibilidad sincrónica para mantener API anterior funcionando
+    
+    DEPRECATED: Usar get_followup_message_for_stage() async en su lugar
+    
+    Args:
+        stage: Número de etapa
+        user_profile: Perfil del usuario (formato legacy)
+        interaction_count: Número de interacciones
+    
+    Returns:
+        Mensaje usando templates (sin IA por limitaciones sync)
+    """
+    try:
+        logger.warning(f"⚠️ Usando función de compatibilidad legacy para etapa {stage}")
+        
+        # Usar templates básicos sin IA (función sync no puede usar async AI)
+        generator = get_global_ai_generator()
+        
+        # Crear contexto básico desde user_profile
+        from hybrid_context_manager import ConversationMemory
+        basic_context = ConversationMemory(user_id="legacy_user")
+        
+        if user_profile:
+            basic_context.user_profile = user_profile
+            basic_context.product_interests = [user_profile.get("interest", "general")]
+            basic_context.budget_range = user_profile.get("budget_mentioned")
+            basic_context.is_entrepreneur = user_profile.get("experience_level") != "empezando"
+        
+        # Obtener mensaje de backup con personalización básica
+        backup_message = generator._get_backup_message(stage, "legacy_user", basic_context)
+        
+        return backup_message
+        
+    except Exception as e:
+        logger.error(f"❌ Error en función de compatibilidad para etapa {stage}: {e}")
+        
+        # Fallback a mensajes súper básicos
+        basic_messages = {
+            0: "¡Hola! ¿Seguís interesada en emprender? 😊",
+            1: "¡Buenos días! ¿Ya pensaste en arrancar tu emprendimiento?",
+            7: "Una semana después... ¿Seguís con ganas de emprender?",
+            14: "2 semanas... ¿Emprendemos juntas o nos despedimos?",
+            66: "Mi último mensaje activo. Fue un placer acompañarte 💛",
+            999: "¡Hola! ¿Cómo andás? Solo un saludito 👋"
+        }
+        
+        return basic_messages.get(stage, "¡Hola! ¿Todo bien? 😊")
+
 
 if __name__ == "__main__":
-    # Test de las plantillas
-    logger.info("🧪 Test de plantillas de follow-up")
+    # Test del sistema de IA para follow-up
+    logger.info("🧪 Test de sistema AI para follow-up")
     
     stages = get_all_available_stages()
     logger.info(f"📋 Etapas disponibles: {stages}")
     
-    # Test de algunos mensajes
-    for stage in [0, 1, 7, 14, 66, 999]:
-        if stage in stages:
-            preview = get_message_preview_for_stage(stage)
-            logger.info(f"📝 Etapa {stage}: {preview}")
-    
-    # Test con perfil de usuario
-    test_profile = {"interest": "joyas", "experience_level": "empezando"}
-    message = get_followup_message_for_stage(1, user_profile=test_profile, interaction_count=2)
-    
-    if message:
-        logger.info(f"📄 Mensaje personalizado: {message[:100]}...")
-    
-    logger.info("✅ Test de plantillas completado")
+    logger.info("✅ Test completado - Sistema AI listo para usar")
