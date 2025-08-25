@@ -1,0 +1,166 @@
+{
+  "general": {
+    "name": "Royal Company",
+    "founded": "2016",
+    "operational_since": "2017",
+    "description": "Empresa mayorista en Argentina que apoya a emprendedores con productos de moda y belleza",
+    "products_summary": "Joyas, relojes, maquillaje, indumentaria y accesorios",
+    "target_market": "Revendedores y emprendedores de todo el país"
+  },
+  "locations": {
+    "city": "Córdoba Capital",
+    "stores": [
+      {
+        "name": "Royal Joyas",
+        "address": "9 de Julio 472"
+      },
+      {
+        "name": "Royal Joyas",
+        "address": "General Paz 159, Galería Planeta, Local 18"
+      },
+      {
+        "name": "Royal Bijou",
+        "address": "San Martín 48, Galería San Martín, Local 23A"
+      }
+    ]
+  },
+  "schedule": {
+    "weekdays": "9:30 a 18:30",
+    "saturdays": "9:30 a 14:00",
+    "sundays": "Cerrado",
+    "online_store": "24/7"
+  },
+  "social_media": {
+    "instagram": {
+      "joyas": "@royal.joyas",
+      "bijou": "@royal.bijou",
+      "indumentaria": "@royal.indumentaria"
+    },
+    "facebook": "Royal Company",
+    "whatsapp": "Oficial disponible"
+  },
+  "purchase_types": {
+    "wholesale": {
+      "name": "Mayorista",
+      "minimum": 40000,
+      "currency": "ARS",
+      "benefits": [
+        "Precios especiales",
+        "Margen hasta 150%",
+        "Acceso a productos exclusivos"
+      ],
+      "target": "Revendedores"
+    },
+    "retail": {
+      "name": "Minorista",
+      "minimum": 0,
+      "currency": "ARS",
+      "benefits": [
+        "Sin mínimo de compra",
+        "Para consumo personal"
+      ],
+      "target": "Consumidor final"
+    }
+  },
+  "shipping": {
+    "provider": "Andreani",
+    "insurance": "100% asegurado",
+    "costs": {
+      "cordoba_capital": 4999,
+      "rest_of_country": 7499,
+      "free_shipping_threshold": 80000
+    },
+    "delivery_times": {
+      "cordoba": {
+        "min_days": 1,
+        "max_days": 2,
+        "description": "24 a 48 horas"
+      },
+      "national": {
+        "min_days": 2,
+        "max_days": 5,
+        "description": "2 a 5 días hábiles"
+      }
+    }
+  },
+  "payment_methods": {
+    "credit_card": {
+      "enabled": true,
+      "installments": 3,
+      "interest_free": true
+    },
+    "bank_transfer": {
+      "enabled": true,
+      "cbu": "4530000800014232361716",
+      "alias": "ROYAL.JOYAS.2023.nx",
+      "account_holder": "Edward Freitas Souzaneto"
+    },
+    "cash": {
+      "enabled": true,
+      "locations": "En locales físicos"
+    },
+    "deposit_system": {
+      "enabled": true,
+      "amount": 10000,
+      "description": "Seña de $10,000 (resto al retirar o antes del despacho)"
+    }
+  },
+  "services": {
+    "jewelry_repairs": {
+      "available": true,
+      "types": [
+        "Soldaduras de joyas",
+        "Ajustes de tamaño (anillos)",
+        "Cambio de piedras y pulido",
+        "Restauración de piezas antiguas",
+        "Cambio de mallas y pilas de relojes"
+      ],
+      "materials": ["Plata 925", "Oro 18K"],
+      "process": "Enviar foto por WhatsApp para presupuesto o traer al local"
+    },
+    "personalization": {
+      "available": true,
+      "types": [
+        "Grabados personalizados",
+        "Nombres, iniciales o símbolos",
+        "Diseños exclusivos"
+      ],
+      "products": ["Anillos", "Dijes", "Pulseras"]
+    }
+  },
+  "educational_resources": {
+    "ebooks": {
+      "available": true,
+      "quantity": "Más de 100",
+      "cost": "Gratuitos"
+    },
+    "academy": {
+      "name": "Academia Royal",
+      "requirement": "Clientes que compran +$80,000 mensual",
+      "url": "https://royalacademia.com.ar/"
+    },
+    "entrepreneur_combos": {
+      "available": true,
+      "description": "Combos para facilitar inicio de negocios",
+      "benefits": [
+        "Productos seleccionados",
+        "Alta rotación",
+        "Fácil venta",
+        "Recuperación rápida de inversión"
+      ]
+    }
+  },
+  "urls": {
+    "main_store": "https://royalmayorista.com.ar/shop/",
+    "entrepreneur_combos": "https://royalmayorista.com.ar/categoria-producto/combo-emprendedor/",
+    "jewelry": "https://royalmayorista.com.ar/categoria-producto/royal-joyas/",
+    "accessories": "https://royalmayorista.com.ar/categoria-producto/accesorios/",
+    "bijouterie": "https://royalmayorista.com.ar/categoria-producto/bijou/",
+    "makeup": "https://royalmayorista.com.ar/categoria-producto/royal-makeup/",
+    "beauty": "https://royalmayorista.com.ar/categoria-producto/belleza-y-cuidado-personal/",
+    "clothing": "https://royalmayorista.com.ar/categoria-producto/indumentaria/",
+    "shoes": "https://royalmayorista.com.ar/categoria-producto/sandalias-y-zapatos/",
+    "electronics": "https://royalmayorista.com.ar/categoria-producto/electronica/",
+    "academy": "https://royalacademia.com.ar/"
+  }
+}

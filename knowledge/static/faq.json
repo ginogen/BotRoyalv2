@@ -1,0 +1,93 @@
+{
+  "faqs": [
+    {
+      "id": "minimum_purchase",
+      "question": "¿Cuál es el mínimo de compra?",
+      "answer": "El mínimo es de $40,000. Desde $80,000 el envío es gratis. Además, contás con mi acompañamiento para ayudarte a hacer crecer tu negocio.",
+      "category": "purchase"
+    },
+    {
+      "id": "shipping_nationwide",
+      "question": "¿Hacen envíos a todo el país?",
+      "answer": "Sí. Hacemos envíos a todo el país. Córdoba Capital: $4,999. Resto del país: $7,499. Gratis desde $80,000. Además, te acompaño como mentora para organizar tus ventas y contenido si querés.",
+      "category": "shipping"
+    },
+    {
+      "id": "payment_methods",
+      "question": "¿Puedo pagar con tarjeta?",
+      "answer": "Sí. Aceptamos tarjeta de crédito (hasta 3 cuotas sin interés), débito o transferencia sin recargo. También puedo ayudarte a pensar promociones para tus clientas según el método de pago que prefieran.",
+      "category": "payment"
+    },
+    {
+      "id": "catalog_no_logo",
+      "question": "¿Tienen catálogo sin logo?",
+      "answer": "Sí. Te paso el enlace https://royalmayorista.com.ar/shop/. Si querés, te puedo ayudar a armar publicaciones con esas fotos.",
+      "category": "catalog"
+    },
+    {
+      "id": "is_reliable",
+      "question": "¿Es confiable comprar en Royal?",
+      "answer": "Royal tiene 7 años en el mercado, más de 30,000 emprendedoras ya trabajan con nosotros, tenemos locales físicos en Córdoba capital y redes verificadas.",
+      "category": "trust"
+    },
+    {
+      "id": "profit_margin",
+      "question": "¿Cuánto puedo ganar con la reventa?",
+      "answer": "La ganancia en la reventa es totalmente libre y depende de vos. En Royal no ponemos límites: cada emprendedora decide el margen según sus objetivos. Si querés vender rápido y mover mucho stock, podés poner una ganancia del 50% al 100%. Si buscás mayor rentabilidad, podés subir tus precios y ganar aún más. Lo importante es que vos tenés el control. Royal te da los productos y el respaldo, y vos decidís cómo posicionarlos para crecer en tu negocio. ¿Querés que te arme algunas ideas de estrategias según tu objetivo de ventas?",
+      "category": "profit"
+    },
+    {
+      "id": "margin_percentage",
+      "question": "¿Qué margen de ganancia puedo poner?",
+      "answer": "El margen lo definís vos según tu estrategia. Podés trabajar con márgenes del 50% al 100% para rotación rápida, o más altos si apuntás a un público que valora exclusividad y diseño. También influye tu círculo social y el tipo de clientes que tengas. Como mentora, puedo ayudarte a definir la estrategia de precios que mejor se adapte a tu mercado.",
+      "category": "profit"
+    },
+    {
+      "id": "expected_profitability",
+      "question": "¿Cuál es la rentabilidad esperada?",
+      "answer": "La rentabilidad depende de tu estrategia de ventas y tu mercado. Con márgenes del 50% al 100% tenés excelente rentabilidad, y muchas emprendedoras logran márgenes superiores en productos selectos. Lo clave es conocer a tu cliente: algunos prefieren variedad y buenos precios, otros buscan exclusividad y pagan más por ello.",
+      "category": "profit"
+    },
+    {
+      "id": "local_pickup",
+      "question": "¿Se puede retirar en local?",
+      "answer": "Sí. Podés retirar en nuestros locales en Córdoba Capital. Además de los productos, tenés mi acompañamiento como mentora para ayudarte a crecer con tu emprendimiento. Ideas, planificación, contenido, promociones, lo que necesites.",
+      "category": "pickup"
+    },
+    {
+      "id": "jewelry_repairs",
+      "question": "¿Hacen arreglos de joyas?",
+      "answer": "¡Sí! Hacemos arreglos y restauración de joyas en plata 925 y oro 18K. Soldaduras, ajustes de anillos, cambio de piedras, pulido, restauración de piezas antiguas, cambio de mallas y pilas de relojes. Mandanos una foto por WhatsApp y te paso presupuesto. También podés traerla al local de General Paz 159.",
+      "category": "services"
+    },
+    {
+      "id": "personalized_jewelry",
+      "question": "¿Tienen joyas personalizadas?",
+      "answer": "¡Genial! Tenemos joyas personalizadas en plata 925. Grabados con nombres, iniciales, símbolos. Anillos, dijes y pulseras exclusivas. Sin mínimo después de tu primera compra mayorista. ¿Tenés algún diseño en mente o querés que te asesoremos?",
+      "category": "services"
+    },
+    {
+      "id": "how_it_works",
+      "question": "¿Cómo funciona Royal?",
+      "answer": "En Royal vendemos al por mayor para revendedores con un mínimo de $40,000. Si sos revendedor, tenés precios re copados. Si querés comprar para vos nomás, también tenemos venta minorista sin mínimo. Enviamos a todo el país y tenemos locales acá en Córdoba. ¿Qué te interesa puntualmente?",
+      "category": "general"
+    },
+    {
+      "id": "difference_with_others",
+      "question": "¿Qué diferencia tiene Royal con otras empresas?",
+      "answer": "Con Royal no solo comprás productos. Acá tenés un equipo y una mentora acompañándote para que tu negocio crezca. Desde asesoramiento personalizado, ideas para vender, catálogo sin logo con fotos profesionales, capacitaciones y más. Si querés, te puedo ayudar a planificar tu primera semana de ventas.",
+      "category": "general"
+    }
+  ],
+  "categories": {
+    "purchase": "Compras y mínimos",
+    "shipping": "Envíos",
+    "payment": "Métodos de pago",
+    "catalog": "Catálogo",
+    "trust": "Confiabilidad",
+    "profit": "Ganancias y márgenes",
+    "pickup": "Retiro en local",
+    "services": "Servicios adicionales",
+    "general": "Información general"
+  }
+}

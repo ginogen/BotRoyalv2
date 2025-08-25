@@ -5,6 +5,7 @@ import os
 import json
 import asyncio
 import hashlib
+import traceback
 from typing import Dict, List, Any, Optional
 from datetime import datetime, timedelta, timezone
 import logging
@@ -278,7 +279,7 @@ class FollowUpDatabaseManager:
             return False
     
     def get_users_ready_for_followup(self) -> List[UserFollowUp]:
-        """Obtiene usuarios listos para recibir el siguiente mensaje de seguimiento"""
+        """Obtiene usuarios listos para recibir el siguiente mensaje de seguimiento y los marca como en procesamiento atómicamente"""
         if not self._ensure_initialized():
             logger.warning("Follow-up database not available")
             return []
@@ -289,18 +290,28 @@ class FollowUpDatabaseManager:
             
             with psycopg2.connect(**self.db_config) as conn:
                 with conn.cursor(cursor_factory=RealDictCursor) as cur:
-                    # Buscar usuarios activos con lock para evitar duplicados
-                    # SKIP LOCKED permite que otros procesos tomen otros registros
+                    # Obtener usuarios activos y marcarlos como en procesamiento en una sola transacción
+                    # SKIP LOCKED permite que otros procesos tomen otros registros sin bloqueo
                     cur.execute("""
-                        SELECT * FROM user_follow_ups 
-                        WHERE is_active = true
-                        AND (processing_started_at IS NULL 
-                             OR processing_started_at < %s)
-                        ORDER BY stage_start_time ASC
-                        FOR UPDATE SKIP LOCKED
-                    """, (current_time - timedelta(minutes=5),))
+                        UPDATE user_follow_ups 
+                        SET processing_started_at = %s,
+                            last_check_time = %s,
+                            updated_at = CURRENT_TIMESTAMP
+                        FROM (
+                            SELECT id, user_id FROM user_follow_ups 
+                            WHERE is_active = true
+                            AND (processing_started_at IS NULL 
+                                 OR processing_started_at < %s)
+                            ORDER BY stage_start_time ASC
+                            LIMIT 50
+                            FOR UPDATE SKIP LOCKED
+                        ) AS candidates
+                        WHERE user_follow_ups.id = candidates.id
+                        RETURNING user_follow_ups.*
+                    """, (current_time, current_time, current_time - timedelta(minutes=5)))
                     
                     rows = cur.fetchall()
+                    logger.info(f"🔒 Marcados {len(rows)} usuarios como en procesamiento atómicamente")
                     
                     for row in rows:
                         # Normalizar fechas a timezone Argentina
@@ -326,8 +337,15 @@ class FollowUpDatabaseManager:
                         if self._should_send_followup(user_followup, current_time):
                             users_ready.append(user_followup)
                             logger.info(f"✅ Usuario {user_followup.user_id} listo para follow-up etapa {user_followup.current_stage}")
+                        else:
+                            # Si no es momento de enviar, limpiar la marca de procesamiento inmediatamente
+                            logger.debug(f"🔓 Usuario {user_followup.user_id} no listo aún, limpiando marca de procesamiento")
+                            self.clear_user_processing(user_followup.user_id)
+                    
+                    # Commit de la transacción
+                    conn.commit()
                             
-            logger.info(f"📊 Usuarios listos para follow-up: {len(users_ready)}")
+            logger.info(f"📊 Usuarios realmente listos para follow-up: {len(users_ready)}")
             return users_ready
             
         except Exception as e:
@@ -538,6 +556,32 @@ class FollowUpDatabaseManager:
             logger.error(f"❌ Error limpiando mensajes antiguos: {e}")
             return 0
     
+    def cleanup_blocked_processing_users(self, minutes: int = 10) -> int:
+        """Limpia usuarios que llevan más tiempo del especificado marcados como 'en procesamiento'"""
+        try:
+            with psycopg2.connect(**self.db_config) as conn:
+                with conn.cursor() as cur:
+                    # Limpiar usuarios que llevan más de X minutos en procesamiento
+                    cur.execute("""
+                        UPDATE user_follow_ups 
+                        SET processing_started_at = NULL,
+                            updated_at = CURRENT_TIMESTAMP
+                        WHERE processing_started_at IS NOT NULL 
+                          AND processing_started_at < %s
+                    """, (datetime.now(ARG_TZ) - timedelta(minutes=minutes),))
+                    
+                    cleared_count = cur.rowcount
+                    conn.commit()
+                    
+                    if cleared_count > 0:
+                        logger.info(f"🔓 Desbloqueados {cleared_count} usuarios que estaban atascados en procesamiento desde hace más de {minutes} minutos")
+                    
+                    return cleared_count
+                    
+        except Exception as e:
+            logger.error(f"❌ Error limpiando usuarios bloqueados: {e}")
+            return 0
+    
     def advance_to_next_stage(self, user_id: str) -> bool:
         """Avanza un usuario a la siguiente etapa"""
         try:
@@ -552,6 +596,8 @@ class FollowUpDatabaseManager:
             # Secuencia de etapas según el plan
             stage_sequence = [0, 1, 2, 4, 7, 10, 14, 18, 26, 36, 46, 56, 66, 999]
             
+            logger.debug(f"🔍 Avanzando etapa - Usuario: {user_id}, Etapa actual: {current_stage}")
+            
             try:
                 current_index = stage_sequence.index(current_stage)
                 if current_index < len(stage_sequence) - 1:
@@ -559,8 +605,10 @@ class FollowUpDatabaseManager:
                 else:
                     # Mantenerse en modo mantenimiento
                     next_stage = 999
+                logger.debug(f"📍 Índice actual: {current_index}, Próxima etapa: {next_stage}")
             except ValueError:
                 # Si la etapa actual no está en la secuencia, ir a la siguiente lógica
+                logger.warning(f"⚠️ Etapa {current_stage} no encontrada en secuencia, usando etapa 1")
                 next_stage = 1
             
             # Actualizar seguimiento
@@ -568,17 +616,23 @@ class FollowUpDatabaseManager:
             user_followup.current_stage = next_stage
             user_followup.stage_start_time = datetime.now(ARG_TZ)
             
+            logger.debug(f"📝 Actualizando DB - Nueva etapa: {next_stage}, Nueva hora inicio: {user_followup.stage_start_time}")
+            
             success = self.create_or_update_followup(user_followup)
             
             if success:
                 # Limpiar marca de procesamiento al avanzar de etapa
                 self.clear_user_processing(user_id)
                 logger.info(f"📈 Usuario {user_id} avanzado de etapa {current_stage} a {next_stage}")
+                logger.info(f"⏰ Próximo mensaje programado para: {user_followup.stage_start_time}")
+            else:
+                logger.error(f"❌ Falló la actualización en DB para usuario {user_id}")
             
             return success
             
         except Exception as e:
             logger.error(f"❌ Error avanzando etapa para {user_id}: {e}")
+            logger.error(f"🔍 Traceback: {traceback.format_exc()}")
             return False
 
 # Instancia global del gestor de base de datos
@@ -617,6 +671,9 @@ except Exception as e:
             return False
             
         def cleanup_old_sent_messages(self, days: int = 7):
+            return 0
+            
+        def cleanup_blocked_processing_users(self, minutes: int = 10):
             return 0
             
         def deactivate_followup(self, user_id: str):

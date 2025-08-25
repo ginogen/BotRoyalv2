@@ -61,7 +61,6 @@ class FollowUpScheduler:
         
         # Control de estado
         self.is_running = False
-        self.processed_jobs_cache = set()  # Cache para evitar duplicados
         
         # Estadísticas
         self.stats = {
@@ -102,6 +101,15 @@ class FollowUpScheduler:
                     trigger=IntervalTrigger(hours=24),
                     id='cleanup_sent_messages',
                     name='Cleanup Sent Messages Cache',
+                    replace_existing=True
+                )
+                
+                # Job de limpieza de usuarios bloqueados cada 15 minutos
+                self.scheduler.add_job(
+                    func=self._cleanup_blocked_users,
+                    trigger=IntervalTrigger(minutes=15),
+                    id='cleanup_blocked_users',
+                    name='Cleanup Blocked Users',
                     replace_existing=True
                 )
                 
@@ -177,28 +185,19 @@ class FollowUpScheduler:
             
             logger.info(f"📬 {len(users_ready)} usuarios listos para follow-up")
             
-            # Procesar cada usuario
+            # Procesar cada usuario (ya están marcados como 'en procesamiento' atómicamente)
             for user_followup in users_ready:
                 try:
-                    # Marcar usuario como en procesamiento INMEDIATAMENTE
-                    db_manager.mark_user_processing(user_followup.user_id)
-                    logger.info(f"🔒 Usuario {user_followup.user_id} marcado como en procesamiento")
+                    logger.info(f"🔄 Procesando usuario ya marcado - Usuario: {user_followup.user_id}, Etapa: {user_followup.current_stage}")
                     
-                    # Evitar duplicados con cache
-                    cache_key = f"{user_followup.user_id}_{user_followup.current_stage}"
+                    # Los usuarios ya están marcados como en procesamiento por get_users_ready_for_followup
+                    # Procesar el mensaje directamente
+                    logger.info(f"📤 Llamando _send_followup_message para {user_followup.user_id}")
+                    self._send_followup_message(user_followup.user_id, user_followup.current_stage)
+                    logger.info(f"✅ Completado procesamiento para {user_followup.user_id}")
                     
-                    if cache_key not in self.processed_jobs_cache:
-                        self._send_followup_message(user_followup.user_id, user_followup.current_stage)
-                        
-                        # Agregar a cache (será limpiado periódicamente)
-                        self.processed_jobs_cache.add(cache_key)
-                        
-                        # Pequeña pausa entre mensajes
-                        time.sleep(2)
-                    else:
-                        logger.info(f"⏭️ Usuario {user_followup.user_id} ya en cache, saltando")
-                        # Limpiar marca de procesamiento si estaba en cache
-                        db_manager.clear_user_processing(user_followup.user_id)
+                    # Pequeña pausa entre mensajes
+                    time.sleep(2)
                         
                 except Exception as e:
                     logger.error(f"❌ Error procesando follow-up para {user_followup.user_id}: {e}")
@@ -214,6 +213,8 @@ class FollowUpScheduler:
     
     def _send_followup_message(self, user_id: str, stage: int):
         """Envía un mensaje de seguimiento a un usuario específico"""
+        processing_cleared = False
+        
         try:
             logger.info(f"📤 Enviando mensaje de seguimiento - Usuario: {user_id}, Etapa: {stage}")
             
@@ -222,22 +223,22 @@ class FollowUpScheduler:
             
             if not user_followup or not user_followup.is_active:
                 logger.info(f"⏭️ Saltando follow-up - Usuario {user_id} no está activo o no existe")
-                # Limpiar marca de procesamiento
-                db_manager.clear_user_processing(user_id)
                 return
             
             # Verificar que la etapa coincida (por si hubo cambios)
             if user_followup.current_stage != stage:
                 logger.info(f"⏭️ Saltando follow-up - Usuario {user_id} cambió de etapa {stage} a {user_followup.current_stage}")
-                # Limpiar marca de procesamiento
-                db_manager.clear_user_processing(user_id)
                 return
             
             # Verificar si el mensaje ya fue enviado recientemente
             if db_manager.check_message_already_sent(user_id, stage, ""):
                 logger.info(f"⏭️ Mensaje ya enviado recientemente para {user_id} en etapa {stage}")
-                # Avanzar etapa de todas formas para no quedar atascado
-                complete_followup_stage(user_id)
+                # IMPORTANTE: Avanzar etapa de todas formas para no quedar atascado
+                success = complete_followup_stage(user_id)
+                logger.info(f"📈 Avance de etapa para {user_id}: {'✅ Exitoso' if success else '❌ Falló'}")
+                # Si el avance fue exitoso, el procesamiento ya se limpió en advance_to_next_stage
+                if success:
+                    processing_cleared = True
                 return
             
             # Obtener mensaje para la etapa
@@ -249,8 +250,6 @@ class FollowUpScheduler:
             
             if not message_content:
                 logger.error(f"❌ No se pudo obtener mensaje para etapa {stage}")
-                # Limpiar marca de procesamiento
-                db_manager.clear_user_processing(user_id)
                 return
             
             # Enviar mensaje usando callback
@@ -262,16 +261,24 @@ class FollowUpScheduler:
                     db_manager.record_message_sent(user_id, stage, message_content)
                     
                     # Avanzar a la siguiente etapa
-                    complete_followup_stage(user_id)
+                    advance_success = complete_followup_stage(user_id)
                     
                     self.stats['messages_sent'] += 1
                     self.stats['jobs_processed'] += 1
                     
                     logger.info(f"✅ Follow-up enviado exitosamente - Usuario: {user_id}, Etapa: {stage}")
+                    logger.info(f"📈 Avance de etapa: {'✅ Exitoso' if advance_success else '❌ Falló'}")
+                    
+                    # Si el avance fue exitoso, el procesamiento ya se limpió en advance_to_next_stage
+                    if advance_success:
+                        processing_cleared = True
+                    
+                    # Log del siguiente estado
+                    next_status = db_manager.get_user_followup(user_id)
+                    if next_status:
+                        logger.info(f"📊 Nuevo estado - Usuario: {user_id}, Etapa actual: {next_status.current_stage}, Próximo envío: {next_status.stage_start_time}")
                 else:
                     logger.error(f"❌ Error enviando mensaje a {user_id}")
-                    # Limpiar marca de procesamiento en caso de error
-                    db_manager.clear_user_processing(user_id)
                     self.stats['errors'] += 1
             else:
                 logger.warning(f"⚠️ No hay callback configurado para enviar mensajes")
@@ -280,21 +287,25 @@ class FollowUpScheduler:
                 logger.info(f"📝 {message_content[:100]}...")
                 
                 # Avanzar etapa en modo simulación
-                complete_followup_stage(user_id)
+                advance_success = complete_followup_stage(user_id)
+                if advance_success:
+                    processing_cleared = True
+                    
                 self.stats['jobs_processed'] += 1
                 
         except Exception as e:
             logger.error(f"❌ Error enviando follow-up a {user_id}: {e}")
             self.stats['errors'] += 1
+        finally:
+            # CRÍTICO: Garantizar que siempre se limpia la marca de procesamiento
+            # excepto si ya se limpió exitosamente en advance_to_next_stage
+            if not processing_cleared:
+                logger.info(f"🧹 Limpiando marca de procesamiento para {user_id}")
+                db_manager.clear_user_processing(user_id)
     
     def _cleanup_old_jobs(self):
         """Limpia jobs antiguos y cache"""
         try:
-            # Limpiar cache de jobs procesados
-            if len(self.processed_jobs_cache) > 1000:
-                self.processed_jobs_cache.clear()
-                logger.info("🧹 Cache de jobs limpiado")
-            
             # Obtener jobs activos
             active_jobs = self.scheduler.get_jobs()
             completed_jobs = []
@@ -327,6 +338,18 @@ class FollowUpScheduler:
         except Exception as e:
             logger.error(f"❌ Error limpiando mensajes enviados: {e}")
     
+    def _cleanup_blocked_users(self):
+        """Limpia usuarios que llevan más de 10 minutos marcados como 'en procesamiento'"""
+        try:
+            # Usar el método de db_manager para limpiar usuarios bloqueados
+            cleared_count = db_manager.cleanup_blocked_processing_users(minutes=10)
+            if cleared_count > 0:
+                logger.info(f"🧹 Desbloqueados {cleared_count} usuarios que estaban atascados en procesamiento")
+            else:
+                logger.debug("👍 No hay usuarios bloqueados para limpiar")
+        except Exception as e:
+            logger.error(f"❌ Error limpiando usuarios bloqueados: {e}")
+    
     def _log_stats(self):
         """Log de estadísticas del sistema"""
         try:
@@ -338,7 +361,6 @@ class FollowUpScheduler:
             logger.info(f"   Errores: {self.stats['errors']}")
             logger.info(f"   Jobs activos: {active_jobs}")
             logger.info(f"   Último check: {self.stats['last_check']}")
-            logger.info(f"   Cache size: {len(self.processed_jobs_cache)}")
             
         except Exception as e:
             logger.error(f"❌ Error loggeando stats: {e}")
@@ -348,8 +370,7 @@ class FollowUpScheduler:
         return {
             **self.stats,
             'is_running': self.is_running,
-            'active_jobs': len(self.scheduler.get_jobs()) if self.scheduler else 0,
-            'cache_size': len(self.processed_jobs_cache)
+            'active_jobs': len(self.scheduler.get_jobs()) if self.scheduler else 0
         }
     
     def get_user_scheduled_jobs(self, user_id: str) -> List[Dict]:

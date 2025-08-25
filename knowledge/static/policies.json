@@ -1,0 +1,141 @@
+{
+  "sales_policies": {
+    "wholesale": {
+      "minimum_amount": 40000,
+      "discount_levels": {
+        "base": "Precio mayorista estándar",
+        "volume": "Descuentos adicionales por volumen",
+        "loyalty": "Beneficios para clientes frecuentes"
+      },
+      "requirements": {
+        "first_purchase": "Mínimo $40,000",
+        "subsequent": "Mínimo $40,000",
+        "personalized_products": "Sin mínimo después de primera compra mayorista"
+      }
+    },
+    "retail": {
+      "minimum_amount": 0,
+      "pricing": "Precios regulares sin descuento mayorista",
+      "target": "Consumo personal"
+    },
+    "deposit_system": {
+      "enabled": true,
+      "amount": 10000,
+      "payment_schedule": "Resto al retirar o antes del despacho",
+      "applies_to": "Pedidos con seña"
+    }
+  },
+  "shipping_policies": {
+    "coverage": "Todo el país",
+    "provider": "Andreani",
+    "insurance": "100% asegurado",
+    "free_shipping": {
+      "threshold": 80000,
+      "applies_to": "Todos los productos"
+    },
+    "delivery_times": {
+      "cordoba_capital": {
+        "min_days": 1,
+        "max_days": 2,
+        "description": "24 a 48 horas"
+      },
+      "rest_of_country": {
+        "min_days": 2,
+        "max_days": 5,
+        "description": "2 a 5 días hábiles"
+      }
+    },
+    "tracking": "Código de seguimiento proporcionado"
+  },
+  "return_policies": {
+    "warranty": {
+      "jewelry": "Certificado de garantía incluido",
+      "watches": "Garantía de funcionamiento",
+      "electronics": "Garantía del fabricante"
+    },
+    "defects": {
+      "report_time": "48 horas desde recepción",
+      "process": "Enviar fotos por WhatsApp para evaluación",
+      "resolution": "Cambio o devolución según el caso"
+    }
+  },
+  "payment_policies": {
+    "accepted_methods": [
+      "Tarjeta de crédito",
+      "Tarjeta de débito",
+      "Transferencia bancaria",
+      "Efectivo en local"
+    ],
+    "installments": {
+      "credit_card": {
+        "max_installments": 3,
+        "interest": "Sin interés"
+      }
+    },
+    "confirmation": "Pedido confirmado al acreditar el pago",
+    "invoice": "Factura electrónica enviada por email"
+  },
+  "product_policies": {
+    "authenticity": {
+      "silver_925": "Certificado de autenticidad incluido",
+      "gold_18k": "Certificado de autenticidad incluido",
+      "brands": "Productos originales con garantía"
+    },
+    "personalization": {
+      "available": true,
+      "types": ["Grabados", "Diseños exclusivos"],
+      "minimum_order": "Sin mínimo después de primera compra mayorista",
+      "production_time": "Consultar según diseño"
+    },
+    "catalog": {
+      "no_logo_available": true,
+      "professional_photos": true,
+      "updates": "Catálogo actualizado regularmente"
+    }
+  },
+  "customer_service_policies": {
+    "support_channels": [
+      "WhatsApp oficial",
+      "Instagram Direct",
+      "Facebook Messenger",
+      "Atención en locales"
+    ],
+    "response_time": {
+      "business_hours": "Respuesta inmediata",
+      "after_hours": "Próximo día hábil"
+    },
+    "mentorship": {
+      "included": true,
+      "services": [
+        "Asesoramiento personalizado",
+        "Ideas de ventas",
+        "Estrategias de marketing",
+        "Planificación de negocios"
+      ]
+    }
+  },
+  "entrepreneur_policies": {
+    "combo_benefits": {
+      "purpose": "Facilitar inicio de emprendimientos",
+      "content": "Productos seleccionados de alta rotación",
+      "pricing": "Precio especial por combo",
+      "availability": "Stock limitado"
+    },
+    "education": {
+      "ebooks": {
+        "quantity": "Más de 100",
+        "cost": "Gratuitos",
+        "topics": ["Ventas", "Marketing", "Gestión", "Redes sociales"]
+      },
+      "academy": {
+        "access": "Clientes con compras +$80,000 mensual",
+        "content": "Capacitaciones exclusivas"
+      }
+    },
+    "presale_model": {
+      "available": true,
+      "benefit": "Vender sin stock propio",
+      "risk": "Reducido"
+    }
+  }
+}
