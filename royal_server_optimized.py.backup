@@ -43,7 +43,7 @@ ROYAL_AGENTS_AVAILABLE = False
 
 # Paso 1: Intentar importar la función principal directamente
 try:
-    from royal_agents.agent_manager import run_contextual_conversation_sync_managed as run_contextual_conversation_sync
+    from royal_agents.royal_agent_contextual import run_contextual_conversation_sync
     ROYAL_AGENTS_AVAILABLE = True
     print("✅ ÉXITO: run_contextual_conversation_sync importado correctamente")
 except Exception as e:

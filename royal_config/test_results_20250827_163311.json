@@ -1,0 +1,110 @@
+{
+  "timestamp": "2025-08-27T16:33:11.791768",
+  "summary": {
+    "total_tests": 5,
+    "passed_tests": 3,
+    "success_rate": 0.6,
+    "overall_passed": false,
+    "critical_tests_passed": true
+  },
+  "detailed_results": {
+    "basic_creation": {
+      "unified": {
+        "created": true,
+        "name": "Royalia - Unified Royal Agent",
+        "instructions_length": 3268,
+        "tools_count": 30,
+        "model": "gpt-4o-mini"
+      },
+      "contextual": {
+        "created": true,
+        "name": "Royalia - Royal Contextual",
+        "instructions_length": 13694,
+        "tools_count": 30,
+        "model": "gpt-4o-mini"
+      },
+      "comparison": {
+        "instructions_length_diff": -10426,
+        "tools_count_diff": 0,
+        "same_model": true
+      }
+    },
+    "tools_comparison": {
+      "unified_tool_count": 30,
+      "contextual_tool_count": 30,
+      "common_tools": 30,
+      "unified_only": [],
+      "contextual_only": [],
+      "has_base_tools": 5,
+      "base_tools_coverage": 1.0
+    },
+    "personality_tests": [
+      {
+        "id": "personality_001",
+        "name": "Argentine tone and voseo",
+        "passed": false,
+        "details": {
+          "expected_found": 4,
+          "expected_total": 4,
+          "forbidden_found": 4,
+          "forbidden_total": 4
+        }
+      },
+      {
+        "id": "personality_002",
+        "name": "Emoji usage without abuse",
+        "passed": true,
+        "details": {
+          "emoji_mentioned": true,
+          "no_abuse_mentioned": true
+        }
+      },
+      {
+        "id": "personality_003",
+        "name": "No greeting repetition",
+        "passed": false,
+        "details": {
+          "has_greeting_tool": true,
+          "no_repeat_greeting_rule": false
+        }
+      }
+    ],
+    "knowledge_tests": [
+      {
+        "id": "knowledge_001",
+        "name": "Company basic information",
+        "passed": false,
+        "details": {},
+        "error": "name 'agent' is not defined"
+      },
+      {
+        "id": "knowledge_002",
+        "name": "Shipping information",
+        "passed": false,
+        "details": {},
+        "error": "name 'agent' is not defined"
+      },
+      {
+        "id": "knowledge_003",
+        "name": "Location information",
+        "passed": false,
+        "details": {},
+        "error": "name 'agent' is not defined"
+      },
+      {
+        "id": "knowledge_004",
+        "name": "Payment methods",
+        "passed": false,
+        "details": {},
+        "error": "name 'agent' is not defined"
+      }
+    ],
+    "performance_test": {
+      "agent_creation_time": 0.0008919239044189453,
+      "instructions_length": 3268,
+      "tools_count": 30,
+      "acceptable_creation_time": true
+    }
+  },
+  "errors": []
+}

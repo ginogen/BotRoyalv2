@@ -1,0 +1,276 @@
+{
+  "test_suite": {
+    "name": "Royal Agent Equivalence Testing",
+    "version": "1.0",
+    "purpose": "Verify that UnifiedRoyalAgent maintains exact functionality of original agents"
+  },
+  "personality_tests": [
+    {
+      "id": "personality_001",
+      "name": "Argentine tone and voseo",
+      "input": "Hola, ¿cómo funciona Royal?",
+      "expected_elements": ["tono argentino", "voseo", "informal", "amigable"],
+      "forbidden_elements": ["aquí", "puedes", "tienes", "usted"],
+      "check_type": "tone_analysis"
+    },
+    {
+      "id": "personality_002", 
+      "name": "Emoji usage without abuse",
+      "input": "¿Tienen productos para emprendedores?",
+      "expected_elements": ["emoji_present", "not_excessive"],
+      "check_type": "emoji_analysis"
+    },
+    {
+      "id": "personality_003",
+      "name": "No greeting repetition",
+      "input": "Buenos días",
+      "repeat_input": "Hola de nuevo",
+      "expected_behavior": "second_message_no_greeting",
+      "check_type": "greeting_pattern"
+    }
+  ],
+  "protocol_tests": [
+    {
+      "id": "protocol_001",
+      "name": "Entrepreneur detection and combo protocol",
+      "input": "Estoy empezando, no sé qué elegir",
+      "expected_elements": [
+        "detección_emprendedor",
+        "protocolo_combos",
+        "preguntas_obligatorias",
+        "mentoría_approach"
+      ],
+      "expected_tools": ["get_combos_emprendedores_info"],
+      "check_type": "protocol_compliance"
+    },
+    {
+      "id": "protocol_002",
+      "name": "Frustration detection protocol",
+      "input": "Esto no me gusta, son un desastre",
+      "expected_elements": [
+        "frustration_detected",
+        "no_sales_insistence", 
+        "hitl_activation",
+        "focus_change"
+      ],
+      "forbidden_elements": ["seguir_ofreciendo_productos", "pedir_datos_compra"],
+      "check_type": "frustration_handling"
+    },
+    {
+      "id": "protocol_003",
+      "name": "HITL protocol activation",
+      "input": "¿Tienen descuentos especiales para mayoristas VIP?",
+      "expected_elements": [
+        "no_invention",
+        "hitl_phrases",
+        "professional_response"
+      ],
+      "forbidden_elements": [
+        "No tengo esa información",
+        "No sé sobre eso",
+        "No tengo acceso"
+      ],
+      "check_type": "hitl_compliance"
+    },
+    {
+      "id": "protocol_004",
+      "name": "Budget and investment protocol",
+      "input": "¿Cuánto necesito invertir para empezar?",
+      "expected_elements": ["inversion_info", "specific_amounts", "roi_explanation"],
+      "expected_tools": ["get_inversion_presupuesto_info"],
+      "forbidden_elements": ["invented_amounts"],
+      "check_type": "tool_usage"
+    }
+  ],
+  "knowledge_tests": [
+    {
+      "id": "knowledge_001",
+      "name": "Company basic information",
+      "input": "¿Cuál es el mínimo de compra?",
+      "expected_elements": ["$40,000", "mayorista", "minorista", "sin_minimo"],
+      "check_type": "factual_accuracy"
+    },
+    {
+      "id": "knowledge_002",
+      "name": "Shipping information",
+      "input": "¿Hacen envíos?",
+      "expected_elements": [
+        "Andreani",
+        "Córdoba $4,999",
+        "Nacional $7,499", 
+        "Gratis $80,000",
+        "100% asegurado"
+      ],
+      "check_type": "factual_accuracy"
+    },
+    {
+      "id": "knowledge_003",
+      "name": "Location information",
+      "input": "¿Dónde están ubicados?",
+      "expected_elements": [
+        "Córdoba Capital",
+        "9 de Julio 472",
+        "General Paz 159",
+        "San Martín 48"
+      ],
+      "check_type": "factual_accuracy"
+    },
+    {
+      "id": "knowledge_004",
+      "name": "Payment methods",
+      "input": "¿Cómo puedo pagar?",
+      "expected_elements": [
+        "tarjeta", 
+        "3 cuotas sin interés",
+        "transferencia",
+        "CBU 4530000800014232361716",
+        "efectivo en locales"
+      ],
+      "check_type": "factual_accuracy"
+    }
+  ],
+  "training_compliance_tests": [
+    {
+      "id": "training_001",
+      "name": "Mentorship approach",
+      "input": "Quiero empezar a vender",
+      "expected_elements": [
+        "acompañamiento",
+        "mentoría", 
+        "preguntas_conocimiento",
+        "no_productos_directos"
+      ],
+      "forbidden_elements": [
+        "lista_productos_inmediata",
+        "respuesta_pasiva"
+      ],
+      "check_type": "training_compliance"
+    },
+    {
+      "id": "training_002",
+      "name": "Combo explanation and benefits",
+      "input": "¿Qué son los combos emprendedores?",
+      "expected_elements": [
+        "productos_preseleccionados",
+        "alta_rotación",
+        "precio_especial",
+        "seguridad_empezar"
+      ],
+      "check_type": "training_compliance"
+    },
+    {
+      "id": "training_003",
+      "name": "No direct product showing without questions",
+      "input": "Quiero ver anillos",
+      "expected_elements": [
+        "preguntas_clarificación",
+        "no_productos_inmediatos"
+      ],
+      "expected_questions": [
+        "¿Qué tipo específico estás buscando?",
+        "¿Es para vos o para regalar?",
+        "¿Qué estilo te gusta más?"
+      ],
+      "check_type": "training_compliance"
+    }
+  ],
+  "tool_functionality_tests": [
+    {
+      "id": "tools_001",
+      "name": "get_royal_info functionality",
+      "input": "¿Cuáles son sus horarios?",
+      "expected_tools": ["get_royal_info"],
+      "expected_elements": [
+        "Lunes a viernes: 9:30 a 18:30",
+        "Sábados: 9:30 a 14:00"
+      ],
+      "check_type": "tool_execution"
+    },
+    {
+      "id": "tools_002", 
+      "name": "Greeting tracking functionality",
+      "input": "Buen día",
+      "expected_tools": ["track_client_greeting"],
+      "expected_behavior": "first_greeting_only",
+      "check_type": "tool_execution"
+    },
+    {
+      "id": "tools_003",
+      "name": "Repairs info functionality", 
+      "input": "¿Hacen arreglos de joyas?",
+      "expected_tools": ["get_arreglos_info"],
+      "expected_elements": [
+        "soldaduras",
+        "ajustes de tamaño",
+        "plata 925",
+        "oro 18K",
+        "General Paz 159"
+      ],
+      "check_type": "tool_execution"
+    }
+  ],
+  "web_catalog_tests": [
+    {
+      "id": "web_001",
+      "name": "Official catalog link only",
+      "input": "¿Tienen catálogo online?",
+      "expected_elements": ["https://royalmayorista.com.ar/shop/"],
+      "forbidden_elements": ["invented_links", "other_urls"],
+      "check_type": "link_validation"
+    }
+  ],
+  "edge_case_tests": [
+    {
+      "id": "edge_001",
+      "name": "Order tracking auto-derivation",
+      "input": "¿Dónde está mi pedido?",
+      "expected_behavior": "auto_derivation_to_tracking_team",
+      "forbidden_elements": ["bot_order_lookup_attempt"],
+      "check_type": "routing_logic"
+    },
+    {
+      "id": "edge_002",
+      "name": "Unknown information HITL response",
+      "input": "¿Tienen descuentos por volumen para empresas multinacionales?",
+      "expected_elements": [
+        "hitl_phrases",
+        "professional_deflection"
+      ],
+      "forbidden_elements": [
+        "No tengo esa información",
+        "invented_policies"
+      ],
+      "check_type": "hitl_compliance"
+    }
+  ],
+  "performance_tests": [
+    {
+      "id": "perf_001",
+      "name": "Response time consistency",
+      "input": "¿Cuál es el mínimo?",
+      "expected_max_response_time": 5.0,
+      "check_type": "performance"
+    },
+    {
+      "id": "perf_002",
+      "name": "Tool execution efficiency",
+      "input": "Quiero información sobre combos",
+      "expected_max_tool_calls": 3,
+      "check_type": "performance"
+    }
+  ],
+  "regression_tests": [
+    {
+      "id": "regression_001",
+      "name": "Multiple input formats",
+      "inputs": [
+        "¿Cuál es el mínimo?",
+        "cual es el minimo",
+        "Mínimo de compra?",
+        "minimo compra"
+      ],
+      "expected_consistency": true,
+      "check_type": "robustness"
+    }
+  ]
+}

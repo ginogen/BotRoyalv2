@@ -1,0 +1,143 @@
+{
+  "agent_info": {
+    "name": "Royalia - Unified Royal Agent",
+    "version": "2.0.0",
+    "model": "gpt-4o-mini",
+    "description": "Agente unificado que combina todas las capacidades de Royal Bot v2"
+  },
+  "config_files": {
+    "personality": "personality.json",
+    "company_knowledge": "company_knowledge.json", 
+    "product_training": "product_training.json",
+    "combo_training": "combo_training.json",
+    "protocols": "protocols.json",
+    "response_rules": "response_rules.json"
+  },
+  "tool_categories": {
+    "base_tools": [
+      "get_royal_info",
+      "track_client_greeting",
+      "get_arreglos_info", 
+      "get_joyas_personalizadas_info",
+      "get_royal_education_info",
+      "get_combos_emprendedores_info",
+      "get_inversion_presupuesto_info",
+      "get_acompanamiento_venta_info",
+      "get_situaciones_frecuentes"
+    ],
+    "contextual_tools": [
+      "get_context_summary",
+      "update_user_profile",
+      "get_recommendations_with_context",
+      "get_product_info_with_context",
+      "get_combos_with_context", 
+      "process_purchase_intent",
+      "clear_conversation_context"
+    ],
+    "hitl_tools": [
+      "detect_user_frustration",
+      "check_mcp_connectivity_and_fallback",
+      "handle_missing_information_hitl",
+      "escalate_to_human_support"
+    ],
+    "mcp_tools": {
+      "woocommerce": [
+        "get_product_info",
+        "check_stock_availability", 
+        "search_products_by_price_range",
+        "get_product_categories",
+        "get_product_details_with_link"
+      ],
+      "training": [
+        "get_combo_recommendations",
+        "get_faq_response",
+        "get_conversation_example",
+        "get_training_rules",
+        "search_training_content",
+        "validate_response_against_training", 
+        "get_personality_guidance"
+      ]
+    }
+  },
+  "priority_hierarchy": [
+    {
+      "level": 1,
+      "name": "Critical Protocols",
+      "description": "Frustration detection, HITL, safety protocols",
+      "sources": ["protocols.json"]
+    },
+    {
+      "level": 2, 
+      "name": "Personality & Tone",
+      "description": "Argentine personality, forbidden words, language style",
+      "sources": ["personality.json"]
+    },
+    {
+      "level": 3,
+      "name": "Training Content",
+      "description": "Mentorship approach, combo recommendations, conversation examples",
+      "sources": ["product_training.json", "combo_training.json"]
+    },
+    {
+      "level": 4,
+      "name": "Company Knowledge", 
+      "description": "Company info, products, policies, locations",
+      "sources": ["company_knowledge.json"]
+    },
+    {
+      "level": 5,
+      "name": "Response Functions",
+      "description": "Hardcoded responses, function tools, specific situations",
+      "sources": ["response_rules.json"]
+    },
+    {
+      "level": 6,
+      "name": "Live Data",
+      "description": "Real-time product data, stock, prices from MCP tools",
+      "sources": ["mcp_tools"]
+    }
+  ],
+  "instruction_generation": {
+    "base_template": "# ROYALIA - UNIFIED ROYAL AGENT\n\nSos Royalia, {identity_description}\n\n{personality_section}\n{protocols_section}\n{training_section}\n{company_section}\n{tools_section}",
+    "dynamic_sections": {
+      "personality": "Load from personality.json",
+      "protocols": "Load critical protocols from protocols.json", 
+      "training": "Load key training rules from training files",
+      "company": "Load essential company info from company_knowledge.json",
+      "tools": "Generate tool usage instructions based on available tools"
+    }
+  },
+  "feature_flags": {
+    "use_unified_agent": false,
+    "preserve_original_agents": true,
+    "enable_a_b_testing": false,
+    "enable_response_logging": true,
+    "enable_performance_metrics": true
+  },
+  "rollback_config": {
+    "backup_agents": {
+      "contextual": "royal_agent_contextual.py",
+      "mcp": "royal_agent_with_mcp.py", 
+      "base": "royal_agent.py"
+    },
+    "fallback_strategy": "auto_rollback_on_error",
+    "health_checks": [
+      "response_quality",
+      "tool_availability",
+      "personality_consistency"
+    ]
+  },
+  "monitoring": {
+    "track_metrics": [
+      "response_time",
+      "tool_usage",
+      "personality_adherence", 
+      "training_compliance",
+      "error_rates"
+    ],
+    "comparison_testing": {
+      "test_cases": "test_cases.json",
+      "baseline_responses": "baseline_responses.json"
+    }
+  }
+}

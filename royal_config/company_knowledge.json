@@ -1,0 +1,180 @@
+{
+  "company_info": {
+    "name": "Royal Company",
+    "founded": 2016,
+    "operational_since": 2017,
+    "type": "empresa_mayorista",
+    "location": "Argentina",
+    "description": "Empresa mayorista en Argentina que apoya a emprendedores con productos de moda y belleza",
+    "clients": "más de 30,000 emprendedoras"
+  },
+  "locations": {
+    "city": "Córdoba Capital",
+    "stores": [
+      {
+        "name": "Royal Joyas",
+        "address": "9 de Julio 472",
+        "type": "joyas"
+      },
+      {
+        "name": "Royal Joyas", 
+        "address": "General Paz 159, Galería Planeta, Local 18",
+        "type": "joyas"
+      },
+      {
+        "name": "Royal Bijou",
+        "address": "San Martín 48, Galería San Martín, Local 23A", 
+        "type": "bijouterie"
+      }
+    ],
+    "hours": {
+      "weekdays": "Lunes a viernes: 9:30 a 18:30",
+      "saturday": "Sábados: 9:30 a 14:00", 
+      "online": "Tienda online 24/7"
+    }
+  },
+  "contact_info": {
+    "social_media": {
+      "instagram": {
+        "royal_joyas": "@royal.joyas",
+        "royal_bijou": "@royal.bijou",
+        "royal_indumentaria": "@royal.indumentaria"
+      },
+      "facebook": "Royal Company",
+      "whatsapp": "WhatsApp Oficial disponible"
+    },
+    "description": "Seguinos para ver novedades, promociones y consejos para emprendedores"
+  },
+  "purchase_types": {
+    "mayorista": {
+      "target": "Revendedores",
+      "minimum": "$40,000",
+      "benefits": [
+        "Precios especiales",
+        "Acceso a productos exclusivos", 
+        "Margen hasta 150%"
+      ],
+      "discounts": "Hasta 150% de margen de ganancia"
+    },
+    "minorista": {
+      "target": "Consumo personal",
+      "minimum": "Sin mínimo de compra",
+      "pricing": "Precios regulares"
+    }
+  },
+  "shipping": {
+    "provider": "Andreani",
+    "security": "100% asegurado",
+    "costs": {
+      "cordoba_capital": "$4,999",
+      "rest_of_country": "$7,499",
+      "free_shipping_threshold": "$80,000"
+    },
+    "delivery_times": {
+      "cordoba": "24-48 horas",
+      "national": "2-5 días"
+    }
+  },
+  "payment_methods": {
+    "credit_card": {
+      "available": true,
+      "installments": "hasta 3 cuotas sin interés"
+    },
+    "debit_card": {
+      "available": true
+    },
+    "bank_transfer": {
+      "available": true,
+      "surcharge": "sin recargo",
+      "details": {
+        "cbu": "4530000800014232361716",
+        "alias": "ROYAL.JOYAS.2023.nx",
+        "holder": "Edward Freitas Souzaneto"
+      }
+    },
+    "cash": {
+      "available": true,
+      "locations": "en locales físicos"
+    },
+    "deposit_system": {
+      "available": true,
+      "amount": "$10,000",
+      "description": "Sistema de seña: $10,000 (resto al retirar)"
+    }
+  },
+  "product_categories": {
+    "joyas": {
+      "plata_925": "Con certificado de garantía de autenticidad",
+      "oro_18k": "Chapadas con garantía de autenticidad",
+      "acero": "Hipoalergénicas con garantía de calidad",
+      "personalizadas": "Con grabados personalizados",
+      "services": ["arreglos", "grabados personalizados", "restauración"]
+    },
+    "relojes": {
+      "brands": ["Casio", "otras marcas reconocidas"],
+      "guarantee": "Con garantía de autenticidad y funcionamiento"
+    },
+    "maquillaje": {
+      "target": "Para revendedores",
+      "products": ["labiales", "bases", "sombras", "esmaltes", "brochas"]
+    },
+    "indumentaria": {
+      "types": ["ropa diaria", "ropa de noche", "ropa de abrigo", "lencería"],
+      "sizes": "talles diversos"
+    },
+    "accesorios": {
+      "general": ["llaveros", "hebillas", "vinchas", "accesorios de vestir"],
+      "bijouterie_supplies": ["grampas", "dijes", "bases", "hilos", "piedras"]
+    },
+    "lentes": {
+      "types": ["de sol", "ópticos"],
+      "features": "Con información técnica y garantía óptica"
+    },
+    "belleza": {
+      "products": ["cremas", "aceites", "mascarillas", "productos de cuidado"]
+    },
+    "calzados": {
+      "types": ["sandalias", "zapatillas", "calzados femeninos"],
+      "variety": "distintos estilos y talles"
+    },
+    "electronica": {
+      "products": ["auriculares", "cargadores", "power banks", "accesorios tecnológicos"]
+    }
+  },
+  "educational_resources": {
+    "ebooks": "Más de 100 e-books gratuitos para emprendedores",
+    "academy": {
+      "name": "Academia Royal",
+      "url": "https://royalacademia.com.ar/",
+      "eligibility": "Para clientes que compran +$80,000 mensual"
+    },
+    "entrepreneur_support": {
+      "combos": "Combos emprendedores para facilitar inicio de negocios",
+      "margins": "Márgenes de ganancia hasta 150%",
+      "presale_model": "Modelo de preventa para vender sin stock (reduce riesgos)"
+    }
+  },
+  "official_links": {
+    "main_store": "https://royalmayorista.com.ar/shop/",
+    "entrepreneur_combos": "https://royalmayorista.com.ar/categoria-producto/combo-emprendedor/",
+    "categories": {
+      "joyas": "https://royalmayorista.com.ar/categoria-producto/royal-joyas/",
+      "accesorios": "https://royalmayorista.com.ar/categoria-producto/accesorios/",
+      "bijou": "https://royalmayorista.com.ar/categoria-producto/bijou/",
+      "marroquineria": "https://royalmayorista.com.ar/categoria-producto/marroquineria/",
+      "makeup": "https://royalmayorista.com.ar/categoria-producto/royal-makeup/",
+      "belleza": "https://royalmayorista.com.ar/categoria-producto/belleza-y-cuidado-personal/",
+      "indumentaria": "https://royalmayorista.com.ar/categoria-producto/indumentaria/",
+      "calzados": "https://royalmayorista.com.ar/categoria-producto/sandalias-y-zapatos/",
+      "electronica": "https://royalmayorista.com.ar/categoria-producto/electronica/"
+    },
+    "academy": "https://royalacademia.com.ar/"
+  },
+  "trust_indicators": {
+    "years_in_market": 7,
+    "clients": "más de 30,000 emprendedoras",
+    "physical_stores": true,
+    "verified_social_media": true,
+    "location": "Córdoba capital"
+  }
+}
