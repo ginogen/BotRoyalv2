@@ -18,8 +18,6 @@ from .royal_agent import (
     get_acompanamiento_venta_info,
     get_situaciones_frecuentes
 )
-# Importar sistema de seguimiento
-from .follow_up_system import activate_followup_for_user, user_responded
 from datetime import datetime
 import logging
 
@@ -403,18 +401,8 @@ async def run_contextual_conversation(user_id: str, user_message: str) -> str:
         # Obtener o crear contexto
         context = context_manager.get_or_create_context(user_id)
         
-        # DETECTAR RESPUESTA DEL USUARIO (para resetear seguimiento)
-        # Si el usuario ya tenía un seguimiento activo, resetear a Día 0
-        try:
-            user_profile = {
-                "last_interaction": datetime.now().isoformat(),
-                "conversation_summary": context.conversation.get_context_summary_for_llm()[:200],
-                "response_detected": True
-            }
-            user_responded(user_id, user_profile)
-            logger.info(f"🔄 Usuario {user_id} respondió - Follow-up reseteado a Día 0")
-        except Exception as e:
-            logger.error(f"❌ Error reseteando follow-up para {user_id}: {e}")
+        # Usuario interaction tracking
+        logger.info(f"📝 Usuario {user_id} iniciando conversación contextual")
         
         # Registrar mensaje del usuario
         context.conversation.add_interaction("user", user_message)
@@ -440,35 +428,8 @@ async def run_contextual_conversation(user_id: str, user_message: str) -> str:
         # Registrar respuesta
         context.conversation.add_interaction("assistant", result.final_output)
         
-        # ACTIVAR SISTEMA DE SEGUIMIENTO - Crear perfil del usuario ENRIQUECIDO
-        user_profile = {
-            # Datos básicos (existentes)
-            "last_interaction": datetime.now().isoformat(),
-            "conversation_summary": context.conversation.get_context_summary_for_llm()[:300],  # Aumentado a 300 chars
-            "user_type": _extract_user_type_from_context(context),
-            "interest": _extract_interest_from_context(context),
-            "experience_level": _extract_experience_level_from_context(context),
-            
-            # NUEVOS datos contextuales específicos
-            "specific_products": _extract_specific_products_from_context(context),
-            "budget_mentioned": _extract_budget_from_context(context),
-            "objections": _extract_objections_from_context(context),
-            "questions_asked": _extract_questions_asked_from_context(context),
-            "engagement_level": _extract_engagement_level_from_context(context),
-            "conversation_topics": _extract_conversation_topics_from_context(context),
-            
-            # Métricas adicionales
-            "conversation_length": len(context.conversation.get_context_summary_for_llm()),
-            "interaction_count_at_followup": len(context.conversation.interaction_history),
-            "conversation_started": context.conversation.conversation_started.isoformat(),
-        }
-        
-        # Activar follow-up automático (comenzará en 1 hora)
-        try:
-            activate_followup_for_user(user_id, user_profile)
-            logger.info(f"🚀 Follow-up activado para usuario: {user_id}")
-        except Exception as e:
-            logger.error(f"❌ Error activando follow-up para {user_id}: {e}")
+        # Update user context profile
+        logger.info(f"📊 Contexto actualizado para usuario: {user_id}")
         
         logger.info(f"✅ Conversación completada para: {user_id}")
         logger.info(f"   Respuesta length: {len(result.final_output)}")
@@ -491,18 +452,8 @@ def run_contextual_conversation_sync(user_id: str, user_message: str) -> str:
         # Obtener contexto
         context = context_manager.get_or_create_context(user_id)
         
-        # DETECTAR RESPUESTA DEL USUARIO (para resetear seguimiento)
-        # Si el usuario ya tenía un seguimiento activo, resetear a Día 0
-        try:
-            user_profile = {
-                "last_interaction": datetime.now().isoformat(),
-                "conversation_summary": context.conversation.get_context_summary_for_llm()[:200],
-                "response_detected": True
-            }
-            user_responded(user_id, user_profile)
-            logger.info(f"🔄 Usuario {user_id} respondió - Follow-up reseteado a Día 0")
-        except Exception as e:
-            logger.error(f"❌ Error reseteando follow-up para {user_id}: {e}")
+        # Usuario interaction tracking
+        logger.info(f"📝 Usuario {user_id} iniciando conversación contextual sync")
         
         # Registrar mensaje
         context.conversation.add_interaction("user", user_message)
@@ -546,35 +497,8 @@ def run_contextual_conversation_sync(user_id: str, user_message: str) -> str:
         # Registrar respuesta
         context.conversation.add_interaction("assistant", result)
         
-        # ACTIVAR SISTEMA DE SEGUIMIENTO - Crear perfil del usuario ENRIQUECIDO
-        user_profile = {
-            # Datos básicos (existentes)
-            "last_interaction": datetime.now().isoformat(),
-            "conversation_summary": context.conversation.get_context_summary_for_llm()[:300],  # Aumentado a 300 chars
-            "user_type": _extract_user_type_from_context(context),
-            "interest": _extract_interest_from_context(context),
-            "experience_level": _extract_experience_level_from_context(context),
-            
-            # NUEVOS datos contextuales específicos
-            "specific_products": _extract_specific_products_from_context(context),
-            "budget_mentioned": _extract_budget_from_context(context),
-            "objections": _extract_objections_from_context(context),
-            "questions_asked": _extract_questions_asked_from_context(context),
-            "engagement_level": _extract_engagement_level_from_context(context),
-            "conversation_topics": _extract_conversation_topics_from_context(context),
-            
-            # Métricas adicionales
-            "conversation_length": len(context.conversation.get_context_summary_for_llm()),
-            "interaction_count_at_followup": len(context.conversation.interaction_history),
-            "conversation_started": context.conversation.conversation_started.isoformat(),
-        }
-        
-        # Activar follow-up automático (comenzará en 1 hora)
-        try:
-            activate_followup_for_user(user_id, user_profile)
-            logger.info(f"🚀 Follow-up activado para usuario: {user_id}")
-        except Exception as e:
-            logger.error(f"❌ Error activando follow-up para {user_id}: {e}")
+        # Update user context profile
+        logger.info(f"📊 Contexto actualizado para usuario: {user_id}")
         
         return result
         
