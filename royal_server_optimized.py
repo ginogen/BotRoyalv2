@@ -1597,7 +1597,20 @@ async def evolution_webhook(request: Request, background_tasks: BackgroundTasks)
         
         # Extract message data
         message_content = message_data_raw.get("message", {}).get("conversation", "").strip()
-        from_number = message_data_raw.get("key", {}).get("remoteJid", "").replace("@s.whatsapp.net", "")
+        from_number = message_data_raw.get("key", {}).get("remoteJid", "")
+        
+        # Handle different number formats (WhatsApp, Meta Ads, etc)
+        if "@lid" in from_number:
+            # Meta Ads Lead ID format
+            logger.info(f"📱 Usuario de Meta Ads detectado: {from_number}")
+            from_number = from_number.replace("@lid", "")
+        elif "@s.whatsapp.net" in from_number:
+            # Standard WhatsApp format
+            from_number = from_number.replace("@s.whatsapp.net", "")
+        elif "@g.us" in from_number:
+            # Group format (ignore for now)
+            logger.info(f"📱 Mensaje de grupo detectado: {from_number}")
+            from_number = from_number.replace("@g.us", "")
         
         # Debug: Mostrar campos extraídos
         logger.info(f"📱 Extracted - Content: '{message_content}', From: '{from_number}'")
@@ -2255,6 +2268,62 @@ async def delete_business_info(info_id: str):
             
     except Exception as e:
         logger.error(f"❌ Failed to delete info: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/admin/cleanup-invalid-sources")
+async def cleanup_invalid_message_sources():
+    """Clean up messages with invalid source values (like 'followup')"""
+    try:
+        if not advanced_queue.pg_pool:
+            raise HTTPException(status_code=500, detail="Database not available")
+        
+        conn = advanced_queue.pg_pool.getconn()
+        try:
+            cursor = conn.cursor()
+            
+            # First, investigate what invalid sources exist
+            cursor.execute("""
+                SELECT source, COUNT(*) as count 
+                FROM message_queue 
+                WHERE source NOT IN ('chatwoot', 'evolution', 'test', 'system')
+                GROUP BY source
+            """)
+            
+            invalid_sources = cursor.fetchall()
+            
+            if not invalid_sources:
+                return {
+                    "status": "success",
+                    "message": "No invalid message sources found",
+                    "cleaned_count": 0
+                }
+            
+            logger.info(f"🔍 Found invalid sources: {invalid_sources}")
+            
+            # Convert all invalid sources to 'system'
+            cursor.execute("""
+                UPDATE message_queue 
+                SET source = 'system' 
+                WHERE source NOT IN ('chatwoot', 'evolution', 'test', 'system')
+            """)
+            
+            cleaned_count = cursor.rowcount
+            conn.commit()
+            
+            logger.info(f"✅ Cleaned {cleaned_count} messages with invalid sources")
+            
+            return {
+                "status": "success", 
+                "message": f"Cleaned {cleaned_count} messages with invalid sources",
+                "invalid_sources_found": [dict(row) for row in invalid_sources],
+                "cleaned_count": cleaned_count
+            }
+                
+        finally:
+            advanced_queue.pg_pool.putconn(conn)
+            
+    except Exception as e:
+        logger.error(f"❌ Failed to cleanup invalid sources: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/admin/search-info")

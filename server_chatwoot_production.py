@@ -327,8 +327,19 @@ class ChatwootService:
             
             phone = sender.get("phone_number") or sender.get("identifier", "")
             
-            if phone and "@s.whatsapp.net" in phone:
-                return phone.replace("@s.whatsapp.net", "")
+            # Handle different number formats
+            if phone:
+                if "@lid" in phone:
+                    # Meta Ads Lead ID format
+                    logger.info(f"📱 Usuario de Meta Ads detectado en Chatwoot: {phone}")
+                    return phone.replace("@lid", "")
+                elif "@s.whatsapp.net" in phone:
+                    # Standard WhatsApp format
+                    return phone.replace("@s.whatsapp.net", "")
+                elif "@g.us" in phone:
+                    # Group format
+                    logger.info(f"📱 Mensaje de grupo detectado en Chatwoot: {phone}")
+                    return phone.replace("@g.us", "")
             
             return phone if phone else None
             
