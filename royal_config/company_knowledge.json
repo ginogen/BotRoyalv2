@@ -36,12 +36,19 @@
   "contact_info": {
     "social_media": {
       "instagram": {
-        "royal_joyas": "@royal.joyas",
-        "royal_bijou": "@royal.bijou",
-        "royal_indumentaria": "@royal.indumentaria"
+        "royal_joyas": "https://www.instagram.com/royalbijouoficial?igsh=MTh4MWpyc2hxbWxibQ=="
       },
       "facebook": "Royal Company",
-      "whatsapp": "WhatsApp Oficial disponible"
+      "whatsapp": {
+        "customer_service": {
+          "description": "Atención al cliente",
+          "number": "wa.me/5493512329422"
+        },
+        "sales": {
+          "description": "Ventas", 
+          "number": "wa.me/5493516819623"
+        }
+      }
     },
     "description": "Seguinos para ver novedades, promociones y consejos para emprendedores"
   },

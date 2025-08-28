@@ -23,11 +23,10 @@ def get_royal_info(query: str) -> str:
             "horarios": "Lunes a viernes: 9:30 a 18:30. Sábados: 9:30 a 14:00"
         },
         "contacto": {
-            "instagram_joyas": "@royal.joyas",
-            "instagram_bijou": "@royal.bijou", 
-            "instagram_indumentaria": "@royal.indumentaria",
+            "instagram_oficial": "https://www.instagram.com/royalbijouoficial?igsh=MTh4MWpyc2hxbWxibQ==",
             "facebook": "Royal Company",
-            "whatsapp": "WhatsApp Oficial disponible",
+            "whatsapp_atencion": "wa.me/5493512329422",
+            "whatsapp_ventas": "wa.me/5493516819623",
             "descripcion": "Seguinos para ver novedades, promociones y consejos para emprendedores"
         },
         "productos": {
@@ -361,9 +360,10 @@ def create_royal_agent() -> Agent:
     - Tienda online 24/7
     
     ## Redes Sociales:
-    - Instagram: @royal.joyas (joyas), @royal.bijou (bijouterie), @royal.indumentaria (indumentaria)
+    - Instagram: https://www.instagram.com/royalbijouoficial?igsh=MTh4MWpyc2hxbWxibQ==
     - Facebook: Royal Company
-    - WhatsApp Oficial disponible
+    - WhatsApp Atención al cliente: wa.me/5493512329422
+    - WhatsApp Ventas: wa.me/5493516819623
     
     ## Tipos de Compra:
     ### Mayorista (Revendedores):
