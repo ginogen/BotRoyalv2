@@ -2315,7 +2315,7 @@ async def cleanup_invalid_message_sources():
             return {
                 "status": "success", 
                 "message": f"Cleaned {cleaned_count} messages with invalid sources",
-                "invalid_sources_found": [dict(row) for row in invalid_sources],
+                "invalid_sources_found": [{"source": row[0], "count": row[1]} for row in invalid_sources],
                 "cleaned_count": cleaned_count
             }
                 
