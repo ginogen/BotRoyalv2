@@ -31,6 +31,12 @@ class ConversationMemory:
     user_intent: str = ""  # emprendedor, comprador, consulta
     user_profile: Dict[str, Any] = field(default_factory=dict)
     
+    # Nuevo: Estado de continuidad conversacional
+    awaiting_response: bool = False  # Si el bot espera una respuesta específica
+    pending_action: Optional[str] = None  # Acción pendiente: "recommendations", "product_details", "purchase"
+    last_question: Optional[str] = None  # Última pregunta hecha al usuario
+    context_data: Dict[str, Any] = field(default_factory=dict)  # Datos adicionales del contexto
+    
     # Productos mostrados recientemente (máximo 10)
     recent_products: List[ProductReference] = field(default_factory=list)
     
@@ -181,6 +187,42 @@ class ConversationMemory:
             else:
                 self.product_interests.append(value)
     
+    def set_awaiting_response(self, pending_action: str, question: str, context_data: Dict[str, Any] = None):
+        """Marca que el bot está esperando una respuesta específica"""
+        self.awaiting_response = True
+        self.pending_action = pending_action
+        self.last_question = question
+        self.context_data = context_data or {}
+        self.last_interaction = datetime.now()
+    
+    def clear_awaiting_response(self):
+        """Limpia el estado de espera de respuesta"""
+        self.awaiting_response = False
+        self.pending_action = None
+        self.last_question = None
+        self.context_data = {}
+        self.last_interaction = datetime.now()
+    
+    def is_continuation_response(self, user_message: str) -> bool:
+        """Detecta si el mensaje es una continuación de la conversación actual"""
+        if not self.awaiting_response:
+            return False
+        
+        message_lower = user_message.lower().strip()
+        
+        # Respuestas de confirmación
+        confirmation_words = ["si", "sí", "ok", "okay", "dale", "perfecto", "bueno", "genial", "yes", "claro"]
+        negative_words = ["no", "nah", "nope", "después", "luego", "otro momento"]
+        
+        # Si es respuesta corta y de confirmación/negación
+        if len(message_lower) <= 10:
+            if any(word in message_lower for word in confirmation_words):
+                return True
+            if any(word in message_lower for word in negative_words):
+                return True
+        
+        return False
+    
     def get_context_summary_for_llm(self) -> str:
         """Genera resumen del contexto para incluir en el prompt del LLM"""
         summary_parts = []
@@ -188,6 +230,14 @@ class ConversationMemory:
         # Estado actual
         if self.current_state != "browsing":
             summary_parts.append(f"🔄 Estado: {self.current_state}")
+        
+        # CRÍTICO: Estado de continuidad conversacional
+        if self.awaiting_response:
+            summary_parts.append(f"⚠️ CONTINUIDAD: Esperando respuesta a '{self.last_question}'")
+            summary_parts.append(f"📝 Acción pendiente: {self.pending_action}")
+            if self.context_data:
+                summary_parts.append(f"📋 Datos contextuales: {self.context_data}")
+            summary_parts.append("🚨 CRÍTICO: El usuario debe estar respondiendo a la pregunta anterior, NO iniciar conversación nueva")
         
         # Perfil del usuario
         if self.is_entrepreneur:

@@ -90,15 +90,39 @@ def get_royal_info(query: str) -> str:
 
 @function_tool
 def track_client_greeting(client_id: str) -> bool:
-    """Rastrea si ya se saludó al cliente hoy para evitar saludos repetidos."""
+    """
+    Rastrea si ya se saludó al cliente hoy usando contexto persistente.
+    También verifica el historial de interacciones para evitar saludos repetidos.
+    """
+    # Importar aquí para evitar circular imports
+    from .conversation_context import context_manager
+    
+    # Obtener contexto del usuario
+    context = context_manager.get_or_create_context(client_id)
+    conversation = context.conversation
+    
     today = datetime.now().date()
     
+    # Verificar si hay interacciones recientes (últimas 2 horas)
+    from datetime import timedelta
+    recent_cutoff = datetime.now() - timedelta(hours=2)
+    
+    # Si tiene interacciones recientes, probablemente ya se saludó
+    if conversation.interaction_history:
+        last_interaction_time = datetime.fromisoformat(conversation.interaction_history[-1]["timestamp"])
+        if last_interaction_time > recent_cutoff:
+            return False  # Ya hay conversación activa, no saludar
+    
+    # Verificar saludo del día usando diccionario como backup
     if client_id in client_greetings:
         last_greeting = client_greetings[client_id]
         if last_greeting == today:
             return False  # Ya saludó hoy
     
+    # Marcar como saludado
     client_greetings[client_id] = today
+    conversation.add_interaction("system", f"Primer saludo del día para {client_id}")
+    
     return True  # Primer saludo del día
 
 @function_tool

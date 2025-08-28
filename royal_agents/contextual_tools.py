@@ -819,6 +819,118 @@ async def clear_conversation_context(wrapper: RunContextWrapper[RoyalAgentContex
     logger.info("✅ Contexto de conversación limpiado")
     return "✅ Contexto de conversación reiniciado. ¡Empezamos de nuevo!"
 
+@function_tool
+async def handle_conversation_continuity(wrapper: RunContextWrapper[RoyalAgentContext], user_message: str) -> str:
+    """
+    HERRAMIENTA CRÍTICA: Maneja la continuidad conversacional cuando el usuario responde
+    a una pregunta específica del bot. Evita que se pierda el hilo de la conversación.
+    """
+    
+    context = wrapper.context
+    conversation = context.conversation
+    user_id = context.user_id
+    
+    logger.info(f"🔄 HANDLE_CONVERSATION_CONTINUITY para usuario: {user_id}")
+    logger.info(f"   Mensaje: {user_message}")
+    logger.info(f"   Esperando respuesta: {conversation.awaiting_response}")
+    logger.info(f"   Acción pendiente: {conversation.pending_action}")
+    
+    # Verificar si es una continuación
+    if not conversation.awaiting_response:
+        return "No hay contexto de continuación activo."
+    
+    # Detectar tipo de respuesta
+    message_lower = user_message.lower().strip()
+    is_confirmation = any(word in message_lower for word in ["si", "sí", "ok", "okay", "dale", "perfecto", "bueno", "genial", "yes", "claro"])
+    is_negative = any(word in message_lower for word in ["no", "nah", "nope", "después", "luego", "otro momento"])
+    
+    # Registrar la respuesta
+    conversation.add_interaction("user", user_message, {"is_continuation": True, "pending_action": conversation.pending_action})
+    
+    response = ""
+    
+    # Manejar según la acción pendiente
+    if conversation.pending_action == "recommendations":
+        if is_confirmation:
+            response = """Perfecto! Para armarte la recomendación ideal, necesito conocerte un poquito más:
+
+• ¿Ya tenés experiencia vendiendo o sería tu primer emprendimiento?
+• ¿Qué tipo de productos te llaman más la atención?
+• ¿Tu idea es arrancar de a poco o hacer una inversión más grande?
+
+Con esa info te armo un combo personalizado que sea perfecto para tu situación 💎"""
+            
+            # Actualizar estado
+            conversation.set_awaiting_response("personal_questions", "información sobre experiencia y preferencias", {
+                "step": "collecting_profile",
+                "questions_asked": ["experience", "preferences", "budget"]
+            })
+            
+        elif is_negative:
+            response = """Dale, sin problema! Quedamos acá por si cambiás de opinión.
+
+¿Te interesa que te muestre algún producto específico o tenés alguna consulta sobre Royal? 😊"""
+            conversation.clear_awaiting_response()
+        else:
+            response = f"""Perfecto! Entiendo que querés {user_message}.
+
+Para darte la mejor recomendación personalizada, contame:
+• ¿Tenés experiencia vendiendo o sería tu primera vez?
+• ¿Qué productos te gustan más?
+
+Así te armo algo ideal para vos 💎"""
+            
+            conversation.set_awaiting_response("personal_questions", "información sobre experiencia y preferencias")
+    
+    elif conversation.pending_action == "personal_questions":
+        response = f"""Genial, {user_message}! Con esa info ya tengo una mejor idea.
+
+Basándome en lo que me contaste, te recomiendo arrancar con:
+
+🎯 **COMBO PERSONALIZADO SUGERIDO:**
+• Joyas de plata 925 (siempre tienen demanda)
+• Algunos productos de maquillaje (alta rotación)  
+• Mix de accesorios para completar
+
+¿Te parece que vayamos por ahí o preferís enfocarte en una sola categoría primero? 💎"""
+        
+        conversation.clear_awaiting_response()
+        conversation.is_entrepreneur = True
+        conversation.update_user_profile("experience_feedback", user_message)
+    
+    else:
+        # Acción no reconocida, respuesta genérica
+        response = f"""Gracias por tu respuesta: "{user_message}".
+
+¿En qué más te puedo ayudar? 😊"""
+        conversation.clear_awaiting_response()
+    
+    # Registrar respuesta del bot
+    conversation.add_interaction("assistant", response[:100] + "..." if len(response) > 100 else response, {
+        "continuity_handled": True,
+        "original_action": conversation.pending_action
+    })
+    
+    logger.info(f"✅ Continuidad manejada exitosamente")
+    return response
+
+@function_tool
+async def set_awaiting_user_response(wrapper: RunContextWrapper[RoyalAgentContext], pending_action: str, question_asked: str) -> str:
+    """
+    Marca que el bot acaba de hacer una pregunta y está esperando respuesta específica del usuario.
+    Usado para mantener continuidad conversacional.
+    """
+    
+    context = wrapper.context
+    conversation = context.conversation
+    
+    logger.info(f"⏳ SET_AWAITING_USER_RESPONSE: {pending_action}")
+    logger.info(f"   Pregunta: {question_asked}")
+    
+    conversation.set_awaiting_response(pending_action, question_asked)
+    
+    return f"✅ Marcado como esperando respuesta para: {pending_action}"
+
 def create_contextual_tools():
     """Crea todas las herramientas contextuales"""
     
@@ -836,7 +948,9 @@ def create_contextual_tools():
         process_purchase_intent,
         update_user_profile,
         get_recommendations_with_context,
-        clear_conversation_context
+        clear_conversation_context,
+        handle_conversation_continuity,
+        set_awaiting_user_response
     ]
     
     logger.info(f"✅ Contextual Tools creadas: {len(tools)} herramientas disponibles (HITL deshabilitado)")
