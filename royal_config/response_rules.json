@@ -23,11 +23,10 @@
           "horarios": "Lunes a viernes: 9:30 a 18:30. Sábados: 9:30 a 14:00"
         },
         "contacto": {
-          "instagram_joyas": "@royal.joyas",
-          "instagram_bijou": "@royal.bijou",
-          "instagram_indumentaria": "@royal.indumentaria",
+          "instagram_oficial": "https://www.instagram.com/royalbijouoficial?igsh=MTh4MWpyc2hxbWxibQ==",
           "facebook": "Royal Company",
-          "whatsapp": "WhatsApp Oficial disponible",
+          "whatsapp_atencion": "wa.me/5493512329422",
+          "whatsapp_ventas": "wa.me/5493516819623",
           "descripcion": "Seguinos para ver novedades, promociones y consejos para emprendedores"
         },
         "productos": {
@@ -170,7 +169,7 @@
         "como_funciona": "Dale, te explico. En Royal vendemos productos al por mayor para revendedores y emprendedores, con un mínimo de compra de $40,000. Si sos revendedor, tenés acceso a precios especiales. Si querés comprar solo para vos, también tenemos venta minorista sin mínimo de compra. Enviamos a todo el país y tenemos locales físicos en Córdoba. ¿Querés que te asesore sobre los productos ideales para vos?",
         "arreglos": "Sí, en Royal ofrecemos servicio de arreglos y restauración de joyas en plata 925 y oro 18K. Algunos de nuestros servicios incluyen: • Soldaduras • Ajustes de tamaño (agrandar o achicar anillos) • Cambio de piedras y pulido • Restauración de piezas antiguas • Cambio de mallas y pilas de relojes. Podés enviarnos una foto de tu joya por WhatsApp y te pasamos un presupuesto. También podés traerla a nuestro local en General Paz 159, Galería Planeta, Local 18. ¿Querés que te asesoremos sobre tu joya?",
         "personalizadas": "¡Sí! Tenemos una categoría especial de joyas personalizadas en plata 925. • Grabados personalizados con nombres, iniciales o símbolos • Anillos, dijes y pulseras con diseño exclusivo • Pedidos especiales sin mínimo después de tu primera compra mayorista. ¿Te gustaría que te asesoremos sobre qué personalización hacer?",
-        "redes_sociales": "Sí, nos encontrás en: Instagram: @royal.joyas (joyas), @royal.bijou (bijouterie), @royal.indumentaria (indumentaria y accesorios) Facebook: Royal Company. Seguinos para ver novedades, promociones y consejos para emprendedores. ¡Nos encantaría que formes parte de nuestra comunidad! 🎉"
+        "redes_sociales": "¡Sí! Podés seguirnos en nuestro Instagram oficial: https://www.instagram.com/royalbijouoficial?igsh=MTh4MWpyc2hxbWxibQ== y Facebook: Royal Company. Seguinos para ver novedades, promociones y consejos para emprendedores. ¡Nos encantaría que formes parte de nuestra comunidad! 🎉"
       }
     }
   },

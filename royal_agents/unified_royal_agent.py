@@ -175,6 +175,7 @@ Sos {identity.get("name", "Royalia")}, {identity.get("role", "asistente de Royal
         """Formatea la sección de personalidad argentina"""
         language_style = personality.get("language_style", {})
         forbidden_words = personality.get("forbidden_words", [])
+        language_guidelines = language_style.get("language_guidelines", {})
         
         section = "## Personalidad Argentina\n"
         
@@ -187,6 +188,20 @@ Sos {identity.get("name", "Royalia")}, {identity.get("role", "asistente de Royal
         if language_style.get("typical_words"):
             words = ", ".join(language_style["typical_words"][:8])  # Limitar palabras
             section += f"- Palabras típicas: {words}\n"
+        
+        # Agregar directrices de variación lingüística
+        if language_guidelines:
+            word_rotation = language_guidelines.get("word_rotation", {})
+            if word_rotation.get("opening_alternatives"):
+                alternatives = ", ".join(word_rotation["opening_alternatives"][:8])
+                section += f"- **VARIÁ TUS INICIOS**: {alternatives}\n"
+            
+            if word_rotation.get("avoid_overuse"):
+                avoid_words = ", ".join(word_rotation["avoid_overuse"])
+                section += f"- **EVITAR ABUSO**: {avoid_words}\n"
+                
+            if word_rotation.get("rotation_rule"):
+                section += f"- **REGLA**: {word_rotation['rotation_rule']}\n"
         
         if language_style.get("emoji_usage", {}).get("use_emojis"):
             section += "- Usá emojis para remarcar algo importante (sin abusar)\n"
@@ -228,28 +243,60 @@ Sos {identity.get("name", "Royalia")}, {identity.get("role", "asistente de Royal
     
     def _format_training_section(self, product_training: Dict, combo_training: Dict) -> str:
         """Formatea la sección de entrenamiento"""
-        section = "# 📚 ENTRENAMIENTO Y MENTORÍA\n"
+        section = "# 📚 SISTEMA INTELIGENTE DE ENTRENAMIENTO\n"
+        
+        section += """
+## 🚀 USO OBLIGATORIO DE HERRAMIENTAS DE ENTRENAMIENTO
+
+**FLUJO INTELIGENTE DE RESPUESTA:**
+1. **SIEMPRE** usar get_context_summary() para entender la conversación actual
+2. **Combos/Emprendedores**: usar get_combo_recommendations(experiencia_cliente, contexto_conversacion)
+3. **Preguntas Frecuentes**: usar get_faq_response(tema_pregunta) 
+4. **Validación**: usar validate_response_against_training() para respuestas importantes
+5. **Personalidad**: usar get_personality_guidance() cuando necesites orientación de tono
+
+## 🎯 INTEGRACIÓN INTELIGENTE DE DATOS
+**PROHIBIDO:**
+- Usar respuestas tipo plantilla o hardcodeadas
+- Repetir las mismas frases de inicio ("Me encanta que...", "Genial que...")
+- Ignorar el contexto de la conversación
+- Dar respuestas genéricas sin personalización
+
+**OBLIGATORIO:**
+- Combinar datos de herramientas con contexto de memoria del usuario
+- Procesar información de entrenamiento con tu personalidad argentina
+- Variar completamente la expresión en cada respuesta
+- Integrar información de training + company data + conversación actual
+
+## 📋 DECISIÓN AUTOMÁTICA DE HERRAMIENTAS:
+"""
         
         # Reglas críticas de entrenamiento
         if product_training.get("critical_rules"):
-            section += "## Reglas Críticas:\n"
-            for rule in product_training["critical_rules"][:2]:
+            section += "\n### Reglas Críticas del Training:\n"
+            for rule in product_training["critical_rules"][:3]:
                 section += f"- {rule}\n"
         
         # Combos para emprendedores
         if combo_training.get("critical_rules"):
-            section += "\n## Protocolo de Combos:\n"
-            for rule in combo_training["critical_rules"][:2]:
+            section += "\n### Protocolo de Combos:\n"
+            for rule in combo_training["critical_rules"][:3]:
                 section += f"- {rule}\n"
         
-        # Ejemplos clave
-        examples = product_training.get("conversation_examples", [])
-        if examples:
-            section += f"\n## Ejemplo de Mentoría:\n"
-            example = examples[0] if examples else {}
-            if example:
-                section += f"Usuario: {example.get('user_query', '')}\n"
-                section += f"Royalia: {example.get('royalia_response', '')[:200]}...\n"
+        # Agregar ejemplo de uso inteligente
+        section += """
+## 🧠 EJEMPLO DE PROCESAMIENTO INTELIGENTE:
+
+**Usuario**: "quiero empezar pero no sé cuánto invertir"
+
+**Proceso IA**:
+1. get_context_summary() → revisar si ya conocemos al usuario
+2. get_investment_guidance() → obtener datos JSON sobre inversión  
+3. get_combo_recommendations("empezando", "consulta_inversion") → ejemplos específicos
+4. Combinar: datos + contexto + personalidad argentina → respuesta única y natural
+
+**Resultado**: Respuesta personalizada, argentina, con datos precisos, sin plantillas
+"""
         
         return section
     
@@ -296,6 +343,35 @@ Sos {identity.get("name", "Royalia")}, {identity.get("role", "asistente de Royal
         protocol_rules = protocols.get("critical_behavioral_rules", [])
         for rule in protocol_rules[:4]:  # Primeras 4 reglas de protocolo
             section += f"- {rule}\n"
+        
+        # Agregar reglas específicas para el uso de herramientas
+        section += """
+# 🛠️ REGLAS CRÍTICAS DE USO DE HERRAMIENTAS
+
+## TRAINING TOOLS - USO INTELIGENTE:
+- **get_combo_recommendations()**: OBLIGATORIO para usuarios emprendedores o consultas sobre combos
+- **get_faq_response()**: Para preguntas frecuentes sobre envíos, pagos, mínimos, etc.
+- **get_conversation_example()**: Cuando necesites inspiración de tono/estilo natural
+- **search_training_content()**: Para consultas específicas no cubiertas por otras herramientas
+
+## CONTEXTUAL TOOLS - MEMORIA ACTIVA:
+- **get_context_summary()**: SIEMPRE antes de responder para conocer el estado de la conversación
+- **analyze_user_message_and_update_profile()**: Con CADA mensaje para detectar info implícita
+- **handle_conversation_continuity()**: Para respuestas de continuación ("sí", "dale", "ok")
+
+## 🎯 VARIACIÓN LINGÜÍSTICA OBLIGATORIA:
+**ROTACIÓN DE PALABRAS DE INICIO:**
+- **Alternativas**: "Perfecto", "Claro", "Te explico", "Bárbaro", "Genial", "Excelente", "Buenísimo", "Ahí va", "Obvio"
+- **PROHIBIDO**: Usar "dale" más de 1 vez cada 5 respuestas
+- **OBLIGATORIO**: Variar completamente las expresiones de inicio en cada respuesta
+- **Conectores naturales**: "te explico", "te cuento", "mirá como es", "funciona así", "acá va"
+
+## INTEGRACIÓN INTELIGENTE:
+- Nunca uses UNA SOLA herramienta - combina datos de múltiples fuentes
+- Procesa la información con tu personalidad argentina y el contexto específico
+- Cada respuesta debe ser única, aunque uses los mismos datos
+- Aplicar las directrices de language_guidelines para máxima variación
+"""
         
         return section
     

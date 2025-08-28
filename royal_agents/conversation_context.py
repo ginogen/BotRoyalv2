@@ -288,7 +288,7 @@ class RoyalAgentContext:
     
     # Estado de herramientas MCP
     mcp_available: bool = False
-    training_available: bool = False
+    training_available: bool = True
     
     def __post_init__(self):
         """Inicializar conversation con user_id correcto"""

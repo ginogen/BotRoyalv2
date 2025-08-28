@@ -210,44 +210,92 @@ def get_combos_emprendedores_info() -> str:
 
 @function_tool
 def get_investment_guidance() -> str:
-    """Provides structured data about investment recommendations for entrepreneurs."""
-    return """
-INVESTMENT_GUIDANCE_DATA:
-{
-    "minimum_purchase": 40000,
-    "recommended_ranges": "40k-150k+ pesos depending on goals",
-    "key_benefits": [
-        "Variety testing: learn what customers prefer",
-        "Quick ROI: recover investment in weeks not months", 
-        "Revenue potential: 40k investment can generate 100k+ sales",
-        "Market validation: identify best selling products"
-    ],
-    "business_logic": "More variety = better customer insights = higher sales",
-    "next_action": "Choose product category (joyas, maquillaje, ropa, accesorios) for custom kit",
-    "tone_guidance": "Be encouraging about business opportunity - vary your expression each time"
-}
-
-INSTRUCTION: Express this data with creative variety. Never use repetitive formulas like 'Me encanta que...' or 'Genial que...'. Be naturally argentinian and enthusiastic but unique each time.
-"""
+    """Provides pure data about investment recommendations for entrepreneurs. AI should process this with full context, memory, and training."""
+    import json
+    
+    data = {
+        "investment_levels": {
+            "minimum_required": 40000,
+            "beginner_safe": "40k-80k",
+            "intermediate": "80k-150k", 
+            "advanced": "150k+",
+            "currency": "pesos argentinos"
+        },
+        "business_benefits": {
+            "variety_testing": "Aprender qué prefieren tus clientas probando diferentes productos",
+            "quick_roi": "Recuperar inversión en semanas, no meses",
+            "revenue_potential": "Inversión de 40k puede generar 100k+ en ventas", 
+            "market_validation": "Identificar productos más vendibles en tu zona",
+            "scalability": "Base sólida para hacer crecer el negocio"
+        },
+        "strategic_logic": {
+            "core_principle": "Más variedad = mejores insights de clientes = mayores ventas",
+            "risk_management": "Distribuir riesgo en múltiples productos",
+            "learning_curve": "Cada producto enseña sobre el mercado local"
+        },
+        "next_steps": [
+            "Elegir categoría principal (joyas, maquillaje, ropa, accesorios)",
+            "Considerar combos emprendedores para starter kit", 
+            "Planificar estrategia de lanzamiento",
+            "Definir precios según mercado local"
+        ],
+        "success_factors": {
+            "key_metrics": ["rotación de productos", "margen de ganancia", "satisfacción del cliente"],
+            "critical_decisions": ["pricing strategy", "target audience", "marketing approach"]
+        }
+    }
+    
+    return json.dumps(data, ensure_ascii=False, indent=2)
 
 @function_tool
 def get_sales_support_process() -> str:
-    """Provides structured data about Royal's sales support and personalized assistance."""
-    return """
-SALES_SUPPORT_DATA:
-{
-    "personalized_mentorship": "custom product selection based on location and profit margins",
-    "quick_process": "complete order in 5 minutes",
-    "fast_delivery": "2-3 days to receive stock",
-    "quick_roi": "start recovering investment in first week",
-    "zone_analysis": "products that sell well in customer's area",
-    "margin_optimization": "focus on highest profit items",
-    "time_saving": "no need to choose individual products",
-    "next_step": "choose product category for custom kit: joyas, maquillaje, indumentaria, accesorios"
-}
-
-INSTRUCTION: Present this sales mentorship with enthusiasm and action-oriented language. Vary your expression - never use the same opening phrases. Be naturally argentinian and encouraging.
-"""
+    """Provides pure data about Royal's sales support and mentorship process. AI should process this with full context, memory, and training."""
+    import json
+    
+    data = {
+        "mentorship_services": {
+            "personalized_selection": "Selección personalizada de productos según tu zona y márgenes de ganancia",
+            "business_planning": "Ayuda con planificación de ventas y estrategia comercial",
+            "content_creation": "Ideas para publicaciones, historias y promociones",
+            "pricing_strategy": "Asesoramiento para definir precios competitivos",
+            "customer_targeting": "Identificar el público ideal en tu área"
+        },
+        "process_efficiency": {
+            "order_speed": "Completar pedido en 5 minutos",
+            "delivery_time": "2-3 días para recibir stock",
+            "roi_timeline": "Empezar a recuperar inversión en primera semana",
+            "setup_support": "Acompañamiento desde el primer día"
+        },
+        "business_intelligence": {
+            "zone_analysis": "Análisis de productos que funcionan bien en tu zona",
+            "margin_optimization": "Enfoque en productos de mayor rentabilidad", 
+            "market_insights": "Datos sobre tendencias y preferencias locales",
+            "competitor_analysis": "Estrategias para diferenciarte"
+        },
+        "value_proposition": {
+            "time_saving": "No necesitas elegir productos uno por uno",
+            "risk_reduction": "Productos pre-validados en el mercado",
+            "ongoing_support": "Acompañamiento continuo, no solo venta inicial",
+            "growth_focused": "Orientado al crecimiento a largo plazo"
+        },
+        "next_actions": {
+            "category_selection": ["joyas", "maquillaje", "indumentaria", "accesorios", "combos mixtos"],
+            "consultation_topics": [
+                "análisis de tu mercado local",
+                "definición de estrategia de precios",
+                "planificación de lanzamiento",
+                "setup de redes sociales"
+            ]
+        },
+        "mentorship_approach": {
+            "proactive": "Ofrecemos ideas antes de que preguntes",
+            "practical": "Soluciones aplicables inmediatamente", 
+            "continuous": "Apoyo durante todo el crecimiento del negocio",
+            "personalized": "Adaptado a tu situación específica"
+        }
+    }
+    
+    return json.dumps(data, ensure_ascii=False, indent=2)
 
 @function_tool
 def get_company_info_by_topic(topic: str) -> str:
@@ -407,15 +455,16 @@ def create_royal_agent() -> Agent:
     # REGLAS DE COMPORTAMIENTO CRÍTICAS
     
     1. **CREATIVIDAD OBLIGATORIA** - NUNCA repitas las mismas frases de inicio o estructura
-    2. **USO INTELIGENTE DE TOOLS** - Cuando uses tools, tomá los datos pero expresalos con TUS palabras, de forma diferente cada vez
-    3. **No saludar repetidamente** - Solo en el primer contacto del día por cliente
-    4. **No inventar información** - Si no sabés algo específico, decí: "Uy, eso lo tengo que consultar puntualmente. Te confirmo enseguida y te doy una respuesta completa 👍"
-    5. **VARIACIÓN TOTAL** - Si el cliente reformula una pregunta, variar COMPLETAMENTE la respuesta, no repetir estructura
-    6. **Ser natural y fluido** - No mencionar que sos un bot, sistema de agentes o tecnología interna
-    7. **Redirigir cuando sea necesario** - Pero sin que el cliente perciba la estructura interna del sistema
-    8. **Mantener tono argentino VARIADO** - Informal, cercano, amigable SIEMPRE, pero expresándote diferente cada vez
-    9. **Ofrecer sistema de seña** - Cuando el cliente esté por confirmar un pedido, mencionar el sistema de seña de $10,000
-    10. **No ser formal o neutro** - Evitar sonar como un bot corporativo, ser como un amigo local
+    2. **VARIACIÓN DE PALABRAS DE INICIO** - Rotá expresiones: "Perfecto", "Claro", "Te explico", "Bárbaro", "Genial". EVITAR usar "dale" más de 1 vez cada 5 respuestas
+    3. **USO INTELIGENTE DE TOOLS** - Cuando uses tools, tomá los datos pero expresalos con TUS palabras, de forma diferente cada vez
+    4. **No saludar repetidamente** - Solo en el primer contacto del día por cliente
+    5. **No inventar información** - Si no sabés algo específico, decí: "Uy, eso lo tengo que consultar puntualmente. Te confirmo enseguida y te doy una respuesta completa 👍"
+    6. **VARIACIÓN TOTAL** - Si el cliente reformula una pregunta, variar COMPLETAMENTE la respuesta, no repetir estructura
+    7. **Ser natural y fluido** - No mencionar que sos un bot, sistema de agentes o tecnología interna
+    8. **Redirigir cuando sea necesario** - Pero sin que el cliente perciba la estructura interna del sistema
+    9. **Mantener tono argentino VARIADO** - Informal, cercano, amigable SIEMPRE, pero expresándote diferente cada vez
+    10. **Ofrecer sistema de seña** - Cuando el cliente esté por confirmar un pedido, mencionar el sistema de seña de $10,000
+    11. **No ser formal o neutro** - Evitar sonar como un bot corporativo, ser como un amigo local
     
     ## Constraints Adicionales:
     - No proporcionar información no relacionada o suposiciones
@@ -429,7 +478,7 @@ def create_royal_agent() -> Agent:
     # SITUACIONES FRECUENTES
     
     ## Cliente pregunta cómo funciona Royal:
-    "Dale, te explico. En Royal vendemos al por mayor para revendedores con un mínimo de $40,000. 
+    "Te explico como funciona. En Royal vendemos al por mayor para revendedores con un mínimo de $40,000. 
     Si sos revendedor, tenés precios re copados. Si querés comprar para vos nomás, 
     también tenemos venta minorista sin mínimo. Enviamos a todo el país y tenemos locales acá en Córdoba. 
     ¿Qué te interesa puntualmente?"
@@ -441,7 +490,7 @@ def create_royal_agent() -> Agent:
     También podés traerla al local de General Paz 159. ¿Qué necesitás arreglar?"
     
     ## Joyas personalizadas:
-    "¡Genial! Tenemos joyas personalizadas en plata 925. Grabados con nombres, iniciales, símbolos.
+    "¡Claro que sí! Tenemos joyas personalizadas en plata 925. Grabados con nombres, iniciales, símbolos.
     Anillos, dijes y pulseras exclusivas. Sin mínimo después de tu primera compra mayorista.
     ¿Tenés algún diseño en mente o querés que te asesoremos?"
     

@@ -312,12 +312,22 @@ async def validate_response_against_training(message: str, context: str = "") ->
                     validation_result['suggestions'].append('Al ofrecer combos, siempre explicar los beneficios')
                     validation_result['score'] -= 5
         
-        # Validar personalidad argentina
-        argentine_indicators = ['dale', 'mirá', 'bárbaro', 'genial', 'joya', 'posta']
+        # Validar personalidad argentina con variedad
+        argentine_indicators = [
+            'mirá', 'bárbaro', 'genial', 'joya', 'posta', 'claro', 'perfecto', 
+            'buenísimo', 'excelente', 'obvio', 'tranquila', 'laburo', 'ojo', 
+            'che', 'vos', 'tenés', 'querés', 'podés', 'dale'  # dale al final
+        ]
         has_argentine_tone = any(indicator in message_lower for indicator in argentine_indicators)
         
+        # Detectar abuso de "dale"
+        dale_count = message_lower.count('dale')
+        if dale_count > 1:
+            validation_result['suggestions'].append('Evitar usar "dale" múltiples veces. Variar con: "Perfecto", "Claro", "Excelente"')
+            validation_result['score'] -= 5
+        
         if not has_argentine_tone and len(message) > 50:
-            validation_result['suggestions'].append('Considerar usar más expresiones argentinas para mantener el tono local')
+            validation_result['suggestions'].append('Considerar usar más expresiones argentinas variadas para mantener el tono local')
             validation_result['score'] -= 3
         
         # Preparar respuesta
@@ -379,8 +389,10 @@ async def get_personality_guidance() -> str:
                 response += f"• {word}\n"
             response += "\n"
         
-        response += "🎯 **Palabras Recomendadas:**\n"
-        response += "• dale, mirá, bárbaro, genial, joya, posta, laburo\n"
+        response += "🎯 **Palabras Recomendadas (con VARIACIÓN):**\n"
+        response += "• **Inicios variados**: Perfecto, Claro, Te explico, Bárbaro, Genial, Excelente, Buenísimo\n"
+        response += "• **Argentinismos**: mirá, ojo, posta, joya, tranquila, laburo, obvio\n"
+        response += "• **ROTAR 'dale'**: usar máximo 1 vez cada 5 respuestas\n"
         response += "• Evitar formalidad excesiva\n"
         response += "• Mantener tono argentino natural y amigable\n"
         
