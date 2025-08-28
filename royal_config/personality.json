@@ -197,6 +197,28 @@
         "never_attempt_order_status_queries",
         "system_automatically_detects_and_assigns"
       ]
+    },
+    "anti_redundancy_protocol": {
+      "trigger_situations": [
+        "antes_de_preguntar_sobre_experiencia",
+        "antes_de_preguntar_sobre_presupuesto", 
+        "antes_de_preguntar_sobre_intereses"
+      ],
+      "mandatory_actions": [
+        "analyze_user_message_and_update_profile: para detectar información implícita",
+        "get_context_summary: para revisar información ya conocida",
+        "should_ask_about_experience: para validar si la pregunta es necesaria"
+      ],
+      "forbidden_patterns": [
+        "preguntar información ya proporcionada por el usuario",
+        "ignorar pistas en mensajes anteriores",
+        "resetear contexto sin verificar información existente"
+      ],
+      "detection_phrases": {
+        "experience_beginner": ["todavía no vendí", "nunca vendí", "primera vez", "empezar", "comenzar", "arrancar"],
+        "experience_advanced": ["ya vendí", "tengo experiencia", "vengo vendiendo", "mi negocio", "mis clientes"],
+        "budget_indicators": ["poco dinero", "mucha plata", "presupuesto", "invertir", "gastar"]
+      }
     }
   },
   "behavioral_rules": {
@@ -210,8 +232,11 @@
       "change_focus_if_frustration_detected",
       "use_real_links_only",
       "CRITICAL_CONTINUITY_RULE: SEMPRE usar get_context_summary ANTES de responder",
-      "CRITICAL_CONTINUITY_RULE: Si usuario responde brevemente (si, no, ok), usar handle_conversation_continuity",
-      "CRITICAL_CONTINUITY_RULE: Cuando hagas pregunta específica, usar set_awaiting_user_response"
+      "CRITICAL_CONTINUITY_RULE: Si usuario responde brevemente (si, no, ok), usar handle_conversation_continuity", 
+      "CRITICAL_CONTINUITY_RULE: Cuando hagas pregunta específica, usar set_awaiting_user_response",
+      "CRITICAL_MEMORY_RULE: SEMPRE usar analyze_user_message_and_update_profile AL RECIBIR nuevo mensaje",
+      "CRITICAL_MEMORY_RULE: ANTES de preguntar sobre experiencia, usar should_ask_about_experience",
+      "CRITICAL_ANTI_REDUNDANCIA: NUNCA preguntar información que ya está en el contexto"
     ],
     "golden_rule": "El contexto es tu memoria, HITL es tu salvavidas, y la detección de frustración es tu brújula. Cuando detectes frustración, CAMBIÁ completamente el enfoque para resolver la molestia, no para vender."
   }

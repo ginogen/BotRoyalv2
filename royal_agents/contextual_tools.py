@@ -931,6 +931,180 @@ async def set_awaiting_user_response(wrapper: RunContextWrapper[RoyalAgentContex
     
     return f"✅ Marcado como esperando respuesta para: {pending_action}"
 
+@function_tool
+async def analyze_user_message_and_update_profile(wrapper: RunContextWrapper[RoyalAgentContext], user_message: str) -> str:
+    """
+    HERRAMIENTA CRÍTICA: Analiza automáticamente el mensaje del usuario para extraer 
+    información del perfil y evitar preguntas redundantes.
+    """
+    
+    context = wrapper.context
+    conversation = context.conversation
+    user_id = context.user_id
+    
+    logger.info(f"🧠 ANALYZE_USER_MESSAGE para usuario: {user_id}")
+    logger.info(f"   Mensaje: {user_message}")
+    
+    message_lower = user_message.lower()
+    profile_updates = []
+    
+    # 1. DETECCIÓN DE NIVEL DE EXPERIENCIA
+    beginner_patterns = [
+        "todavía no vendí", "todavia no vendi", "nunca vendí", "nunca vendi", 
+        "no vendí nada", "no vendi nada", "primera vez", "primer emprendimiento",
+        "empezar", "comenzar", "arrancar", "no tengo experiencia", 
+        "soy nuevo", "soy nueva", "recién empiezo", "recien empiezo"
+    ]
+    
+    experienced_patterns = [
+        "ya vendí", "ya vendi", "tengo experiencia", "vengo vendiendo", 
+        "hace tiempo que vendo", "soy revendedor", "soy revendedora",
+        "mi negocio", "mis clientes", "mis ventas", "renovar stock"
+    ]
+    
+    restocking_patterns = [
+        "renovar stock", "reponer stock", "necesito más", "se me acabó",
+        "se me acabo", "quiero más productos", "restock"
+    ]
+    
+    if any(pattern in message_lower for pattern in beginner_patterns):
+        if not conversation.experience_level:  # Solo actualizar si no está definido
+            conversation.update_user_profile("experience_level", "empezando")
+            conversation.is_entrepreneur = True
+            profile_updates.append("Experiencia: principiante/empezando")
+            logger.info(f"📊 Detectado: usuario principiante")
+    
+    elif any(pattern in message_lower for pattern in experienced_patterns):
+        if not conversation.experience_level:
+            conversation.update_user_profile("experience_level", "experimentado") 
+            conversation.is_entrepreneur = True
+            profile_updates.append("Experiencia: experimentado")
+            logger.info(f"📊 Detectado: usuario experimentado")
+    
+    elif any(pattern in message_lower for pattern in restocking_patterns):
+        if not conversation.experience_level:
+            conversation.update_user_profile("experience_level", "renovando_stock")
+            conversation.is_entrepreneur = True
+            profile_updates.append("Experiencia: renovando stock")
+            logger.info(f"📊 Detectado: usuario renovando stock")
+    
+    # 2. DETECCIÓN DE INTERESES DE PRODUCTO
+    product_interests = []
+    
+    if any(word in message_lower for word in ["joya", "joyas", "anillo", "collar", "pulsera", "aros"]):
+        product_interests.append("joyas")
+    if any(word in message_lower for word in ["maquillaje", "makeup", "labial", "sombra", "base"]):
+        product_interests.append("maquillaje") 
+    if any(word in message_lower for word in ["ropa", "indumentaria", "remera", "vestido", "pantalón"]):
+        product_interests.append("indumentaria")
+    if any(word in message_lower for word in ["bijou", "bijouterie", "accesorios"]):
+        product_interests.append("bijouterie")
+    if any(word in message_lower for word in ["reloj", "relojes"]):
+        product_interests.append("relojes")
+    
+    for interest in product_interests:
+        if interest not in conversation.product_interests:
+            conversation.product_interests.append(interest)
+            profile_updates.append(f"Interés detectado: {interest}")
+            logger.info(f"📊 Detectado interés: {interest}")
+    
+    # 3. DETECCIÓN DE PRESUPUESTO
+    budget_patterns = [
+        (r"(\d+)k", "aproximadamente {} mil pesos"),
+        (r"\$(\d+\.?\d*)", "${} pesos"),
+        (r"(\d+)\s*mil", "{} mil pesos"),
+        (r"poco.*dinero", "presupuesto ajustado"),
+        (r"mucha.*plata", "presupuesto amplio"),
+    ]
+    
+    import re
+    for pattern, description in budget_patterns:
+        match = re.search(pattern, message_lower)
+        if match and not conversation.budget_range:
+            if match.groups():
+                budget_info = description.format(match.group(1))
+            else:
+                budget_info = description
+            conversation.budget_range = budget_info
+            profile_updates.append(f"Presupuesto: {budget_info}")
+            logger.info(f"📊 Detectado presupuesto: {budget_info}")
+            break
+    
+    # 4. DETECCIÓN DE INTENCIÓN
+    if any(word in message_lower for word in ["emprender", "emprendimiento", "negocio", "revender"]):
+        if not conversation.user_intent:
+            conversation.user_intent = "emprendedor"
+            conversation.is_entrepreneur = True
+            profile_updates.append("Intención: emprendedor")
+            logger.info(f"📊 Detectado: intención emprendedora")
+    
+    # Registrar actualizaciones en el historial
+    if profile_updates:
+        conversation.add_interaction("system", f"Perfil actualizado automáticamente: {', '.join(profile_updates)}", {
+            "auto_analysis": True,
+            "updates": profile_updates
+        })
+        
+        result = f"✅ Perfil actualizado automáticamente:\n" + "\n".join(f"• {update}" for update in profile_updates)
+        logger.info(f"✅ {len(profile_updates)} actualizaciones de perfil realizadas")
+        return result
+    else:
+        return "✅ Mensaje analizado, no se detectaron actualizaciones de perfil necesarias"
+
+@function_tool
+async def should_ask_about_experience(wrapper: RunContextWrapper[RoyalAgentContext]) -> str:
+    """
+    Valida si es necesario preguntar sobre experiencia del usuario o si ya se conoce.
+    CRÍTICO: Evita preguntas redundantes.
+    """
+    
+    context = wrapper.context
+    conversation = context.conversation
+    
+    logger.info(f"🤔 SHOULD_ASK_ABOUT_EXPERIENCE para usuario: {context.user_id}")
+    logger.info(f"   Experience level actual: {conversation.experience_level}")
+    logger.info(f"   Is entrepreneur: {conversation.is_entrepreneur}")
+    
+    # Si ya tenemos el nivel de experiencia, NO preguntar
+    if conversation.experience_level:
+        response = f"❌ NO PREGUNTAR - Ya conocemos la experiencia del usuario: {conversation.experience_level}"
+        logger.info(response)
+        return response
+    
+    # Revisar historial de interacciones por pistas
+    beginner_hints = [
+        "todavía no vendí", "todavia no vendi", "nunca vendí", "primera vez",
+        "empezar", "comenzar", "arrancar", "soy nuevo", "soy nueva"
+    ]
+    
+    experienced_hints = [
+        "ya vendí", "tengo experiencia", "vengo vendiendo", "mi negocio", 
+        "mis clientes", "renovar stock"
+    ]
+    
+    recent_messages = conversation.interaction_history[-3:]  # Últimos 3 mensajes
+    all_text = " ".join([msg["message"].lower() for msg in recent_messages if msg["role"] == "user"])
+    
+    if any(hint in all_text for hint in beginner_hints):
+        # Actualizar automáticamente y no preguntar
+        conversation.update_user_profile("experience_level", "empezando")
+        conversation.is_entrepreneur = True
+        response = "❌ NO PREGUNTAR - Detectado automáticamente: principiante (basado en mensajes recientes)"
+        logger.info(response)
+        return response
+    
+    if any(hint in all_text for hint in experienced_hints):
+        conversation.update_user_profile("experience_level", "experimentado")
+        conversation.is_entrepreneur = True
+        response = "❌ NO PREGUNTAR - Detectado automáticamente: experimentado (basado en mensajes recientes)"
+        logger.info(response)
+        return response
+    
+    # Si no tenemos información, SÍ es válido preguntar
+    response = "✅ SÍ PREGUNTAR - No tenemos información sobre experiencia del usuario"
+    logger.info(response)
+    return response
+
 def create_contextual_tools():
     """Crea todas las herramientas contextuales"""
     
@@ -950,7 +1124,9 @@ def create_contextual_tools():
         get_recommendations_with_context,
         clear_conversation_context,
         handle_conversation_continuity,
-        set_awaiting_user_response
+        set_awaiting_user_response,
+        analyze_user_message_and_update_profile,
+        should_ask_about_experience
     ]
     
     logger.info(f"✅ Contextual Tools creadas: {len(tools)} herramientas disponibles (HITL deshabilitado)")

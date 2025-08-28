@@ -239,16 +239,27 @@ class ConversationMemory:
                 summary_parts.append(f"📋 Datos contextuales: {self.context_data}")
             summary_parts.append("🚨 CRÍTICO: El usuario debe estar respondiendo a la pregunta anterior, NO iniciar conversación nueva")
         
-        # Perfil del usuario
+        # Perfil del usuario con alertas anti-redundancia
         if self.is_entrepreneur:
             summary_parts.append(f"👤 Usuario: Emprendedor ({self.experience_level})")
+            if self.experience_level:
+                summary_parts.append(f"🚨 ANTI-REDUNDANCIA: NO preguntar sobre experiencia - ya sabemos que es {self.experience_level}")
             
         if self.product_interests:
             interests = ", ".join(self.product_interests[-3:])  # Últimos 3 intereses
             summary_parts.append(f"💡 Intereses: {interests}")
+            summary_parts.append(f"🚨 ANTI-REDUNDANCIA: Intereses conocidos, personalizar según {interests}")
             
         if self.budget_range:
             summary_parts.append(f"💰 Presupuesto: {self.budget_range}")
+            summary_parts.append(f"🚨 ANTI-REDUNDANCIA: NO preguntar sobre presupuesto - ya sabemos: {self.budget_range}")
+        
+        # Información crítica para evitar redundancia
+        if self.is_entrepreneur and not self.experience_level:
+            summary_parts.append("⚠️ USAR analyze_user_message_and_update_profile ANTES de preguntar sobre experiencia")
+        
+        if not self.product_interests and not self.budget_range:
+            summary_parts.append("💡 OPORTUNIDAD: Usar analyze_user_message_and_update_profile para detectar intereses/presupuesto")
         
         # Productos recientes
         if self.recent_products:
