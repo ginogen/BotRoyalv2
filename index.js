@@ -48,8 +48,8 @@ const processedMessages = new Map(); // userId -> Set de IDs de mensajes procesa
 const userLastProcessingTime = new Map(); // userId -> timestamp
 
 // Configuración con variables de entorno
-const BUFFER_TIMEOUT_MS = parseInt(process.env.BUFFER_TIMEOUT_MS) || 8000;
-const MESSAGE_COOLDOWN_MS = parseInt(process.env.MESSAGE_COOLDOWN_MS) || 2000;
+const BUFFER_TIMEOUT_MS = parseInt(process.env.BUFFER_TIMEOUT_MS) || 3000;
+const MESSAGE_COOLDOWN_MS = parseInt(process.env.MESSAGE_COOLDOWN_MS) || 1000;
 
 // 🎯 Métricas de rendimiento
 const performanceMetrics = {

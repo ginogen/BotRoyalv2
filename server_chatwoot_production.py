@@ -66,8 +66,8 @@ INSTANCE_NAME = os.getenv("INSTANCE_NAME", "F1_Retencion")
 # Workers y concurrencia
 WORKER_POOL_SIZE = int(os.getenv("WORKER_POOL_SIZE", 3))
 MAX_CONCURRENT_USERS = int(os.getenv("MAX_CONCURRENT_USERS", 5))
-MESSAGE_BUFFER_TIMEOUT = int(os.getenv("MESSAGE_BUFFER_TIMEOUT", 8000)) / 1000  # Convertir a segundos
-MESSAGE_COOLDOWN = int(os.getenv("MESSAGE_COOLDOWN", 2000)) / 1000
+MESSAGE_BUFFER_TIMEOUT = int(os.getenv("MESSAGE_BUFFER_TIMEOUT", 3000)) / 1000  # Convertir a segundos
+MESSAGE_COOLDOWN = int(os.getenv("MESSAGE_COOLDOWN", 1000)) / 1000
 
 # ================================
 # ESTRUCTURAS DE DATOS

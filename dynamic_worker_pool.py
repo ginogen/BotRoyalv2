@@ -259,7 +259,7 @@ class Worker:
         self.metrics.status = WorkerStatus.SHUTTING_DOWN
         
         # Wait for current task to complete (with timeout)
-        timeout = 30  # 30 seconds timeout
+        timeout = 15  # 15 seconds timeout
         while self.is_running and timeout > 0:
             await asyncio.sleep(1)
             timeout -= 1
@@ -294,10 +294,10 @@ class DynamicWorkerPool:
         self.worker_tasks: Dict[str, asyncio.Task] = {}
         
         # Configuration (Railway-optimized)
-        self.min_workers = int(os.getenv('MIN_WORKERS', 2))
+        self.min_workers = int(os.getenv('MIN_WORKERS', 3))
         self.max_workers = int(os.getenv('MAX_WORKERS', 8))
-        self.target_response_time = float(os.getenv('TARGET_RESPONSE_TIME', 10.0))  # seconds
-        self.scale_cooldown = int(os.getenv('SCALE_COOLDOWN', 30))  # seconds
+        self.target_response_time = float(os.getenv('TARGET_RESPONSE_TIME', 5.0))  # seconds
+        self.scale_cooldown = int(os.getenv('SCALE_COOLDOWN', 20))  # seconds
         
         # Auto-scaling thresholds
         self.scale_up_queue_threshold = int(os.getenv('SCALE_UP_QUEUE_THRESHOLD', 10))

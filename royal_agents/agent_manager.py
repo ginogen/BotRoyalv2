@@ -312,22 +312,29 @@ def run_contextual_conversation_sync_managed(user_id: str, user_message: str) ->
         import threading
         from concurrent.futures import ThreadPoolExecutor
         
-        def run_conversation():
+        async def run_conversation():
             try:
                 from agents import Runner
-                with Runner(agent, context) as runner:
-                    result = runner.run(user_message)
-                    return result.value if hasattr(result, 'value') else str(result)
+                result = await Runner.run(
+                    agent,
+                    user_message,
+                    context=context
+                )
+                return result.final_output if hasattr(result, 'final_output') else str(result)
             except Exception as e:
                 logger.error(f"❌ Error in managed conversation: {e}")
                 # Fallback al agente contextual original
                 from .royal_agent_contextual import run_contextual_conversation_sync
                 return run_contextual_conversation_sync(user_id, user_message)
         
+        # Ejecutar la función asíncrona
+        def sync_run_conversation():
+            return asyncio.run(run_conversation())
+        
         # Ejecutar en thread pool para compatibilidad
-        with ThreadPoolExecutor(max_workers=1) as executor:
-            future = executor.submit(run_conversation)
-            return future.result(timeout=120)
+        with ThreadPoolExecutor(max_workers=3) as executor:
+            future = executor.submit(sync_run_conversation)
+            return future.result(timeout=30)
             
     except Exception as e:
         logger.error(f"❌ Error in agent manager conversation: {e}")
