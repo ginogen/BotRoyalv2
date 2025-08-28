@@ -42,7 +42,13 @@ class UnifiedRoyalAgentConfig:
     """Cargador y gestor de configuración unificada"""
     
     def __init__(self, config_dir: str = None):
-        self.config_dir = Path(config_dir or "/Users/gino/BotRoyalv2/royal_config")
+        if config_dir:
+            self.config_dir = Path(config_dir)
+        else:
+            # Path relativo desde este archivo hacia royal_config
+            current_file = Path(__file__).resolve()
+            project_root = current_file.parent.parent  # royal_agents -> BotRoyalv2
+            self.config_dir = project_root / "royal_config"
         self.config = {}
         self._load_all_configs()
     
