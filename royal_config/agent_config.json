@@ -108,7 +108,7 @@
     }
   },
   "feature_flags": {
-    "use_unified_agent": false,
+    "use_unified_agent": true,
     "preserve_original_agents": true,
     "enable_a_b_testing": false,
     "enable_response_logging": true,

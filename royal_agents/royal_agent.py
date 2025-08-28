@@ -186,74 +186,115 @@ def get_combos_emprendedores_info() -> str:
     """
 
 @function_tool
-def get_inversion_presupuesto_info() -> str:
-    """Información sobre cuánto invertir y presupuesto recomendado para emprendedores."""
+def get_investment_guidance() -> str:
+    """Provides structured data about investment recommendations for entrepreneurs."""
     return """
-    Me encanta que ya estés pensando en invertir 💛 Eso es clave para arrancar con fuerza y generar ventas desde el primer día.
-    
-    Como la compra mínima es de $40.000, lo ideal para tu primera inversión está entre $40.000 y $150.000, según lo que quieras y puedas destinar. Esto te permite tener suficiente variedad para mostrar, probar diferentes productos y ver cuáles se mueven mejor con tus clientas.
-    
-    Cuanta más variedad tengas al inicio, más fácil es que las personas te digan qué les gusta y qué prefieren. Esa información es oro para que puedas traer justo lo que ellas buscan y aumentar tus ventas 🚀
-    
-    **💡 Miralo así:** Con solo $40.000 ya tenés suficiente para generar $100.000+ en ventas. Es una inversión que se recupera en semanas, no en meses.
-    
-    Contame, ¿ya tenés en mente si querés trabajar con joyas, maquillaje o ropa? **En este momento te puedo armar un kit personalizado** con los productos que más se venden en ese rubro 🚀
-    """
+INVESTMENT_GUIDANCE_DATA:
+{
+    "minimum_purchase": 40000,
+    "recommended_ranges": "40k-150k+ pesos depending on goals",
+    "key_benefits": [
+        "Variety testing: learn what customers prefer",
+        "Quick ROI: recover investment in weeks not months", 
+        "Revenue potential: 40k investment can generate 100k+ sales",
+        "Market validation: identify best selling products"
+    ],
+    "business_logic": "More variety = better customer insights = higher sales",
+    "next_action": "Choose product category (joyas, maquillaje, ropa, accesorios) for custom kit",
+    "tone_guidance": "Be encouraging about business opportunity - vary your expression each time"
+}
+
+INSTRUCTION: Express this data with creative variety. Never use repetitive formulas like 'Me encanta que...' or 'Genial que...'. Be naturally argentinian and enthusiastic but unique each time.
+"""
 
 @function_tool
-def get_acompanamiento_venta_info() -> str:
-    """Ofrece acompañamiento inmediato y cierre de venta consultivo."""
+def get_sales_support_process() -> str:
+    """Provides structured data about Royal's sales support and personalized assistance."""
     return """
-    🎆 **¡Perfect timing!** Te noto súper motivada y eso es lo más importante para tener éxito.
-    
-    **📞 ¿Querés que te arme algo personalizado AHORA MISMO?**
-    
-    En base a lo que me contás, puedo armarte un kit con los productos que más se venden en tu zona y que tienen mejor margen de ganancia. No pierdas tiempo eligiendo uno por uno.
-    
-    **💎 Esto es lo que pasa después:**
-    1. Te mando la selección personalizada
-    2. Hacés el pedido en 5 minutos
-    3. En 2-3 días tenés tu stock listo para vender
-    4. Empezás a recuperar tu inversión en la primera semana
-    
-    **🚀 Decime:** ¿Prefierís que te arme algo de joyas, maquillaje o indumentaria? ¡Arranquemos!
-    """
+SALES_SUPPORT_DATA:
+{
+    "personalized_mentorship": "custom product selection based on location and profit margins",
+    "quick_process": "complete order in 5 minutes",
+    "fast_delivery": "2-3 days to receive stock",
+    "quick_roi": "start recovering investment in first week",
+    "zone_analysis": "products that sell well in customer's area",
+    "margin_optimization": "focus on highest profit items",
+    "time_saving": "no need to choose individual products",
+    "next_step": "choose product category for custom kit: joyas, maquillaje, indumentaria, accesorios"
+}
+
+INSTRUCTION: Present this sales mentorship with enthusiasm and action-oriented language. Vary your expression - never use the same opening phrases. Be naturally argentinian and encouraging.
+"""
 
 @function_tool
-def get_situaciones_frecuentes(situacion: str) -> str:
-    """Respuestas para situaciones frecuentes específicas."""
+def get_company_info_by_topic(topic: str) -> str:
+    """Provides structured company information by topic."""
     
-    situaciones = {
-        "como_funciona": """Dale, te explico. En Royal vendemos productos al por mayor para revendedores y emprendedores, con un mínimo de compra de $40,000.
-Si sos revendedor, tenés acceso a precios especiales.
-Si querés comprar solo para vos, también tenemos venta minorista sin mínimo de compra.
-Enviamos a todo el país y tenemos locales físicos en Córdoba. ¿Querés que te asesore sobre los productos ideales para vos?""",
-        
-        "arreglos": """Sí, en Royal ofrecemos servicio de arreglos y restauración de joyas en plata 925 y oro 18K.
-Algunos de nuestros servicios incluyen:
-• Soldaduras
-• Ajustes de tamaño (agrandar o achicar anillos)
-• Cambio de piedras y pulido
-• Restauración de piezas antiguas
-• Cambio de mallas y pilas de relojes
+    info_database = {
+        "como_funciona": """
+COMPANY_INFO_DATA:
+{
+    "business_model": "wholesale and retail",
+    "target_customers": ["revendedores", "emprendedores", "usuarios_finales"],
+    "wholesale_minimum": 40000,
+    "retail_minimum": 0,
+    "wholesale_benefits": "special wholesale prices and exclusive access",
+    "retail_benefits": "no minimum purchase required",
+    "shipping": "nationwide delivery",
+    "physical_locations": "Córdoba stores",
+    "next_step": "product advisory consultation"
+}
 
-Podés enviarnos una foto de tu joya por WhatsApp y te pasamos un presupuesto. También podés traerla a nuestro local en General Paz 159, Galería Planeta, Local 18.
-¿Querés que te asesoremos sobre tu joya?""",
+INSTRUCTION: Explain how Royal works naturally and enthusiastically. Vary your expression each time.
+""",
         
-        "personalizadas": """¡Sí! Tenemos una categoría especial de joyas personalizadas en plata 925.
-• Grabados personalizados con nombres, iniciales o símbolos
-• Anillos, dijes y pulseras con diseño exclusivo
-• Pedidos especiales sin mínimo después de tu primera compra mayorista
+        "arreglos": """
+JEWELRY_REPAIR_DATA:
+{
+    "services_available": true,
+    "materials": ["plata 925", "oro 18K"],
+    "services": ["soldaduras", "ajustes de tamaño", "cambio de piedras", "pulido", "restauración de piezas antiguas", "cambio de mallas y pilas de relojes"],
+    "process_whatsapp": "send photo for quote",
+    "process_physical": "bring to store for assessment",
+    "location": "General Paz 159, Galería Planeta, Local 18",
+    "next_step": "jewelry assessment consultation"
+}
 
-¿Te gustaría que te asesoremos sobre qué personalización hacer?""",
+INSTRUCTION: Present jewelry repair services with creative variety. Be helpful and encouraging.
+""",
         
-        "redes_sociales": """Sí, nos encontrás en:
-Instagram: @royal.joyas (joyas), @royal.bijou (bijouterie), @royal.indumentaria (indumentaria y accesorios)
-Facebook: Royal Company
-Seguinos para ver novedades, promociones y consejos para emprendedores. ¡Nos encantaría que formes parte de nuestra comunidad! 🎉"""
+        "personalizadas": """
+CUSTOM_JEWELRY_DATA:
+{
+    "available": true,
+    "material": "plata 925",
+    "customization_types": ["grabados personalizados", "nombres e iniciales", "símbolos", "diseño exclusivo"],
+    "products": ["anillos", "dijes", "pulseras"],
+    "ordering": "no minimum after first wholesale purchase",
+    "next_step": "personalization consultation"
+}
+
+INSTRUCTION: Present custom jewelry options with enthusiasm and creative expression. Each time differently.
+""",
+        
+        "redes_sociales": """
+SOCIAL_MEDIA_DATA:
+{
+    "instagram_accounts": {
+        "@royal.joyas": "jewelry",
+        "@royal.bijou": "bijouterie", 
+        "@royal.indumentaria": "clothing and accessories"
+    },
+    "facebook": "Royal Company",
+    "content_types": ["novedades", "promociones", "consejos para emprendedores"],
+    "community_benefit": "join entrepreneurial community and get tips"
+}
+
+INSTRUCTION: Share social media info enthusiastically and encourage following. Vary your approach each time.
+"""
     }
     
-    return situaciones.get(situacion, "Información no disponible para esta situación.")
+    return info_database.get(topic, "ERROR: Information not available for this topic")
 
 def create_royal_agent() -> Agent:
     """Crea y configura el agente de consultas de Royal."""
@@ -264,10 +305,13 @@ def create_royal_agent() -> Agent:
     
     Sos Royalia, el primer punto de contacto de Royal Company. Solo saludá en el PRIMER mensaje del día por cliente, nunca más.
     
-    ## Personalidad Argentina
-    - Hablá en tono argentino informal y amigable, pero sin ser exageros, ya que estás hablando con posibles clientes.
-    - Evitá ser formal o neutro (debes vosear, no hablar en "usted").
+    ## Personalidad Argentina - CREATIVIDAD Y VARIACIÓN
+    - Hablá en tono argentino informal y amigable, pero VARIÁ tu forma de expresarte
+    - NUNCA uses las mismas frases de inicio: "Me encanta que...", "Genial que...", "Qué bueno que..."
+    - Sé natural y espontánea: dale, mirá, bárbaro, genial, perfecto, buenísimo
+    - Evitá ser formal o neutro (debes vosear, no hablar en "usted")
     - Usá emojis para remarcar algo importante (sin abusar)
+    - CADA respuesta debe sonar diferente, aunque la información sea la misma
     
     ## PALABRAS PROHIBIDAS - NUNCA USAR:
     aquí, puedes, quieres, tienes, debes, sería bueno que, ¿Deseas...?, ¿Puedes...?, 
@@ -338,14 +382,16 @@ def create_royal_agent() -> Agent:
     
     # REGLAS DE COMPORTAMIENTO CRÍTICAS
     
-    1. **No saludar repetidamente** - Solo en el primer contacto del día por cliente
-    2. **No inventar información** - Si no sabés algo específico, decí: "Uy, eso lo tengo que consultar puntualmente. Te confirmo enseguida y te doy una respuesta completa 👍"
-    3. **Evitar respuestas duplicadas** - Si el cliente reformula una pregunta, variar la respuesta, no repetir palabra por palabra
-    4. **Ser natural y fluido** - No mencionar que sos un bot, sistema de agentes o tecnología interna
-    5. **Redirigir cuando sea necesario** - Pero sin que el cliente perciba la estructura interna del sistema
-    6. **Mantener tono argentino** - Informal, cercano, amigable SIEMPRE
-    7. **Ofrecer sistema de seña** - Cuando el cliente esté por confirmar un pedido, mencionar el sistema de seña de $10,000
-    8. **No ser formal o neutro** - Evitar sonar como un bot corporativo, ser como un amigo local
+    1. **CREATIVIDAD OBLIGATORIA** - NUNCA repitas las mismas frases de inicio o estructura
+    2. **USO INTELIGENTE DE TOOLS** - Cuando uses tools, tomá los datos pero expresalos con TUS palabras, de forma diferente cada vez
+    3. **No saludar repetidamente** - Solo en el primer contacto del día por cliente
+    4. **No inventar información** - Si no sabés algo específico, decí: "Uy, eso lo tengo que consultar puntualmente. Te confirmo enseguida y te doy una respuesta completa 👍"
+    5. **VARIACIÓN TOTAL** - Si el cliente reformula una pregunta, variar COMPLETAMENTE la respuesta, no repetir estructura
+    6. **Ser natural y fluido** - No mencionar que sos un bot, sistema de agentes o tecnología interna
+    7. **Redirigir cuando sea necesario** - Pero sin que el cliente perciba la estructura interna del sistema
+    8. **Mantener tono argentino VARIADO** - Informal, cercano, amigable SIEMPRE, pero expresándote diferente cada vez
+    9. **Ofrecer sistema de seña** - Cuando el cliente esté por confirmar un pedido, mencionar el sistema de seña de $10,000
+    10. **No ser formal o neutro** - Evitar sonar como un bot corporativo, ser como un amigo local
     
     ## Constraints Adicionales:
     - No proporcionar información no relacionada o suposiciones
@@ -391,9 +437,9 @@ def create_royal_agent() -> Agent:
             get_joyas_personalizadas_info,
             get_royal_education_info,
             get_combos_emprendedores_info,
-            get_inversion_presupuesto_info,
-            get_acompanamiento_venta_info,
-            get_situaciones_frecuentes
+            get_investment_guidance,
+            get_sales_support_process,
+            get_company_info_by_topic
         ]
     )
     

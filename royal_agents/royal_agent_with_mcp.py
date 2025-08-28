@@ -31,7 +31,9 @@ from .royal_agent import (
     get_arreglos_info,
     get_joyas_personalizadas_info, 
     get_royal_education_info,
-    get_situaciones_frecuentes
+    get_investment_guidance,
+    get_sales_support_process,
+    get_company_info_by_topic
 )
 
 def create_enhanced_royal_agent() -> Agent:
@@ -334,7 +336,7 @@ def create_enhanced_royal_agent() -> Agent:
         get_arreglos_info,
         get_joyas_personalizadas_info,
         get_royal_education_info,
-        get_situaciones_frecuentes
+        get_company_info_by_topic
     ]
     
     # Agregar herramientas MCP si están disponibles

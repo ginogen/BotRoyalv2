@@ -1,4 +1,6 @@
 {
+  "_note": "IMPORTANT: This file now contains DATA GUIDELINES, not hardcoded responses. AI should use tools to get structured data and express it creatively with variety.",
+  "_philosophy": "Same accurate information, different creative expression each time",
   "function_tools": {
     "get_royal_info": {
       "purpose": "Obtiene información específica sobre Royal Mayorista según la consulta",
@@ -150,31 +152,17 @@
         "cta": "¿En qué rubro te gustaría arrancar? Te armo una recomendación personalizada en este momento"
       }
     },
-    "get_inversion_presupuesto_info": {
-      "purpose": "Información sobre cuánto invertir y presupuesto recomendado para emprendedores",
-      "content": {
-        "opening": "Me encanta que ya estés pensando en invertir 💛 Eso es clave para arrancar con fuerza y generar ventas desde el primer día",
-        "recommended_range": "Como la compra mínima es de $40.000, lo ideal para tu primera inversión está entre $40.000 y $150.000, según lo que quieras y puedas destinar",
-        "benefits_variety": "Esto te permite tener suficiente variedad para mostrar, probar diferentes productos y ver cuáles se mueven mejor con tus clientas",
-        "strategy_tip": "Cuanta más variedad tengas al inicio, más fácil es que las personas te digan qué les gusta y qué prefieren. Esa información es oro para que puedas traer justo lo que ellas buscan y aumentar tus ventas",
-        "roi_perspective": "Miralo así: Con solo $40.000 ya tenés suficiente para generar $100.000+ en ventas. Es una inversión que se recupera en semanas, no en meses",
-        "cta": "Contame, ¿ya tenés en mente si querés trabajar con joyas, maquillaje o ropa? En este momento te puedo armar un kit personalizado con los productos que más se venden en ese rubro"
-      }
+    "investment_guidance": {
+      "purpose": "Investment guidance for entrepreneurs - AI should use get_investment_guidance() tool",
+      "deprecated": "This function now returns structured data, not hardcoded text",
+      "new_tool": "get_investment_guidance()",
+      "ai_instruction": "Use tool data creatively, vary expression each time"
     },
-    "get_acompanamiento_venta_info": {
-      "purpose": "Ofrece acompañamiento inmediato y cierre de venta consultivo",
-      "content": {
-        "opening": "¡Perfect timing! Te noto súper motivada y eso es lo más importante para tener éxito",
-        "immediate_offer": "¿Querés que te arme algo personalizado AHORA MISMO?",
-        "value_proposition": "En base a lo que me contás, puedo armarte un kit con los productos que más se venden en tu zona y que tienen mejor margen de ganancia. No pierdas tiempo eligiendo uno por uno",
-        "process_steps": [
-          "Te mando la selección personalizada",
-          "Hacés el pedido en 5 minutos",
-          "En 2-3 días tenés tu stock listo para vender",
-          "Empezás a recuperar tu inversión en la primera semana"
-        ],
-        "cta": "Decime: ¿Prefierís que te arme algo de joyas, maquillaje o indumentaria? ¡Arranquemos!"
-      }
+    "sales_support": {
+      "purpose": "Sales support and consultation process - AI should use get_sales_support_process() tool",  
+      "deprecated": "This function now returns structured data, not hardcoded text",
+      "new_tool": "get_sales_support_process()",
+      "ai_instruction": "Use tool data but express enthusiastically with creative variety"
     },
     "get_situaciones_frecuentes": {
       "purpose": "Respuestas para situaciones frecuentes específicas",

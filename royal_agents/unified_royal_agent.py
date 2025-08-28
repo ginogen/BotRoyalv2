@@ -17,8 +17,8 @@ from datetime import datetime
 from .royal_agent import (
     get_royal_info, track_client_greeting, get_arreglos_info,
     get_joyas_personalizadas_info, get_royal_education_info,
-    get_combos_emprendedores_info, get_inversion_presupuesto_info,
-    get_acompanamiento_venta_info, get_situaciones_frecuentes
+    get_combos_emprendedores_info, get_investment_guidance,
+    get_sales_support_process, get_company_info_by_topic
 )
 
 # Importar herramientas contextuales si están disponibles
@@ -304,9 +304,9 @@ Sos {identity.get("name", "Royalia")}, {identity.get("role", "asistente de Royal
             get_joyas_personalizadas_info,
             get_royal_education_info,
             get_combos_emprendedores_info,
-            get_inversion_presupuesto_info,
-            get_acompanamiento_venta_info,
-            get_situaciones_frecuentes
+            get_investment_guidance,
+            get_sales_support_process,
+            get_company_info_by_topic
         ]
         
         all_tools = base_tools.copy()

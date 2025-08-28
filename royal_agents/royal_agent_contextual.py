@@ -14,9 +14,9 @@ from .royal_agent import (
     get_joyas_personalizadas_info, 
     get_royal_education_info,
     get_combos_emprendedores_info,
-    get_inversion_presupuesto_info,
-    get_acompanamiento_venta_info,
-    get_situaciones_frecuentes
+    get_investment_guidance,
+    get_sales_support_process,
+    get_company_info_by_topic
 )
 from datetime import datetime
 import logging
@@ -101,12 +101,12 @@ def create_contextual_royal_agent() -> Agent[RoyalAgentContext]:
     
     ### Para consultas sobre presupuesto e inversión:
     **Palabras:** "cuánto invertir", "presupuesto", "cuánto comprar", "cuánto necesito", "cuánto gastar", "cuánto destinar", "primera inversión"
-    → **ACCIÓN:** SIEMPRE usar get_inversion_presupuesto_info()
+    → **ACCIÓN:** SIEMPRE usar get_investment_guidance()
     → **CRÍTICO:** Esta información convierte dudas en ventas
     
     ### Para acompañamiento y cierre:
     **Palabras:** "me ayudás", "no sé cuál elegir", "qué me recomendás", "qué me conviene", "estoy motivada", "quiero arrancar ya"
-    → **ACCIÓN:** Usar get_acompanamiento_venta_info() cuando detectes interés alto
+    → **ACCIÓN:** Usar get_sales_support_process() cuando detectes interés alto
     → **OBJETIVO:** Convertir motivación en acción inmediata
     
     ### 🚨 IMPORTANTE - Consultas sobre PEDIDOS/ÓRDENES:
@@ -183,7 +183,7 @@ def create_contextual_royal_agent() -> Agent[RoyalAgentContext]:
        - **Experimentado**: productos específicos + diversificación
     3. **GUARDAR información con update_user_profile()**
     4. **REGLA CRÍTICA:** Si mencionan "no sé qué elegir" o "empezar" → combos emprendedores OBLIGATORIO
-    5. **REGLA CRÍTICA:** Si preguntan por dinero/presupuesto → get_inversion_presupuesto_info() OBLIGATORIO
+    5. **REGLA CRÍTICA:** Si preguntan por dinero/presupuesto → get_investment_guidance() OBLIGATORIO
     6. **REGLA DE CONVERSIÓN:** SIEMPRE incluir CTAs claras cuando muestres productos o combos
     7. **REGLA ANTI-OBJECIÓN:** Romper objeciones de precio explicando ROI y rentabilidad
     8. **REGLA DE URGENCIA:** Mencionar que combos se agotan o son limitados (sin mentir)
@@ -304,7 +304,7 @@ def create_contextual_royal_agent() -> Agent[RoyalAgentContext]:
     ```
     Usuario: "¿Cuánto necesito invertir para empezar?"
     
-    1. **SIEMPRE usar get_inversion_presupuesto_info()**
+    1. **SIEMPRE usar get_investment_guidance()**
     2. La herramienta da información específica sobre montos ($40,000-$150,000)
     3. **NUNCA inventar montos o rangos** - usar solo la información de la herramienta
     4. Continuar la conversación preguntando por el rubro de interés
@@ -332,9 +332,9 @@ def create_contextual_royal_agent() -> Agent[RoyalAgentContext]:
         get_joyas_personalizadas_info,
         get_royal_education_info,
         get_combos_emprendedores_info,
-        get_inversion_presupuesto_info,
-        get_acompanamiento_venta_info,
-        get_situaciones_frecuentes
+        get_investment_guidance,
+        get_sales_support_process,
+        get_company_info_by_topic
     ]
     
     # Agregar herramientas contextuales (OBLIGATORIAS)
