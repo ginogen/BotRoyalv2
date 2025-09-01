@@ -2148,6 +2148,38 @@ async def schedule_manual_followup(request: Request):
         logger.error(f"❌ Error programando follow-up manual: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.post("/admin/setup-followup-tables")
+async def setup_followup_tables():
+    """Crear tablas de follow-up (solo para admin)"""
+    try:
+        database_url = os.getenv("DATABASE_URL")
+        if not database_url:
+            raise HTTPException(status_code=500, detail="DATABASE_URL not configured")
+        
+        # Ejecutar el script de creación de tablas
+        import subprocess
+        result = subprocess.run(
+            ["python", "create_followup_tables.py"],
+            capture_output=True,
+            text=True
+        )
+        
+        if result.returncode == 0:
+            return {
+                "success": True, 
+                "message": "Tablas de follow-up creadas exitosamente",
+                "output": result.stdout
+            }
+        else:
+            raise HTTPException(
+                status_code=500, 
+                detail=f"Error creando tablas: {result.stderr}"
+            )
+            
+    except Exception as e:
+        logger.error(f"❌ Error setup tablas: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 # =====================================================
 # ADMIN ENDPOINTS FOR DYNAMIC CONTENT
 # =====================================================
@@ -2485,6 +2517,115 @@ async def search_business_info(q: str = "", category: str = ""):
         raise HTTPException(status_code=500, detail=str(e))
 
 # =====================================================
+# UTILITY FUNCTIONS
+# =====================================================
+
+async def _create_followup_tables_if_needed(database_url: str) -> bool:
+    """Crear tablas de follow-up automáticamente si no existen"""
+    try:
+        import psycopg2
+        
+        # Definir SQLs de creación
+        table_sqls = [
+            # Tabla principal de trabajos
+            """
+            CREATE TABLE IF NOT EXISTS follow_up_jobs (
+                id SERIAL PRIMARY KEY,
+                user_id VARCHAR(255) NOT NULL,
+                phone VARCHAR(50) NOT NULL,
+                stage INTEGER NOT NULL,
+                scheduled_for TIMESTAMP NOT NULL,
+                status VARCHAR(50) DEFAULT 'pending',
+                attempts INTEGER DEFAULT 0,
+                max_attempts INTEGER DEFAULT 3,
+                context_snapshot JSONB,
+                last_user_message TEXT,
+                trigger_event VARCHAR(100),
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                processed_at TIMESTAMP,
+                next_retry_at TIMESTAMP,
+                UNIQUE(user_id, stage)
+            );
+            """,
+            
+            # Historial
+            """
+            CREATE TABLE IF NOT EXISTS follow_up_history (
+                id SERIAL PRIMARY KEY,
+                user_id VARCHAR(255) NOT NULL,
+                phone VARCHAR(50) NOT NULL,
+                stage INTEGER NOT NULL,
+                message_sent TEXT NOT NULL,
+                template_used VARCHAR(100),
+                generation_model VARCHAR(50),
+                sent_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                user_responded BOOLEAN DEFAULT FALSE,
+                responded_at TIMESTAMP,
+                response_message TEXT,
+                response_time_hours DECIMAL(10,2),
+                effectiveness_score DECIMAL(3,2),
+                metadata JSONB DEFAULT '{}'
+            );
+            """,
+            
+            # Configuración
+            """
+            CREATE TABLE IF NOT EXISTS follow_up_config (
+                id SERIAL PRIMARY KEY,
+                stage_delays_hours INTEGER[] DEFAULT '{1,6,24,48,72,96,120,168}',
+                start_hour INTEGER DEFAULT 9,
+                end_hour INTEGER DEFAULT 21,
+                timezone VARCHAR(50) DEFAULT 'America/Argentina/Cordoba',
+                allowed_weekdays INTEGER[] DEFAULT '{1,2,3,4,5,6}',
+                max_followups_per_user INTEGER DEFAULT 8,
+                cooldown_between_stages_hours INTEGER DEFAULT 1,
+                is_active BOOLEAN DEFAULT TRUE,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+            """,
+            
+            # Blacklist
+            """
+            CREATE TABLE IF NOT EXISTS follow_up_blacklist (
+                id SERIAL PRIMARY KEY,
+                user_id VARCHAR(255) UNIQUE NOT NULL,
+                phone VARCHAR(50),
+                reason VARCHAR(200),
+                added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                added_by VARCHAR(100) DEFAULT 'user'
+            );
+            """,
+            
+            # Índices
+            """
+            CREATE INDEX IF NOT EXISTS idx_followup_jobs_scheduled ON follow_up_jobs(scheduled_for, status);
+            CREATE INDEX IF NOT EXISTS idx_followup_jobs_user ON follow_up_jobs(user_id);
+            CREATE INDEX IF NOT EXISTS idx_followup_history_user_time ON follow_up_history(user_id, sent_at);
+            CREATE INDEX IF NOT EXISTS idx_followup_blacklist_user ON follow_up_blacklist(user_id);
+            """,
+            
+            # Configuración inicial
+            """
+            INSERT INTO follow_up_config (id) VALUES (1) ON CONFLICT (id) DO NOTHING;
+            """
+        ]
+        
+        with psycopg2.connect(database_url) as conn:
+            with conn.cursor() as cursor:
+                for sql in table_sqls:
+                    cursor.execute(sql)
+                
+                conn.commit()
+        
+        logger.info("✅ Tablas de follow-up creadas/verificadas automáticamente")
+        return True
+                
+    except Exception as e:
+        logger.error(f"❌ Error creando tablas de follow-up: {e}")
+        return False
+
+# =====================================================
 # STARTUP AND SHUTDOWN HANDLERS
 # =====================================================
 
@@ -2527,6 +2668,10 @@ async def startup_event():
             if not database_url:
                 raise ValueError("DATABASE_URL not found in environment variables")
             
+            # Crear tablas automáticamente si no existen
+            logger.info("🗄️ Verificando/creando tablas de follow-up...")
+            await _create_followup_tables_if_needed(database_url)
+            
             followup_scheduler = FollowUpScheduler(database_url)
             await followup_scheduler.initialize()
             followup_scheduler.start()
@@ -2544,6 +2689,7 @@ async def startup_event():
             logger.info("✅ Follow-up system initialized successfully")
         except Exception as e:
             logger.error(f"❌ Error initializing follow-up system: {e}")
+            logger.warning("⚠️ Follow-up system disabled due to initialization error")
             followup_scheduler = None
             followup_manager = None
             followup_tracker = None
