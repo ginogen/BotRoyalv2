@@ -2523,19 +2523,23 @@ async def startup_event():
         logger.info("📅 Initializing follow-up system...")
         try:
             # Initialize follow-up components
-            followup_scheduler = FollowUpScheduler(DATABASE_URL)
+            database_url = os.getenv("DATABASE_URL")
+            if not database_url:
+                raise ValueError("DATABASE_URL not found in environment variables")
+            
+            followup_scheduler = FollowUpScheduler(database_url)
             await followup_scheduler.initialize()
             followup_scheduler.start()
             
             followup_manager = FollowUpManager(
-                database_url=DATABASE_URL,
+                database_url=database_url,
                 evolution_api_url=EVOLUTION_API_URL,
                 evolution_token=EVOLUTION_API_TOKEN,
                 instance_name=INSTANCE_NAME,
                 openai_api_key=os.getenv("OPENAI_API_KEY")
             )
             
-            followup_tracker = FollowUpTracker(DATABASE_URL)
+            followup_tracker = FollowUpTracker(database_url)
             
             logger.info("✅ Follow-up system initialized successfully")
         except Exception as e:
