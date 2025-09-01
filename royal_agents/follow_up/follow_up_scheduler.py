@@ -9,9 +9,8 @@ from datetime import datetime, timedelta
 from typing import Dict, Any, Optional, List
 import pytz
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore
 from apscheduler.executors.asyncio import AsyncIOExecutor
-from apscheduler.triggers.date import DateTrigger
+from apscheduler.triggers.interval import IntervalTrigger
 import psycopg2
 from psycopg2.extras import RealDictCursor
 
@@ -46,11 +45,7 @@ class FollowUpScheduler:
     async def initialize(self):
         """Inicializar el scheduler"""
         try:
-            # Configurar jobstore con PostgreSQL
-            jobstores = {
-                'default': SQLAlchemyJobStore(url=self.database_url)
-            }
-            
+            # Configurar scheduler sin jobstore persistente (más simple)
             executors = {
                 'default': AsyncIOExecutor()
             }
@@ -62,13 +57,21 @@ class FollowUpScheduler:
             }
             
             self.scheduler = AsyncIOScheduler(
-                jobstores=jobstores,
                 executors=executors, 
                 job_defaults=job_defaults,
                 timezone=self.timezone
             )
             
-            # Agregar job recurrente para detectar usuarios inactivos
+            # Agregar job recurrente para procesar follow-ups pendientes
+            self.scheduler.add_job(
+                func=self._process_pending_followups,
+                trigger='interval',
+                minutes=1,  # Revisar cada minuto
+                id='process_pending_followups',
+                replace_existing=True
+            )
+            
+            # Agregar job para detectar usuarios inactivos
             self.scheduler.add_job(
                 func=self._check_inactive_users,
                 trigger='interval',
@@ -108,6 +111,29 @@ class FollowUpScheduler:
             self.is_running = False
             logger.info("⏹️ Follow-up scheduler detenido")
     
+    async def _process_pending_followups(self):
+        """Procesar follow-ups pendientes que ya llegaron a su hora"""
+        try:
+            with psycopg2.connect(self.database_url) as conn:
+                with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+                    # Buscar follow-ups que ya deben enviarse
+                    cursor.execute("""
+                        SELECT user_id, stage, scheduled_for 
+                        FROM follow_up_jobs 
+                        WHERE status = 'pending' 
+                        AND scheduled_for <= %s
+                        ORDER BY scheduled_for
+                        LIMIT 10
+                    """, (datetime.now(self.timezone),))
+                    
+                    pending_jobs = cursor.fetchall()
+                    
+                    for job in pending_jobs:
+                        await self._execute_followup(job['user_id'], job['stage'])
+                        
+        except Exception as e:
+            logger.error(f"❌ Error procesando follow-ups pendientes: {e}")
+
     async def _check_inactive_users(self):
         """Revisar usuarios inactivos y programar follow-ups"""
         try:
@@ -117,10 +143,8 @@ class FollowUpScheduler:
                 with conn.cursor(cursor_factory=RealDictCursor) as cursor:
                     # Buscar usuarios inactivos que no tienen follow-ups programados
                     query = """
-                    SELECT DISTINCT cc.user_id, cc.last_interaction, cc.context_data,
-                           ui.message as last_message, ui.created_at as last_message_time
+                    SELECT DISTINCT cc.user_id, cc.last_interaction, cc.context_data
                     FROM conversation_contexts cc
-                    LEFT JOIN user_interactions ui ON cc.user_id = ui.user_id
                     LEFT JOIN follow_up_blacklist bl ON cc.user_id = bl.user_id
                     WHERE bl.user_id IS NULL  -- No está en blacklist
                     AND cc.last_interaction < %s  -- Inactivo por más de 1 hora
@@ -129,8 +153,6 @@ class FollowUpScheduler:
                         WHERE fj.user_id = cc.user_id 
                         AND fj.status = 'pending'
                     )
-                    ORDER BY ui.created_at DESC
-                    LIMIT ui.id;
                     """
                     
                     cutoff_time = datetime.now(self.timezone) - timedelta(hours=1)
@@ -233,18 +255,7 @@ class FollowUpScheduler:
                     """, (user_id, phone, stage, scheduled_for, 
                           context_snapshot, last_user_message))
                     
-                    # Programar el job en APScheduler
-                    job_id = f"followup_{user_id}_{stage}"
-                    
-                    self.scheduler.add_job(
-                        func=self._execute_followup,
-                        trigger=DateTrigger(run_date=scheduled_for),
-                        args=[user_id, stage],
-                        id=job_id,
-                        replace_existing=True
-                    )
-                    
-                    logger.debug(f"📋 Follow-up programado: {job_id} para {scheduled_for}")
+                    logger.debug(f"📋 Follow-up programado en BD: usuario {user_id} etapa {stage} para {scheduled_for}")
                     
         except Exception as e:
             logger.error(f"❌ Error creando job de follow-up: {e}")
@@ -317,14 +328,6 @@ class FollowUpScheduler:
                     """, (datetime.now(self.timezone), user_id))
                     
                     cancelled_count = cursor.rowcount
-                    
-                    # Cancelar jobs en el scheduler
-                    for stage in self.stage_delays.keys():
-                        job_id = f"followup_{user_id}_{stage}"
-                        try:
-                            self.scheduler.remove_job(job_id)
-                        except:
-                            pass  # Job ya no existe
                     
                     logger.info(f"🚫 Cancelados {cancelled_count} follow-ups para {user_id}")
                     
