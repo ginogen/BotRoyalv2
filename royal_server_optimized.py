@@ -38,6 +38,9 @@ from dynamic_worker_pool import initialize_worker_pool, shutdown_worker_pool, dy
 # Bot state management
 from bot_state_manager import BotStateManager
 
+# Follow-up system
+from royal_agents.follow_up import FollowUpScheduler, FollowUpManager, FollowUpTracker
+
 # Royal agents import - Intentar importación modular
 ROYAL_AGENTS_AVAILABLE = False
 
@@ -175,6 +178,12 @@ async def process_royal_message(user_id: str, message: str, message_data: Option
     try:
         # Log the processing start
         logger.info(f"🤖 Processing message for {user_id}: {message[:50]}...")
+        
+        # 📅 FOLLOW-UP: Cancelar follow-ups cuando el usuario responde
+        if followup_manager and message_data and message_data.role == "user":
+            await followup_manager.handle_user_response(user_id)
+            if followup_tracker:
+                await followup_tracker.track_user_response(user_id, message)
         
         # ✨ NUEVO: Verificar estado del bot ANTES de procesar
         # Extraer identificadores del mensaje
@@ -2044,6 +2053,102 @@ async def admin_worker_stats():
         raise HTTPException(status_code=500, detail=f"Failed to get worker stats: {e}")
 
 # =====================================================
+# FOLLOW-UP SYSTEM ENDPOINTS
+# =====================================================
+
+@app.get("/api/followup/stats")
+async def get_followup_stats():
+    """Obtener estadísticas del sistema de follow-up"""
+    try:
+        if not followup_manager:
+            return {"error": "Follow-up system not initialized"}
+        
+        stats = await followup_manager.get_followup_stats()
+        return stats
+    except Exception as e:
+        logger.error(f"❌ Error obteniendo stats de follow-up: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/followup/performance")
+async def get_followup_performance():
+    """Obtener métricas de rendimiento de follow-ups"""
+    try:
+        if not followup_tracker:
+            return {"error": "Follow-up tracker not initialized"}
+        
+        performance = await followup_tracker.get_performance_metrics(7)
+        return performance
+    except Exception as e:
+        logger.error(f"❌ Error obteniendo performance de follow-up: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/followup/queue")
+async def get_followup_queue():
+    """Obtener estado de la cola de follow-ups"""
+    try:
+        if not followup_tracker:
+            return {"error": "Follow-up tracker not initialized"}
+        
+        queue_status = await followup_tracker.get_queue_status()
+        return queue_status
+    except Exception as e:
+        logger.error(f"❌ Error obteniendo cola de follow-up: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/followup/blacklist")
+async def add_to_blacklist(request: Request):
+    """Agregar usuario a blacklist de follow-ups"""
+    try:
+        if not followup_manager:
+            raise HTTPException(status_code=503, detail="Follow-up system not available")
+        
+        data = await request.json()
+        user_id = data.get("user_id")
+        phone = data.get("phone", "")
+        reason = data.get("reason", "user_request")
+        
+        if not user_id:
+            raise HTTPException(status_code=400, detail="user_id required")
+        
+        await followup_manager.add_user_to_blacklist(user_id, phone, reason)
+        return {"success": True, "message": f"Usuario {user_id} agregado a blacklist"}
+        
+    except Exception as e:
+        logger.error(f"❌ Error agregando a blacklist: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/followup/schedule")
+async def schedule_manual_followup(request: Request):
+    """Programar follow-ups manualmente para un usuario"""
+    try:
+        if not followup_scheduler:
+            raise HTTPException(status_code=503, detail="Follow-up scheduler not available")
+        
+        data = await request.json()
+        user_id = data.get("user_id")
+        phone = data.get("phone")
+        
+        if not user_id or not phone:
+            raise HTTPException(status_code=400, detail="user_id and phone required")
+        
+        # Obtener contexto del usuario
+        context = await hybrid_context_manager.get_context(user_id)
+        context_data = context.to_dict() if context else {}
+        
+        success = await followup_scheduler.schedule_user_followups(
+            user_id, phone, context_data
+        )
+        
+        if success:
+            return {"success": True, "message": f"Follow-ups programados para {user_id}"}
+        else:
+            raise HTTPException(status_code=500, detail="Error programando follow-ups")
+            
+    except Exception as e:
+        logger.error(f"❌ Error programando follow-up manual: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# =====================================================
 # ADMIN ENDPOINTS FOR DYNAMIC CONTENT
 # =====================================================
 
@@ -2386,7 +2491,7 @@ async def search_business_info(q: str = "", category: str = ""):
 @app.on_event("startup")
 async def startup_event():
     """Initialize all systems on startup"""
-    global bot_state_manager, main_event_loop
+    global bot_state_manager, main_event_loop, followup_scheduler, followup_manager, followup_tracker
     
     logger.info("🚀 Starting Royal Bot - Maximum Efficiency Edition")
     
@@ -2412,6 +2517,38 @@ async def startup_event():
     logger.info("⚡ Initializing dynamic worker pool...")
     await initialize_worker_pool(process_royal_message)
     
+    # Initialize follow-up system (if enabled)
+    followup_enabled = os.getenv("FOLLOWUP_ENABLED", "true").lower() == "true"
+    if followup_enabled:
+        logger.info("📅 Initializing follow-up system...")
+        try:
+            # Initialize follow-up components
+            followup_scheduler = FollowUpScheduler(DATABASE_URL)
+            await followup_scheduler.initialize()
+            followup_scheduler.start()
+            
+            followup_manager = FollowUpManager(
+                database_url=DATABASE_URL,
+                evolution_api_url=EVOLUTION_API_URL,
+                evolution_token=EVOLUTION_API_TOKEN,
+                instance_name=INSTANCE_NAME,
+                openai_api_key=os.getenv("OPENAI_API_KEY")
+            )
+            
+            followup_tracker = FollowUpTracker(DATABASE_URL)
+            
+            logger.info("✅ Follow-up system initialized successfully")
+        except Exception as e:
+            logger.error(f"❌ Error initializing follow-up system: {e}")
+            followup_scheduler = None
+            followup_manager = None
+            followup_tracker = None
+    else:
+        logger.info("📅 Follow-up system disabled")
+        followup_scheduler = None
+        followup_manager = None  
+        followup_tracker = None
+
     # Start background tasks
     logger.info("📡 Starting background tasks...")
     asyncio.create_task(response_sender_task())
@@ -2426,10 +2563,19 @@ async def startup_event():
 @app.on_event("shutdown")
 async def shutdown_event():
     """Graceful shutdown of all systems"""
-    global bot_state_manager
+    global bot_state_manager, followup_scheduler, followup_manager
     
     logger.info("🛑 Shutting down Royal Bot - Maximum Efficiency Edition")
     
+    # Shutdown follow-up system first
+    if followup_scheduler:
+        logger.info("📅 Stopping follow-up scheduler...")
+        followup_scheduler.stop()
+    
+    if followup_manager:
+        logger.info("📤 Closing follow-up manager...")
+        await followup_manager.close()
+
     # Shutdown worker pool first (stop processing new messages)
     logger.info("⚡ Shutting down worker pool...")
     await shutdown_worker_pool()
