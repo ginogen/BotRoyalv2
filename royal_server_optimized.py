@@ -180,10 +180,16 @@ async def process_royal_message(user_id: str, message: str, message_data: Option
         logger.info(f"🤖 Processing message for {user_id}: {message[:50]}...")
         
         # 📅 FOLLOW-UP: Cancelar follow-ups cuando el usuario responde
-        if followup_manager and message_data and message_data.role == "user":
-            await followup_manager.handle_user_response(user_id)
-            if followup_tracker:
-                await followup_tracker.track_user_response(user_id, message)
+        try:
+            if followup_manager and message_data:
+                # Los mensajes de usuarios vienen de evolution o chatwoot (no system)
+                source_str = str(message_data.source).lower() if hasattr(message_data, 'source') else ''
+                if source_str in ['evolution', 'chatwoot', 'messagesource.evolution', 'messagesource.chatwoot']:
+                    await followup_manager.handle_user_response(user_id)
+                    if followup_tracker:
+                        await followup_tracker.track_user_response(user_id, message)
+        except Exception as e:
+            logger.debug(f"Follow-up processing skipped: {e}")
         
         # ✨ NUEVO: Verificar estado del bot ANTES de procesar
         # Extraer identificadores del mensaje
