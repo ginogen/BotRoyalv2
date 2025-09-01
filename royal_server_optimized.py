@@ -87,6 +87,7 @@ INSTANCE_NAME = os.getenv("INSTANCE_NAME", "F1_Retencion")
 CHATWOOT_TEAM_SHIPPING_ID = int(os.getenv("CHATWOOT_TEAM_SHIPPING_ID", "0"))
 CHATWOOT_TEAM_SUPPORT_ID = int(os.getenv("CHATWOOT_TEAM_SUPPORT_ID", "0"))
 CHATWOOT_TEAM_BILLING_ID = int(os.getenv("CHATWOOT_TEAM_BILLING_ID", "0"))
+CHATWOOT_TEAM_GENERAL_ID = int(os.getenv("CHATWOOT_TEAM_GENERAL_ID", "0"))  # Para consultas generales sin información
 
 # Performance tuning
 ENABLE_PERFORMANCE_MONITORING = os.getenv("ENABLE_PERFORMANCE_MONITORING", "true").lower() == "true"
@@ -272,6 +273,82 @@ async def process_royal_message(user_id: str, message: str, message_data: Option
         
         return error_response
 
+def detect_missing_info_response(response: str) -> tuple[bool, str, str]:
+    """
+    Detecta si la respuesta indica falta de información y debe asignarse a un agente.
+    
+    Returns:
+        tuple: (should_assign, info_type, replacement_message)
+    """
+    import re
+    import random
+    
+    response_lower = response.lower()
+    
+    # Patrones que indican falta de información
+    missing_info_patterns = [
+        r"no tengo información",
+        r"no dispongo.*información", 
+        r"no sé.*sobre",
+        r"no conozco.*información",
+        r"no puedo.*información",
+        r"no tengo.*datos",
+        r"información.*no.*está.*disponible",
+        r"no.*encontré.*información",
+        r"no.*acceso.*información"
+    ]
+    
+    # Verificar si la respuesta indica falta de información
+    for pattern in missing_info_patterns:
+        if re.search(pattern, response_lower):
+            # Determinar tipo de información faltante
+            info_type = "general"
+            if any(word in response_lower for word in ["precio", "costo", "valor", "pago"]):
+                info_type = "price"
+            elif any(word in response_lower for word in ["stock", "disponible", "cantidad"]):
+                info_type = "stock"
+            elif any(word in response_lower for word in ["producto", "joya", "modelo"]):
+                info_type = "product"
+            elif any(word in response_lower for word in ["envío", "entrega", "despacho"]):
+                info_type = "shipping"
+            
+            # Mensajes naturales argentinos de reemplazo
+            replacement_messages = {
+                'product': [
+                    "Dale, dejame que chequeo eso puntualmente en el sistema y te confirmo ahora 👍",
+                    "Tengo que verificar eso con el equipo. Dame un momento que te traigo la info completa 👍",
+                    "Mirá, eso lo tengo que consultar específicamente. En un ratito te confirmo todo 👍"
+                ],
+                'price': [
+                    "Los precios me los están actualizando justo ahora. Dame un minuto que te confirmo el valor exacto 👍",
+                    "Tengo que chequear el precio actualizado. Ahora te traigo el dato preciso 👍",
+                    "Dale, dejame que reviso el valor actual y te confirmo en un momento 👍"
+                ],
+                'stock': [
+                    "El stock lo tengo que verificar en tiempo real. Un segundo que chequeo y te confirmo 👍",
+                    "Dale, que consulto la disponibilidad exacta y te digo 👍",
+                    "Tengo que ver qué hay disponible ahora mismo. Ya te confirmo 👍"
+                ],
+                'shipping': [
+                    "Los envíos tengo que consultarlos según tu zona específica. Ya te digo 👍",
+                    "Para el envío necesito chequear tu ubicación exacta. Ahora te confirmo 👍",
+                    "Dale, que verifico las opciones de envío para tu zona y te cuento 👍"
+                ],
+                'general': [
+                    "Dale, tengo que chequear eso puntualmente. Dame un ratito y te confirmo todo 👍",
+                    "Esa info la tengo que verificar bien. En un momento te respondo 👍",
+                    "Dejame que consulto eso específicamente y te paso toda la información 👍"
+                ]
+            }
+            
+            # Seleccionar mensaje de reemplazo
+            messages = replacement_messages.get(info_type, replacement_messages['general'])
+            replacement_message = random.choice(messages)
+            
+            return True, info_type, replacement_message
+    
+    return False, "", ""
+
 async def send_response_to_channel(user_id: str, response: str, message_data: 'MessageData'):
     """Send response back to the appropriate channel (WhatsApp, Chatwoot, etc.)"""
     
@@ -279,6 +356,45 @@ async def send_response_to_channel(user_id: str, response: str, message_data: 'M
     if not response or response is None:
         logger.debug(f"🔇 No response to send for {user_id} (None or empty)")
         return False
+    
+    # 🚨 INTERCEPTOR: Detectar "No tengo información" y asignar a agente
+    should_assign, info_type, replacement_message = detect_missing_info_response(response)
+    
+    if should_assign and message_data.conversation_id:
+        logger.warning(f"🚨 DETECTADA respuesta sin información de tipo '{info_type}' para {user_id}")
+        logger.info(f"📋 Respuesta original: {response[:100]}...")
+        
+        # Determinar team según tipo de información
+        team_id = CHATWOOT_TEAM_GENERAL_ID  # Por defecto
+        if info_type == "shipping":
+            team_id = CHATWOOT_TEAM_SHIPPING_ID
+        elif info_type in ["product", "stock", "price"]:
+            team_id = CHATWOOT_TEAM_SUPPORT_ID if CHATWOOT_TEAM_GENERAL_ID == 0 else CHATWOOT_TEAM_GENERAL_ID
+        
+        # Asignar automáticamente si hay team configurado
+        if team_id > 0:
+            assignment_success = await assign_conversation_to_team(
+                message_data.conversation_id, 
+                team_id, 
+                f"Información faltante: {info_type}"
+            )
+            
+            if assignment_success:
+                logger.info(f"✅ Conversación {message_data.conversation_id} asignada automáticamente por falta de información ({info_type})")
+                
+                # Pausar bot para esta conversación
+                if bot_state_manager:
+                    conv_identifier = f"conv_{message_data.conversation_id}"
+                    await bot_state_manager.pause_bot(
+                        conv_identifier, 
+                        reason=f"Asignado por información faltante: {info_type}",
+                        ttl=86400  # 24 horas
+                    )
+                    logger.info(f"⏸️ Bot pausado para conversación {message_data.conversation_id}")
+        
+        # Usar mensaje de reemplazo natural
+        response = replacement_message
+        logger.info(f"🔄 Mensaje reemplazado: {replacement_message}")
     
     try:
         # Los mensajes de Evolution se envían por el canal Evolution si tienen número de teléfono
