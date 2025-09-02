@@ -3408,15 +3408,16 @@ async def make_user_inactive_endpoint(request: Request):
     Endpoint temporal para hacer que un usuario aparezca inactivo (para testing follow-ups)
     """
     try:
+        import psycopg2
+        import pytz
+        from datetime import timedelta
+        
         data = await request.json()
         user_id = data.get("user_id")
         hours_ago = data.get("hours_ago", 2)
         
         if not user_id:
             return {"error": "user_id requerido"}
-        
-        import pytz
-        from datetime import timedelta
         
         # Calcular timestamp inactivo
         inactive_time = datetime.now(pytz.timezone("America/Argentina/Cordoba")) - timedelta(hours=hours_ago)
