@@ -10,6 +10,12 @@ Integrates all optimization systems for Railway deployment:
 - Real-time monitoring
 """
 
+# Aplicar parche para compatibilidad de openai-agents antes de cualquier import
+try:
+    import patch_openai_agents
+except ImportError:
+    pass  # El parche es opcional
+
 import os
 import json
 import logging
