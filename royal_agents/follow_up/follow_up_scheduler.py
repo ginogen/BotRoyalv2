@@ -271,6 +271,8 @@ class FollowUpScheduler:
                                   last_user_message: Optional[str] = None):
         """Crear un trabajo de follow-up en la base de datos"""
         try:
+            from psycopg2.extras import Json
+            
             with psycopg2.connect(self.database_url) as conn:
                 with conn.cursor() as cursor:
                     # Obtener el teléfono del contexto
@@ -290,7 +292,7 @@ class FollowUpScheduler:
                             context_snapshot = EXCLUDED.context_snapshot,
                             status = 'pending'
                     """, (user_id, phone, stage, scheduled_for, 
-                          context_snapshot, last_user_message))
+                          Json(context_snapshot), last_user_message))
                     
                     logger.debug(f"📋 Follow-up programado en BD: usuario {user_id} etapa {stage} para {scheduled_for}")
                     
