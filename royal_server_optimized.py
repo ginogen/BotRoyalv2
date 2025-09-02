@@ -3274,7 +3274,7 @@ async def debug_followups_endpoint():
                     # Usuarios inactivos
                     cutoff_time = current_time - timedelta(hours=1)
                     cursor.execute("""
-                        SELECT user_id, last_interaction, phone_number
+                        SELECT user_id, last_interaction, context_data
                         FROM conversation_contexts 
                         WHERE last_interaction < %s
                         ORDER BY last_interaction DESC
@@ -3319,7 +3319,7 @@ async def debug_followups_tables():
                     tables_info["conversation_contexts"]["count"] = count_result["count"]
                     
                     cursor.execute("""
-                        SELECT user_id, last_interaction, phone_number 
+                        SELECT user_id, last_interaction, context_data
                         FROM conversation_contexts 
                         ORDER BY last_interaction DESC 
                         LIMIT 5
