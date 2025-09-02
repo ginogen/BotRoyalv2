@@ -3458,9 +3458,9 @@ async def trigger_followup_check_endpoint():
     Endpoint temporal para forzar la ejecución del check de usuarios inactivos
     """
     try:
-        if follow_up_scheduler:
+        if followup_scheduler:
             logger.info("🔄 [DEBUG] Forzando check de usuarios inactivos...")
-            await follow_up_scheduler._check_inactive_users()
+            await followup_scheduler._check_inactive_users()
             return {
                 "success": True,
                 "message": "Check de usuarios inactivos ejecutado manualmente"
