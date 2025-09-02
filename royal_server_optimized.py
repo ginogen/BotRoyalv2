@@ -613,6 +613,51 @@ async def metrics_collector_task():
     logger.info("📊 Metrics collector stopped")
 
 # =====================================================
+# MESSAGE EXTRACTION FUNCTIONS
+# =====================================================
+
+def extract_message_content(message_data: dict) -> str:
+    """Extract message content from different WhatsApp message types"""
+    message = message_data.get("message", {})
+    
+    # Type 1: Simple conversation message
+    if "conversation" in message:
+        return message["conversation"]
+    
+    # Type 2: Extended text message
+    if "extendedTextMessage" in message:
+        return message["extendedTextMessage"].get("text", "")
+    
+    # Type 3: Quoted message
+    if "quotedMessage" in message:
+        quoted = message["quotedMessage"]
+        if "conversation" in quoted:
+            return quoted["conversation"]
+        elif "extendedTextMessage" in quoted:
+            return quoted["extendedTextMessage"].get("text", "")
+    
+    # Type 4: Media messages
+    if "imageMessage" in message:
+        return message["imageMessage"].get("caption", "[Imagen]")
+    
+    if "videoMessage" in message:
+        return message["videoMessage"].get("caption", "[Video]")
+    
+    if "documentMessage" in message:
+        return message["documentMessage"].get("caption", "[Documento]")
+    
+    if "audioMessage" in message:
+        return "[Audio]"
+    
+    if "stickerMessage" in message:
+        return "[Sticker]"
+    
+    if "locationMessage" in message:
+        return "[Ubicación]"
+    
+    return ""
+
+# =====================================================
 # CONVERSATION-PHONE MAPPING FUNCTIONS
 # =====================================================
 
@@ -1727,7 +1772,7 @@ async def evolution_webhook(request: Request, background_tasks: BackgroundTasks)
             return {"status": "received", "ignored": "fromMe"}
         
         # Extract message data
-        message_content = message_data_raw.get("message", {}).get("conversation", "").strip()
+        message_content = extract_message_content(message_data_raw).strip()
         from_number = message_data_raw.get("key", {}).get("remoteJid", "")
         
         # Handle different number formats (WhatsApp, Meta Ads, etc)
