@@ -3452,6 +3452,29 @@ async def make_user_inactive_endpoint(request: Request):
         logger.error(f"❌ Error haciendo usuario inactivo: {e}")
         return {"error": str(e)}
 
+@app.post("/debug/trigger-followup-check")
+async def trigger_followup_check_endpoint():
+    """
+    Endpoint temporal para forzar la ejecución del check de usuarios inactivos
+    """
+    try:
+        if follow_up_scheduler:
+            logger.info("🔄 [DEBUG] Forzando check de usuarios inactivos...")
+            await follow_up_scheduler._check_inactive_users()
+            return {
+                "success": True,
+                "message": "Check de usuarios inactivos ejecutado manualmente"
+            }
+        else:
+            return {
+                "success": False,
+                "message": "Follow-up scheduler no inicializado"
+            }
+        
+    except Exception as e:
+        logger.error(f"❌ Error forzando check de follow-ups: {e}")
+        return {"error": str(e)}
+
 # =====================================================
 # MAIN EXECUTION
 # =====================================================
