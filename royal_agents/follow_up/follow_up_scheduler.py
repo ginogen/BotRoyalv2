@@ -19,11 +19,19 @@ logger = logging.getLogger('followup.scheduler')
 class FollowUpScheduler:
     """Scheduler principal para follow-ups automáticos"""
     
-    def __init__(self, database_url: str, timezone: str = "America/Argentina/Cordoba"):
+    def __init__(self, database_url: str, timezone: str = "America/Argentina/Cordoba",
+                 evolution_api_url: str = None, evolution_token: str = None, 
+                 instance_name: str = None, openai_api_key: str = None):
         self.database_url = database_url
         self.timezone = pytz.timezone(timezone)
         self.scheduler = None
         self.is_running = False
+        
+        # Configuración Evolution API para el manager
+        self.evolution_api_url = evolution_api_url
+        self.evolution_token = evolution_token
+        self.instance_name = instance_name
+        self.openai_api_key = openai_api_key
         
         # Configuración de etapas (en horas)
         self.stage_delays = {
@@ -114,19 +122,30 @@ class FollowUpScheduler:
     async def _process_pending_followups(self):
         """Procesar follow-ups pendientes que ya llegaron a su hora"""
         try:
+            current_time = datetime.now(self.timezone)
+            
+            # TEMPORAL: Para diagnóstico
+            logger.info(f"🔍 [DEBUG] Buscando follow-ups pendientes antes de {current_time}")
+            logger.info(f"🔍 [DEBUG] Zona horaria: {self.timezone}")
+            
             with psycopg2.connect(self.database_url) as conn:
                 with conn.cursor(cursor_factory=RealDictCursor) as cursor:
                     # Buscar follow-ups que ya deben enviarse
                     cursor.execute("""
-                        SELECT user_id, stage, scheduled_for 
+                        SELECT user_id, stage, scheduled_for, phone, status
                         FROM follow_up_jobs 
                         WHERE status = 'pending' 
                         AND scheduled_for <= %s
                         ORDER BY scheduled_for
                         LIMIT 10
-                    """, (datetime.now(self.timezone),))
+                    """, (current_time,))
                     
                     pending_jobs = cursor.fetchall()
+                    
+                    # TEMPORAL: Para diagnóstico
+                    logger.info(f"🔍 [DEBUG] Follow-ups pendientes encontrados: {len(pending_jobs)}")
+                    if pending_jobs:
+                        logger.info(f"🔍 [DEBUG] Primer job: user_id={pending_jobs[0]['user_id']}, stage={pending_jobs[0]['stage']}, scheduled_for={pending_jobs[0]['scheduled_for']}")
                     
                     for job in pending_jobs:
                         await self._execute_followup(job['user_id'], job['stage'])
@@ -156,10 +175,21 @@ class FollowUpScheduler:
                     """
                     
                     cutoff_time = datetime.now(self.timezone) - timedelta(hours=1)
+                    
+                    # TEMPORAL: Para diagnóstico
+                    logger.info(f"🔍 [DEBUG] Buscando usuarios inactivos desde: {cutoff_time}")
+                    logger.info(f"🔍 [DEBUG] Zona horaria: {self.timezone}")
+                    
                     cursor.execute(query, (cutoff_time,))
                     inactive_users = cursor.fetchall()
                     
                     logger.info(f"👥 Encontrados {len(inactive_users)} usuarios inactivos")
+                    
+                    # TEMPORAL: Para diagnóstico
+                    if inactive_users:
+                        logger.info(f"🔍 [DEBUG] Primer usuario inactivo: user_id={inactive_users[0]['user_id']}, last_interaction={inactive_users[0]['last_interaction']}")
+                    else:
+                        logger.info(f"🔍 [DEBUG] No se encontraron usuarios inactivos")
                     
                     for user in inactive_users:
                         await self._schedule_user_followups(user)
@@ -243,6 +273,11 @@ class FollowUpScheduler:
                 with conn.cursor() as cursor:
                     # Obtener el teléfono del contexto
                     phone = context_snapshot.get('phone', 'unknown')
+                    if phone == 'unknown' and user_id.startswith('whatsapp_'):
+                        phone = user_id.replace('whatsapp_', '')
+                    
+                    # TEMPORAL: Para diagnóstico
+                    logger.info(f"🔍 [DEBUG] Creando follow-up job: user_id={user_id}, stage={stage}, scheduled_for={scheduled_for}, phone={phone}")
                     
                     cursor.execute("""
                         INSERT INTO follow_up_jobs 
@@ -270,7 +305,13 @@ class FollowUpScheduler:
                 # Importar el manager para enviar el mensaje
                 from .follow_up_manager import FollowUpManager
                 
-                manager = FollowUpManager(self.database_url)
+                manager = FollowUpManager(
+                    database_url=self.database_url,
+                    evolution_api_url=self.evolution_api_url,
+                    evolution_token=self.evolution_token,
+                    instance_name=self.instance_name,
+                    openai_api_key=self.openai_api_key
+                )
                 success = await manager.send_followup_message(user_id, stage)
                 
                 if success:

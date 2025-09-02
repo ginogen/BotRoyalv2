@@ -2851,7 +2851,13 @@ async def startup_event():
             logger.info("🗄️ Verificando/creando tablas de follow-up...")
             await _create_followup_tables_if_needed(database_url)
             
-            followup_scheduler = FollowUpScheduler(database_url)
+            followup_scheduler = FollowUpScheduler(
+                database_url=database_url,
+                evolution_api_url=EVOLUTION_API_URL,
+                evolution_token=EVOLUTION_API_TOKEN,
+                instance_name=EVOLUTION_INSTANCE_NAME,
+                openai_api_key=os.getenv("OPENAI_API_KEY")
+            )
             await followup_scheduler.initialize()
             followup_scheduler.start()
             
@@ -2859,7 +2865,7 @@ async def startup_event():
                 database_url=database_url,
                 evolution_api_url=EVOLUTION_API_URL,
                 evolution_token=EVOLUTION_API_TOKEN,
-                instance_name=INSTANCE_NAME,
+                instance_name=EVOLUTION_INSTANCE_NAME,
                 openai_api_key=os.getenv("OPENAI_API_KEY")
             )
             
@@ -3218,6 +3224,69 @@ async def get_bot_paused_instructions(request: Request):
             }
         }
     }
+
+# =====================================================
+# DEBUG ENDPOINTS (TEMPORAL)
+# =====================================================
+
+@app.get("/debug/followups")
+async def debug_followups_endpoint():
+    """
+    Endpoint temporal para diagnosticar el sistema de follow-ups
+    """
+    try:
+        import pytz
+        argentina_tz = pytz.timezone("America/Argentina/Cordoba")
+        current_time = datetime.now(argentina_tz)
+        
+        debug_info = {
+            "timestamp": current_time.isoformat(),
+            "timezone": "America/Argentina/Cordoba",
+            "scheduler_running": follow_up_scheduler.is_running if follow_up_scheduler else False,
+            "pending_jobs": [],
+            "inactive_users": [],
+            "evolution_config": {
+                "url": EVOLUTION_API_URL,
+                "instance": EVOLUTION_INSTANCE_NAME,
+                "token_configured": bool(EVOLUTION_API_TOKEN)
+            }
+        }
+        
+        # Verificar follow-ups pendientes
+        if DATABASE_URL:
+            import psycopg2
+            from psycopg2.extras import RealDictCursor
+            
+            with psycopg2.connect(DATABASE_URL) as conn:
+                with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+                    # Follow-ups pendientes
+                    cursor.execute("""
+                        SELECT user_id, stage, scheduled_for, phone, status, created_at
+                        FROM follow_up_jobs 
+                        WHERE status = 'pending'
+                        ORDER BY scheduled_for
+                        LIMIT 20
+                    """)
+                    pending_jobs = cursor.fetchall()
+                    debug_info["pending_jobs"] = [dict(job) for job in pending_jobs]
+                    
+                    # Usuarios inactivos
+                    cutoff_time = current_time - timedelta(hours=1)
+                    cursor.execute("""
+                        SELECT user_id, last_interaction, phone_number
+                        FROM conversation_contexts 
+                        WHERE last_interaction < %s
+                        ORDER BY last_interaction DESC
+                        LIMIT 10
+                    """, (cutoff_time,))
+                    inactive_users = cursor.fetchall()
+                    debug_info["inactive_users"] = [dict(user) for user in inactive_users]
+        
+        return debug_info
+        
+    except Exception as e:
+        logger.error(f"❌ Error en debug de follow-ups: {e}")
+        return {"error": str(e)}
 
 # =====================================================
 # MAIN EXECUTION
