@@ -3242,7 +3242,7 @@ async def debug_followups_endpoint():
         debug_info = {
             "timestamp": current_time.isoformat(),
             "timezone": "America/Argentina/Cordoba",
-            "scheduler_running": follow_up_scheduler.is_running if follow_up_scheduler else False,
+            "scheduler_running": followup_scheduler.is_running if followup_scheduler else False,
             "pending_jobs": [],
             "inactive_users": [],
             "evolution_config": {
@@ -3286,6 +3286,68 @@ async def debug_followups_endpoint():
         
     except Exception as e:
         logger.error(f"❌ Error en debug de follow-ups: {e}")
+        return {"error": str(e)}
+
+@app.get("/debug/followups/tables")
+async def debug_followups_tables():
+    """
+    Endpoint temporal para verificar datos en las tablas
+    """
+    try:
+        import pytz
+        argentina_tz = pytz.timezone("America/Argentina/Cordoba")
+        current_time = datetime.now(argentina_tz)
+        
+        tables_info = {
+            "timestamp": current_time.isoformat(),
+            "conversation_contexts": {"count": 0, "recent": []},
+            "follow_up_jobs": {"count": 0, "recent": []},
+            "follow_up_blacklist": {"count": 0}
+        }
+        
+        if DATABASE_URL:
+            import psycopg2
+            from psycopg2.extras import RealDictCursor
+            
+            with psycopg2.connect(DATABASE_URL) as conn:
+                with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+                    # Verificar conversation_contexts
+                    cursor.execute("SELECT COUNT(*) as count FROM conversation_contexts")
+                    count_result = cursor.fetchone()
+                    tables_info["conversation_contexts"]["count"] = count_result["count"]
+                    
+                    cursor.execute("""
+                        SELECT user_id, last_interaction, phone_number 
+                        FROM conversation_contexts 
+                        ORDER BY last_interaction DESC 
+                        LIMIT 5
+                    """)
+                    recent_contexts = cursor.fetchall()
+                    tables_info["conversation_contexts"]["recent"] = [dict(ctx) for ctx in recent_contexts]
+                    
+                    # Verificar follow_up_jobs
+                    cursor.execute("SELECT COUNT(*) as count FROM follow_up_jobs")
+                    count_result = cursor.fetchone()
+                    tables_info["follow_up_jobs"]["count"] = count_result["count"]
+                    
+                    cursor.execute("""
+                        SELECT user_id, stage, status, created_at, scheduled_for
+                        FROM follow_up_jobs 
+                        ORDER BY created_at DESC 
+                        LIMIT 5
+                    """)
+                    recent_jobs = cursor.fetchall()
+                    tables_info["follow_up_jobs"]["recent"] = [dict(job) for job in recent_jobs]
+                    
+                    # Verificar blacklist
+                    cursor.execute("SELECT COUNT(*) as count FROM follow_up_blacklist")
+                    count_result = cursor.fetchone()
+                    tables_info["follow_up_blacklist"]["count"] = count_result["count"]
+        
+        return tables_info
+        
+    except Exception as e:
+        logger.error(f"❌ Error en debug de tablas: {e}")
         return {"error": str(e)}
 
 # =====================================================

@@ -192,6 +192,8 @@ class FollowUpScheduler:
                         logger.info(f"🔍 [DEBUG] No se encontraron usuarios inactivos")
                     
                     for user in inactive_users:
+                        # TEMPORAL: Para diagnóstico
+                        logger.info(f"🔍 [DEBUG] Programando follow-ups para usuario inactivo: {user['user_id']}")
                         await self._schedule_user_followups(user)
                         
         except Exception as e:
