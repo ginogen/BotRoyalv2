@@ -3352,6 +3352,56 @@ async def debug_followups_tables():
         logger.error(f"❌ Error en debug de tablas: {e}")
         return {"error": str(e)}
 
+@app.post("/debug/create-test-context")
+async def create_test_context_endpoint(request: Request):
+    """
+    Endpoint temporal para crear un contexto de prueba y verificar el sistema
+    """
+    try:
+        data = await request.json()
+        user_id = data.get("user_id", "whatsapp_5491112345678")
+        message = data.get("message", "Hola, me interesa emprender")
+        
+        # Crear contexto usando hybrid_context_manager directamente
+        from hybrid_context_manager import ConversationMemory
+        import pytz
+        
+        test_context = ConversationMemory(user_id=user_id)
+        test_context.last_interaction = datetime.now(pytz.timezone("America/Argentina/Cordoba"))
+        test_context.user_intent = "emprendedor"
+        test_context.is_entrepreneur = True
+        test_context.context_data = {"phone": user_id.replace("whatsapp_", "")}
+        
+        # Agregar interacción
+        test_context.interaction_history.append({
+            "role": "user",
+            "message": message,
+            "timestamp": test_context.last_interaction.isoformat()
+        })
+        
+        # Guardar en PostgreSQL
+        success = await hybrid_context_manager.save_context(user_id, test_context)
+        
+        if success:
+            # Verificar que se guardó
+            saved_context = await hybrid_context_manager.get_context(user_id)
+            
+            return {
+                "success": True,
+                "message": f"Contexto de prueba creado para {user_id}",
+                "context_data": saved_context.to_dict() if saved_context else None,
+                "should_trigger_followup": True
+            }
+        else:
+            return {
+                "success": False,
+                "message": "Error guardando contexto de prueba"
+            }
+        
+    except Exception as e:
+        logger.error(f"❌ Error creando contexto de prueba: {e}")
+        return {"error": str(e)}
+
 # =====================================================
 # MAIN EXECUTION
 # =====================================================
