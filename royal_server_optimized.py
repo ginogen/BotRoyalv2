@@ -3423,7 +3423,11 @@ async def make_user_inactive_endpoint(request: Request):
         inactive_time = datetime.now(pytz.timezone("America/Argentina/Cordoba")) - timedelta(hours=hours_ago)
         
         # Actualizar en PostgreSQL directamente
-        with psycopg2.connect(DATABASE_URL) as conn:
+        database_url = os.getenv("DATABASE_URL")
+        if not database_url:
+            return {"error": "DATABASE_URL no configurada"}
+            
+        with psycopg2.connect(database_url) as conn:
             with conn.cursor() as cursor:
                 cursor.execute("""
                     UPDATE conversation_contexts 
