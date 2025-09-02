@@ -3253,11 +3253,12 @@ async def debug_followups_endpoint():
         }
         
         # Verificar follow-ups pendientes
-        if DATABASE_URL:
+        database_url = os.getenv("DATABASE_URL")
+        if database_url:
             import psycopg2
             from psycopg2.extras import RealDictCursor
             
-            with psycopg2.connect(DATABASE_URL) as conn:
+            with psycopg2.connect(database_url) as conn:
                 with conn.cursor(cursor_factory=RealDictCursor) as cursor:
                     # Follow-ups pendientes
                     cursor.execute("""
@@ -3305,11 +3306,12 @@ async def debug_followups_tables():
             "follow_up_blacklist": {"count": 0}
         }
         
-        if DATABASE_URL:
+        database_url = os.getenv("DATABASE_URL")
+        if database_url:
             import psycopg2
             from psycopg2.extras import RealDictCursor
             
-            with psycopg2.connect(DATABASE_URL) as conn:
+            with psycopg2.connect(database_url) as conn:
                 with conn.cursor(cursor_factory=RealDictCursor) as cursor:
                     # Verificar conversation_contexts
                     cursor.execute("SELECT COUNT(*) as count FROM conversation_contexts")
