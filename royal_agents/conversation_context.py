@@ -343,15 +343,19 @@ class ContextManager:
     
     def get_or_create_context(self, user_id: str) -> RoyalAgentContext:
         """Obtiene o crea contexto para usuario"""
+        logger.info(f"🎯 [DEBUG] get_or_create_context llamado para: {user_id}")
+        
         if user_id not in self.active_contexts:
             self.active_contexts[user_id] = RoyalAgentContext(
                 user_id=user_id,
                 conversation=ConversationMemory(user_id=user_id)
             )
-            logger.info(f"🆕 Nuevo contexto creado para usuario: {user_id}")
+            logger.info(f"🆕 [DEBUG] Nuevo contexto creado para usuario: {user_id}")
             
             # Intentar guardar también en PostgreSQL para follow-ups
             self._save_to_postgresql_if_available(user_id, self.active_contexts[user_id].conversation)
+        else:
+            logger.info(f"♻️ [DEBUG] Contexto existente reutilizado para: {user_id}")
         
         # Actualizar last_interaction y guardar
         self.active_contexts[user_id].conversation.last_interaction = datetime.now()
@@ -361,6 +365,7 @@ class ContextManager:
     
     def _save_to_postgresql_if_available(self, user_id: str, conversation: ConversationMemory):
         """Guarda en PostgreSQL si está disponible (para follow-ups)"""
+        logger.info(f"💾 [DEBUG] Intentando guardar contexto en PostgreSQL para: {user_id}")
         try:
             import os
             import psycopg2
@@ -368,10 +373,13 @@ class ContextManager:
             
             database_url = os.getenv("DATABASE_URL")
             if not database_url:
+                logger.warning(f"⚠️ [DEBUG] DATABASE_URL no encontrada, no se puede guardar contexto")
                 return
                 
+            logger.info(f"🔌 [DEBUG] Conectando a PostgreSQL para guardar: {user_id}")
             with psycopg2.connect(database_url) as conn:
                 with conn.cursor() as cursor:
+                    logger.info(f"📝 [DEBUG] Ejecutando INSERT/UPDATE para: {user_id}")
                     cursor.execute("""
                         INSERT INTO conversation_contexts 
                         (user_id, context_data, last_interaction, current_state, user_intent, is_entrepreneur, experience_level)
@@ -394,10 +402,12 @@ class ContextManager:
                         conversation.experience_level
                     ))
                     
-            logger.debug(f"💾 Contexto guardado en PostgreSQL para follow-ups: {user_id}")
+            logger.info(f"✅ [DEBUG] Contexto guardado exitosamente en PostgreSQL: {user_id}")
             
         except Exception as e:
-            logger.debug(f"⚠️ No se pudo guardar contexto en PostgreSQL: {e}")
+            logger.error(f"❌ [DEBUG] Error guardando contexto en PostgreSQL para {user_id}: {e}")
+            import traceback
+            logger.error(f"📋 [DEBUG] Traceback completo: {traceback.format_exc()}")
     
     def cleanup_old_contexts(self, hours: int = 24):
         """Limpia contextos antiguos"""
