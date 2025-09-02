@@ -3475,6 +3475,51 @@ async def trigger_followup_check_endpoint():
         logger.error(f"❌ Error forzando check de follow-ups: {e}")
         return {"error": str(e)}
 
+@app.get("/debug/database-tables")
+async def debug_database_tables():
+    """
+    Endpoint temporal para verificar qué tablas existen en la base de datos
+    """
+    try:
+        import psycopg2
+        
+        database_url = os.getenv("DATABASE_URL")
+        if not database_url:
+            return {"error": "DATABASE_URL no configurada"}
+        
+        with psycopg2.connect(database_url) as conn:
+            with conn.cursor() as cursor:
+                # Verificar qué tablas existen
+                cursor.execute("""
+                    SELECT table_name 
+                    FROM information_schema.tables 
+                    WHERE table_schema = 'public'
+                    ORDER BY table_name
+                """)
+                tables = [row[0] for row in cursor.fetchall()]
+                
+                # Verificar estructura de follow_up_jobs si existe
+                follow_up_jobs_structure = None
+                if 'follow_up_jobs' in tables:
+                    cursor.execute("""
+                        SELECT column_name, data_type 
+                        FROM information_schema.columns 
+                        WHERE table_name = 'follow_up_jobs'
+                        ORDER BY ordinal_position
+                    """)
+                    follow_up_jobs_structure = cursor.fetchall()
+                
+                return {
+                    "database_connected": True,
+                    "tables": tables,
+                    "follow_up_jobs_exists": 'follow_up_jobs' in tables,
+                    "follow_up_jobs_structure": follow_up_jobs_structure
+                }
+        
+    except Exception as e:
+        logger.error(f"❌ Error verificando tablas: {e}")
+        return {"error": str(e)}
+
 # =====================================================
 # MAIN EXECUTION
 # =====================================================
