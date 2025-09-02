@@ -3402,6 +3402,51 @@ async def create_test_context_endpoint(request: Request):
         logger.error(f"❌ Error creando contexto de prueba: {e}")
         return {"error": str(e)}
 
+@app.post("/debug/make-user-inactive")
+async def make_user_inactive_endpoint(request: Request):
+    """
+    Endpoint temporal para hacer que un usuario aparezca inactivo (para testing follow-ups)
+    """
+    try:
+        data = await request.json()
+        user_id = data.get("user_id")
+        hours_ago = data.get("hours_ago", 2)
+        
+        if not user_id:
+            return {"error": "user_id requerido"}
+        
+        import pytz
+        from datetime import timedelta
+        
+        # Calcular timestamp inactivo
+        inactive_time = datetime.now(pytz.timezone("America/Argentina/Cordoba")) - timedelta(hours=hours_ago)
+        
+        # Actualizar en PostgreSQL directamente
+        with psycopg2.connect(DATABASE_URL) as conn:
+            with conn.cursor() as cursor:
+                cursor.execute("""
+                    UPDATE conversation_contexts 
+                    SET last_interaction = %s
+                    WHERE user_id = %s
+                """, (inactive_time, user_id))
+                
+                if cursor.rowcount > 0:
+                    return {
+                        "success": True,
+                        "message": f"Usuario {user_id} marcado como inactivo desde hace {hours_ago} horas",
+                        "inactive_since": inactive_time.isoformat(),
+                        "updated_rows": cursor.rowcount
+                    }
+                else:
+                    return {
+                        "success": False,
+                        "message": f"Usuario {user_id} no encontrado"
+                    }
+        
+    except Exception as e:
+        logger.error(f"❌ Error haciendo usuario inactivo: {e}")
+        return {"error": str(e)}
+
 # =====================================================
 # MAIN EXECUTION
 # =====================================================
