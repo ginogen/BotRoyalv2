@@ -2855,7 +2855,7 @@ async def startup_event():
                 database_url=database_url,
                 evolution_api_url=EVOLUTION_API_URL,
                 evolution_token=EVOLUTION_API_TOKEN,
-                instance_name=EVOLUTION_INSTANCE_NAME,
+                instance_name=INSTANCE_NAME,
                 openai_api_key=os.getenv("OPENAI_API_KEY")
             )
             await followup_scheduler.initialize()
@@ -2865,7 +2865,7 @@ async def startup_event():
                 database_url=database_url,
                 evolution_api_url=EVOLUTION_API_URL,
                 evolution_token=EVOLUTION_API_TOKEN,
-                instance_name=EVOLUTION_INSTANCE_NAME,
+                instance_name=INSTANCE_NAME,
                 openai_api_key=os.getenv("OPENAI_API_KEY")
             )
             
@@ -3247,7 +3247,7 @@ async def debug_followups_endpoint():
             "inactive_users": [],
             "evolution_config": {
                 "url": EVOLUTION_API_URL,
-                "instance": EVOLUTION_INSTANCE_NAME,
+                "instance": INSTANCE_NAME,
                 "token_configured": bool(EVOLUTION_API_TOKEN)
             }
         }
