@@ -4,52 +4,7 @@
 from typing import Dict, List, Any, Optional
 from agents import Agent, Runner, RunContextWrapper  # type: ignore
 from .conversation_context import RoyalAgentContext
-# Importar hybrid_context_manager para persistencia en PostgreSQL
-try:
-    from hybrid_context_manager import hybrid_context_manager, ConversationMemory
-    from .conversation_context import RoyalAgentContext
-    
-    class HybridContextWrapper:
-        """Wrapper para hacer hybrid_context_manager compatible con la API síncrona"""
-        
-        def get_or_create_context(self, user_id: str) -> RoyalAgentContext:
-            """Método síncrono que usa async hybrid_context_manager"""
-            import asyncio
-            
-            # Intentar obtener el loop actual
-            try:
-                loop = asyncio.get_running_loop()
-                # Crear una tarea en el loop actual
-                task = loop.create_task(self._async_get_or_create_context(user_id))
-                # Ejecutar hasta completarse
-                while not task.done():
-                    pass
-                return task.result()
-            except RuntimeError:
-                # Si no hay loop, crear uno nuevo
-                return asyncio.run(self._async_get_or_create_context(user_id))
-        
-        async def _async_get_or_create_context(self, user_id: str) -> RoyalAgentContext:
-            """Método async interno"""
-            try:
-                # Intentar obtener contexto existente
-                memory = await hybrid_context_manager.get_context(user_id)
-                logger.info(f"✅ Contexto obtenido de hybrid_context_manager para {user_id}")
-            except Exception as e:
-                # Si no existe, crear nuevo
-                logger.info(f"🆕 Creando nuevo contexto para {user_id}: {e}")
-                memory = ConversationMemory(user_id=user_id)
-                await hybrid_context_manager.save_context(user_id, memory)
-            
-            # Crear RoyalAgentContext
-            return RoyalAgentContext(user_id=user_id, conversation=memory)
-    
-    context_manager = HybridContextWrapper()
-    logger.info("✅ Usando hybrid_context_manager con wrapper síncrono para persistencia en PostgreSQL")
-    
-except ImportError:
-    from .conversation_context import context_manager
-    logger.warning("⚠️ Usando context_manager en memoria (hybrid no disponible)")
+from .conversation_context import context_manager
 from .contextual_tools import create_contextual_tools
 from .woocommerce_mcp_tools import create_woocommerce_tools
 from .training_mcp_tools import create_training_tools
@@ -562,20 +517,6 @@ def run_contextual_conversation_sync(user_id: str, user_message: str) -> str:
         
         # Registrar respuesta
         context.conversation.add_interaction("assistant", result)
-        
-        # Guardar contexto en PostgreSQL si usamos hybrid_context_manager
-        if hasattr(context_manager, '_async_get_or_create_context'):
-            try:
-                # Ejecutar guardado async
-                import asyncio
-                try:
-                    loop = asyncio.get_running_loop()
-                    loop.create_task(hybrid_context_manager.save_context(user_id, context.conversation))
-                except RuntimeError:
-                    asyncio.run(hybrid_context_manager.save_context(user_id, context.conversation))
-                logger.info(f"💾 Contexto guardado en PostgreSQL para: {user_id}")
-            except Exception as e:
-                logger.error(f"❌ Error guardando contexto en PostgreSQL: {e}")
         
         # Update user context profile
         logger.info(f"📊 Contexto actualizado para usuario: {user_id}")

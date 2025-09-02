@@ -52,6 +52,11 @@ class ConversationMemory:
     product_interests: List[str] = field(default_factory=list)
     budget_range: Optional[str] = None
     
+    def to_dict(self) -> Dict[str, Any]:
+        """Convertir a diccionario para almacenamiento"""
+        from dataclasses import asdict
+        return asdict(self)
+    
     def add_product_reference(self, product: ProductReference):
         """Agrega referencia a producto mostrado"""
         # Evitar duplicados
@@ -344,8 +349,55 @@ class ContextManager:
                 conversation=ConversationMemory(user_id=user_id)
             )
             logger.info(f"🆕 Nuevo contexto creado para usuario: {user_id}")
+            
+            # Intentar guardar también en PostgreSQL para follow-ups
+            self._save_to_postgresql_if_available(user_id, self.active_contexts[user_id].conversation)
+        
+        # Actualizar last_interaction y guardar
+        self.active_contexts[user_id].conversation.last_interaction = datetime.now()
+        self._save_to_postgresql_if_available(user_id, self.active_contexts[user_id].conversation)
         
         return self.active_contexts[user_id]
+    
+    def _save_to_postgresql_if_available(self, user_id: str, conversation: ConversationMemory):
+        """Guarda en PostgreSQL si está disponible (para follow-ups)"""
+        try:
+            import os
+            import psycopg2
+            from psycopg2.extras import Json
+            
+            database_url = os.getenv("DATABASE_URL")
+            if not database_url:
+                return
+                
+            with psycopg2.connect(database_url) as conn:
+                with conn.cursor() as cursor:
+                    cursor.execute("""
+                        INSERT INTO conversation_contexts 
+                        (user_id, context_data, last_interaction, current_state, user_intent, is_entrepreneur, experience_level)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s)
+                        ON CONFLICT (user_id) DO UPDATE SET
+                            context_data = EXCLUDED.context_data,
+                            last_interaction = EXCLUDED.last_interaction,
+                            current_state = EXCLUDED.current_state,
+                            user_intent = EXCLUDED.user_intent,
+                            is_entrepreneur = EXCLUDED.is_entrepreneur,
+                            experience_level = EXCLUDED.experience_level,
+                            updated_at = CURRENT_TIMESTAMP
+                    """, (
+                        user_id,
+                        Json(conversation.to_dict()),
+                        conversation.last_interaction,
+                        conversation.current_state,
+                        conversation.user_intent,
+                        conversation.is_entrepreneur,
+                        conversation.experience_level
+                    ))
+                    
+            logger.debug(f"💾 Contexto guardado en PostgreSQL para follow-ups: {user_id}")
+            
+        except Exception as e:
+            logger.debug(f"⚠️ No se pudo guardar contexto en PostgreSQL: {e}")
     
     def cleanup_old_contexts(self, hours: int = 24):
         """Limpia contextos antiguos"""
