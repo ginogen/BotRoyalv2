@@ -287,6 +287,8 @@ def detect_missing_info_response(response: str) -> tuple[bool, str, str]:
     
     # Patrones que indican falta de información
     missing_info_patterns = [
+        r"lamentablemente.*no tengo",
+        r"disculp.*no tengo información",
         r"no tengo información",
         r"no dispongo.*información", 
         r"no sé.*sobre",
@@ -295,7 +297,11 @@ def detect_missing_info_response(response: str) -> tuple[bool, str, str]:
         r"no tengo.*datos",
         r"información.*no.*está.*disponible",
         r"no.*encontré.*información",
-        r"no.*acceso.*información"
+        r"no.*acceso.*información",
+        r"lamentablemente.*no.*información",
+        r"no cuento con.*información",
+        r"no hay información",
+        r"sin información.*disponible"
     ]
     
     # Verificar si la respuesta indica falta de información

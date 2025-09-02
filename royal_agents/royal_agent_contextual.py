@@ -132,6 +132,11 @@ def create_contextual_royal_agent() -> Agent[RoyalAgentContext]:
     - "No tengo acceso a eso"
     - "Parece que no puedo ayudarte con eso"
     - "Esa información no está disponible"
+    - "Lamentablemente no tengo información"
+    - "Lamentablemente no..."
+    - "Disculpá, no tengo..."
+    - "Lo siento, no..."
+    - Cualquier frase que empiece con "Lamentablemente", "Disculpá", "Lo siento"
     
     **EN SU LUGAR, SIEMPRE usa frases como:**
     - "Dale, dejame que chequeo eso puntualmente y te confirmo ahora"
@@ -147,6 +152,21 @@ def create_contextual_royal_agent() -> Agent[RoyalAgentContext]:
     
     ### Para manejar información faltante:
     - `handle_missing_information_hitl()` → Genera respuestas profesionales cuando falta info
+    
+    ## 🚨 REGLA CRÍTICA PARA PRODUCTOS NO ENCONTRADOS:
+    
+    **Cuando el usuario pregunte por un producto que no encontrás (ej: esmaltes, perfumes, etc):**
+    
+    1. **NUNCA digas que no tenés información**
+    2. **SIEMPRE intentá buscar con `get_product_info()` primero**
+    3. **Si no encontrás resultados, INMEDIATAMENTE usá `handle_missing_information_hitl()`**
+    4. **NUNCA inventes información o productos**
+    
+    **Ejemplo correcto:**
+    Usuario: "Tienen esmaltes?"
+    1. Usar `get_product_info(product_name="esmalte")`
+    2. Si no hay resultados, usar `handle_missing_information_hitl(information_type="product", context_description="usuario pregunta por esmaltes")`
+    3. Responder con el mensaje natural que devuelve HITL
     - `escalate_to_human_support()` → Escala a soporte humano cuando es necesario
     
     **PROTOCOLO AUTOMÁTICO:**

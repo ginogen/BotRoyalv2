@@ -454,6 +454,63 @@ async def get_product_details_with_link(product_name: str) -> str:
     logger.info(f"✅ Detalles obtenidos para: {name}")
     return details
 
+@function_tool
+async def search_products(search_term: str) -> str:
+    """
+    Busca productos en WooCommerce por término general.
+    Útil para búsquedas amplias como "esmaltes", "perfumes", "cremas", etc.
+    
+    Args:
+        search_term: Término de búsqueda general
+    """
+    
+    logger.info(f"🔍 SEARCH_PRODUCTS llamada con término: '{search_term}'")
+    
+    # Buscar productos con el término
+    result = await wc_client.make_request('products', {
+        'search': search_term,
+        'per_page': 10,
+        'orderby': 'relevance'
+    })
+    
+    if 'error' in result:
+        logger.error(f"❌ Error en search_products: {result['error']}")
+        return "No pude realizar la búsqueda en este momento. El equipo técnico está trabajando en ello."
+    
+    products = result if isinstance(result, list) else []
+    
+    logger.info(f"📦 Productos encontrados: {len(products)}")
+    
+    if not products:
+        # Si no encontramos productos, devolver mensaje que activará HITL
+        logger.warning(f"⚠️ No se encontraron productos para: {search_term}")
+        return f"No encontré productos específicos de {search_term} en el sistema. Dejame consultar con el equipo para darte información precisa."
+    
+    # Formatear resultados encontrados
+    products_info = []
+    
+    for product in products[:5]:  # Máximo 5 productos
+        name = product.get('name', 'Sin nombre')
+        price = product.get('price', product.get('regular_price', 'Consultar'))
+        stock = product.get('in_stock', False)
+        
+        # Formatear precio
+        if price and price != 'Consultar':
+            try:
+                price = f"${float(price):,.0f}".replace(',', '.')
+            except:
+                price = f"${price}"
+        
+        stock_status = "✅ Disponible" if stock else "❌ Sin stock"
+        
+        products_info.append(f"• **{name}** - {price} {stock_status}")
+    
+    response = f"🔍 **Resultados para '{search_term}':**\n\n"
+    response += "\n".join(products_info)
+    response += "\n\n💬 **¿Te interesa alguno en particular? Contame cuál para darte más detalles!**"
+    
+    return response
+
 def create_woocommerce_tools():
     """Retorna lista de tools de WooCommerce para usar en el agente"""
     return [
@@ -462,5 +519,6 @@ def create_woocommerce_tools():
         get_product_categories,
         search_products_by_price_range,
         get_combo_emprendedor_products,
-        get_product_details_with_link
+        get_product_details_with_link,
+        search_products  # Nueva herramienta de búsqueda general
     ] 

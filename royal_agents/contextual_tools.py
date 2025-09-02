@@ -1109,11 +1109,11 @@ def create_contextual_tools():
     """Crea todas las herramientas contextuales"""
     
     tools = [
-        # HITL DESHABILITADO TEMPORALMENTE
-        # detect_user_frustration,
-        # handle_missing_information_hitl,
-        # check_mcp_connectivity_and_fallback,
-        # escalate_to_human_support,
+        # HITL HABILITADO
+        detect_user_frustration,
+        handle_missing_information_hitl,
+        check_mcp_connectivity_and_fallback,
+        escalate_to_human_support,
         
         # Herramientas contextuales principales
         get_context_summary,
@@ -1129,5 +1129,5 @@ def create_contextual_tools():
         should_ask_about_experience
     ]
     
-    logger.info(f"✅ Contextual Tools creadas: {len(tools)} herramientas disponibles (HITL deshabilitado)")
+    logger.info(f"✅ Contextual Tools creadas: {len(tools)} herramientas disponibles (HITL habilitado)")
     return tools 
