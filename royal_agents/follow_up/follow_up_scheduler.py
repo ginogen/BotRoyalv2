@@ -176,9 +176,8 @@ class FollowUpScheduler:
                     
                     cutoff_time = datetime.now(self.timezone) - timedelta(hours=1)
                     
-                    # TEMPORAL: Para diagnóstico
-                    logger.info(f"🔍 [DEBUG] Buscando usuarios inactivos desde: {cutoff_time}")
-                    logger.info(f"🔍 [DEBUG] Zona horaria: {self.timezone}")
+                    logger.debug(f"🔍 Checking inactive users since: {cutoff_time}")
+                    logger.debug(f"🔍 Timezone: {self.timezone}")
                     
                     cursor.execute(query, (cutoff_time,))
                     inactive_users = cursor.fetchall()
@@ -351,6 +350,12 @@ class FollowUpScheduler:
                     last_interaction = result['last_interaction']
                     if isinstance(last_interaction, str):
                         last_interaction = datetime.fromisoformat(last_interaction.replace('Z', '+00:00'))
+                    
+                    # Asegurar que last_interaction tenga timezone
+                    if last_interaction.tzinfo is None:
+                        last_interaction = self.timezone.localize(last_interaction)
+                    else:
+                        last_interaction = last_interaction.astimezone(self.timezone)
                     
                     # Considerar inactivo si no ha interactuado en la última hora
                     cutoff = datetime.now(self.timezone) - timedelta(hours=1)
