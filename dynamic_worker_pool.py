@@ -11,6 +11,7 @@ import logging
 import psutil
 import threading
 import time
+import pytz
 from datetime import datetime, timedelta
 from typing import Dict, List, Any, Optional, Callable, Coroutine
 from dataclasses import dataclass, field
@@ -69,8 +70,8 @@ class WorkerMetrics:
     last_error_at: Optional[datetime] = None
     
     # Lifecycle
-    created_at: datetime = field(default_factory=datetime.now)
-    last_activity: datetime = field(default_factory=datetime.now)
+    created_at: datetime = field(default_factory=lambda: datetime.now(pytz.timezone("America/Argentina/Cordoba")))
+    last_activity: datetime = field(default_factory=lambda: datetime.now(pytz.timezone("America/Argentina/Cordoba")))
 
 @dataclass
 class PoolMetrics:
@@ -132,7 +133,7 @@ class CircuitBreaker:
         if not self.last_failure_time:
             return True
         
-        return (datetime.now() - self.last_failure_time).seconds > self.recovery_timeout
+        return (datetime.now(pytz.timezone("America/Argentina/Cordoba")) - self.last_failure_time).seconds > self.recovery_timeout
     
     def _on_success(self):
         """Handle successful execution"""
@@ -142,7 +143,7 @@ class CircuitBreaker:
     def _on_failure(self):
         """Handle failed execution"""
         self.failure_count += 1
-        self.last_failure_time = datetime.now()
+        self.last_failure_time = datetime.now(pytz.timezone("America/Argentina/Cordoba"))
         
         if self.failure_count >= self.failure_threshold:
             self.state = "open"
@@ -186,7 +187,7 @@ class Worker:
                 logger.error(f"❌ Worker {self.worker_id} cycle error: {e}")
                 self.metrics.errors_count += 1
                 self.metrics.last_error = str(e)
-                self.metrics.last_error_at = datetime.now()
+                self.metrics.last_error_at = datetime.now(pytz.timezone("America/Argentina/Cordoba"))
                 self.metrics.status = WorkerStatus.ERROR
                 
                 # Exponential backoff on errors
@@ -207,7 +208,7 @@ class Worker:
         # Process the message
         self.metrics.status = WorkerStatus.BUSY
         self.metrics.current_message_id = message.queue_id
-        self.metrics.task_started_at = datetime.now()
+        self.metrics.task_started_at = datetime.now(pytz.timezone("America/Argentina/Cordoba"))
         
         start_time = time.time()
         success = False
@@ -238,7 +239,7 @@ class Worker:
             self.metrics.average_processing_time = (
                 self.metrics.total_processing_time / self.metrics.messages_processed
             )
-            self.metrics.last_activity = datetime.now()
+            self.metrics.last_activity = datetime.now(pytz.timezone("America/Argentina/Cordoba"))
             
             # Complete message in queue
             await advanced_queue.complete_message(
@@ -307,7 +308,7 @@ class DynamicWorkerPool:
         # Performance tracking
         self.metrics = PoolMetrics()
         self.scaling_history = deque(maxlen=100)
-        self.last_scale_time = datetime.now() - timedelta(minutes=5)
+        self.last_scale_time = datetime.now(pytz.timezone("America/Argentina/Cordoba")) - timedelta(minutes=5)
         
         # Control
         self.is_running = False
@@ -389,16 +390,16 @@ class DynamicWorkerPool:
         
         # Update metrics
         self.metrics.last_scale_action = "scale_up"
-        self.metrics.last_scale_time = datetime.now()
+        self.metrics.last_scale_time = datetime.now(pytz.timezone("America/Argentina/Cordoba"))
         self.metrics.scale_reason = reason
-        self.last_scale_time = datetime.now()
+        self.last_scale_time = datetime.now(pytz.timezone("America/Argentina/Cordoba"))
         
         # Record scaling event
         self.scaling_history.append({
             'action': 'scale_up',
             'count': count,
             'reason': reason.value,
-            'timestamp': datetime.now(),
+            'timestamp': datetime.now(pytz.timezone("America/Argentina/Cordoba")),
             'total_workers': len(self.workers)
         })
     
@@ -431,16 +432,16 @@ class DynamicWorkerPool:
         
         # Update metrics
         self.metrics.last_scale_action = "scale_down"
-        self.metrics.last_scale_time = datetime.now()
+        self.metrics.last_scale_time = datetime.now(pytz.timezone("America/Argentina/Cordoba"))
         self.metrics.scale_reason = reason
-        self.last_scale_time = datetime.now()
+        self.last_scale_time = datetime.now(pytz.timezone("America/Argentina/Cordoba"))
         
         # Record scaling event
         self.scaling_history.append({
             'action': 'scale_down',
             'count': count,
             'reason': reason.value,
-            'timestamp': datetime.now(),
+            'timestamp': datetime.now(pytz.timezone("America/Argentina/Cordoba")),
             'total_workers': len(self.workers)
         })
     
@@ -459,7 +460,7 @@ class DynamicWorkerPool:
             priority += worker.metrics.errors_count * 10
             
             # Prefer workers with longer idle time
-            idle_time = (datetime.now() - worker.metrics.last_activity).total_seconds()
+            idle_time = (datetime.now(pytz.timezone("America/Argentina/Cordoba")) - worker.metrics.last_activity).total_seconds()
             priority += min(idle_time / 60, 50)  # Up to 50 points for idle time
             
             worker_candidates.append((worker_id, priority))
@@ -491,7 +492,7 @@ class DynamicWorkerPool:
     
     async def _update_metrics(self):
         """Update pool performance metrics"""
-        current_time = datetime.now()
+        current_time = datetime.now(pytz.timezone("America/Argentina/Cordoba"))
         
         # Worker status counts
         self.metrics.active_workers = len(self.workers)
@@ -531,7 +532,7 @@ class DynamicWorkerPool:
         """Evaluate if scaling is needed"""
         
         # Check cooldown period
-        if (datetime.now() - self.last_scale_time).total_seconds() < self.scale_cooldown:
+        if (datetime.now(pytz.timezone("America/Argentina/Cordoba")) - self.last_scale_time).total_seconds() < self.scale_cooldown:
             return
         
         current_workers = len(self.workers)

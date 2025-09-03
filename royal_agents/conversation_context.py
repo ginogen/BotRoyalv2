@@ -6,6 +6,7 @@ from typing import Dict, List, Any, Optional
 from datetime import datetime
 import json
 import logging
+import pytz
 
 logger = logging.getLogger(__name__)
 
@@ -17,14 +18,14 @@ class ProductReference:
     id: Optional[str] = None
     permalink: Optional[str] = None
     category: Optional[str] = None
-    shown_at: datetime = field(default_factory=datetime.now)
+    shown_at: datetime = field(default_factory=lambda: datetime.now(pytz.timezone("America/Argentina/Cordoba")))
 
 @dataclass 
 class ConversationMemory:
     """Memoria de la conversación actual"""
     user_id: str
-    conversation_started: datetime = field(default_factory=datetime.now)
-    last_interaction: datetime = field(default_factory=datetime.now)
+    conversation_started: datetime = field(default_factory=lambda: datetime.now(pytz.timezone("America/Argentina/Cordoba")))
+    last_interaction: datetime = field(default_factory=lambda: datetime.now(pytz.timezone("America/Argentina/Cordoba")))
     
     # Estado de la conversación
     current_state: str = "browsing"  # browsing, selecting, purchasing, completed
@@ -89,7 +90,7 @@ class ConversationMemory:
         if len(self.recent_products) > 10:
             self.recent_products = self.recent_products[-10:]
             
-        self.last_interaction = datetime.now()
+        self.last_interaction = datetime.now(pytz.timezone("America/Argentina/Cordoba"))
         logger.info(f"📦 Producto agregado al contexto: {product.name}")
     
     def add_interaction(self, role: str, message: str, metadata: Optional[Dict] = None):
@@ -97,7 +98,7 @@ class ConversationMemory:
         interaction = {
             "role": role,
             "message": message[:500],  # Truncar mensajes muy largos
-            "timestamp": datetime.now().isoformat(),
+            "timestamp": datetime.now(pytz.timezone("America/Argentina/Cordoba")).isoformat(),
             "metadata": metadata or {}
         }
         
@@ -107,7 +108,7 @@ class ConversationMemory:
         if len(self.interaction_history) > 20:
             self.interaction_history = self.interaction_history[-20:]
             
-        self.last_interaction = datetime.now()
+        self.last_interaction = datetime.now(pytz.timezone("America/Argentina/Cordoba"))
     
     def get_recent_products_summary(self) -> str:
         """Genera resumen de productos mostrados recientemente"""
@@ -201,7 +202,7 @@ class ConversationMemory:
     def update_user_profile(self, key: str, value: Any):
         """Actualiza perfil del usuario"""
         self.user_profile[key] = value
-        self.last_interaction = datetime.now()
+        self.last_interaction = datetime.now(pytz.timezone("America/Argentina/Cordoba"))
         
         # Actualizar flags específicos
         if key == "experience_level":
@@ -219,7 +220,7 @@ class ConversationMemory:
         self.pending_action = pending_action
         self.last_question = question
         self.context_data = context_data or {}
-        self.last_interaction = datetime.now()
+        self.last_interaction = datetime.now(pytz.timezone("America/Argentina/Cordoba"))
     
     def clear_awaiting_response(self):
         """Limpia el estado de espera de respuesta"""
@@ -227,7 +228,7 @@ class ConversationMemory:
         self.pending_action = None
         self.last_question = None
         self.context_data = {}
-        self.last_interaction = datetime.now()
+        self.last_interaction = datetime.now(pytz.timezone("America/Argentina/Cordoba"))
     
     def is_continuation_response(self, user_message: str) -> bool:
         """Detecta si el mensaje es una continuación de la conversación actual"""
@@ -379,7 +380,7 @@ class ContextManager:
             logger.debug(f"♻️ Existing context reused for: {user_id}")
         
         # Actualizar last_interaction y guardar
-        self.active_contexts[user_id].conversation.last_interaction = datetime.now()
+        self.active_contexts[user_id].conversation.last_interaction = datetime.now(pytz.timezone("America/Argentina/Cordoba"))
         self._save_to_postgresql_if_available(user_id, self.active_contexts[user_id].conversation)
         
         return self.active_contexts[user_id]
