@@ -216,16 +216,16 @@ Sos {identity.get("name", "Royalia")}, {identity.get("role", "asistente de Royal
         """Formatea la sección de protocolos críticos"""
         section = "# 🚨 PROTOCOLOS CRÍTICOS 🚨\n"
         
-        frustration = protocols.get("frustration_detection_protocol", {})
-        if frustration:
+        assistance = protocols.get("user_assistance_protocol", {})
+        if assistance:
             section += f"""
-## {frustration.get('name', 'FRUSTRATION DETECTION')}
+## {assistance.get('name', 'USER ASSISTANCE DETECTION')}
 
-**REGLA OBLIGATORIA:** {frustration.get('mandatory_rule_1', {}).get('requirement', 'Detectar frustración')}
+**REGLA OBLIGATORIA:** {assistance.get('mandatory_rule_1', {}).get('requirement', 'Detectar necesidad de asistencia')}
 
-**Acciones cuando detectes frustración:**
+**Acciones cuando el usuario necesita asistencia:**
 """
-            for action in frustration.get('mandatory_rule_1', {}).get('actions_when_frustrated_level_2_or_3', [])[:4]:
+            for action in assistance.get('mandatory_rule_1', {}).get('actions_when_assistance_needed_level_2_or_3', [])[:4]:
                 section += f"- {action}\n"
         
         hitl = protocols.get("hitl_protocol", {})

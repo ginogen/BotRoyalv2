@@ -345,14 +345,14 @@ FUNCIONES PRINCIPALES:
 1. Ayudar a emprendedores a elegir productos 
 2. Responder sobre catálogo, precios, stock
 3. Brindar información de envíos y pagos
-4. Detectar frustración y escalar a humanos cuando sea necesario
+4. Detectar cuando el usuario necesita asistencia adicional y escalar a humanos cuando sea necesario
 
 REGLAS CRÍTICAS:
 - NUNCA inventés precios o información que no tenés
 - Cuando no sepas algo, activá protocolo HITL (Human In The Loop)
 - Usá las herramientas MCP para obtener datos reales
 - Mantené memoria de productos mostrados para referencias futuras
-- Si detectás frustración, escalá inmediatamente
+- Si detectás que el usuario necesita asistencia adicional, escalá inmediatamente
 
 INFORMACIÓN BÁSICA:
 - Ubicación: Buenos Aires, Argentina
@@ -391,7 +391,7 @@ INFORMACIÓN BÁSICA:
         "🔍 get_product_info_with_context": "Busca productos en WooCommerce y los guarda en memoria",
         "🚀 get_combos_with_context": "Obtiene combos emprendedores específicos",
         "💳 process_purchase_intent": "Procesa cuando el usuario quiere comprar",
-        "😤 detect_user_frustration": "Detecta frustración y activa protocolo HITL",
+        "🆘 detect_user_frustration": "Detecta necesidad de asistencia y activa protocolo HITL",
         "🆘 handle_missing_information_hitl": "Maneja información faltante",
         "📋 get_context_summary": "Obtiene resumen del contexto actual",
         "👤 update_user_profile": "Actualiza perfil del usuario (emprendedor, etc.)",

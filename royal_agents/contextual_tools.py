@@ -18,10 +18,10 @@ APIResponse = Union[List[WooCommerceProduct], Dict[str, Any]]
 @function_tool
 async def detect_user_frustration(wrapper: RunContextWrapper[RoyalAgentContext], user_message: str) -> str:
     """
-    Detecta si el usuario está frustrado, enojado o tiene un problema y activa protocolo HITL.
+    Detecta si el usuario necesita asistencia adicional o tiene dificultades y activa protocolo HITL.
     
     Args:
-        user_message: Mensaje del usuario para analizar frustración
+        user_message: Mensaje del usuario para analizar necesidad de asistencia
     """
     
     context = wrapper.context
@@ -30,7 +30,7 @@ async def detect_user_frustration(wrapper: RunContextWrapper[RoyalAgentContext],
     logger.info(f"😤 DETECT_USER_FRUSTRATION para usuario: {context.user_id}")
     logger.info(f"   Mensaje: {user_message}")
     
-    # Palabras/frases que indican frustración - EXPANDIDA
+    # Palabras/frases que indican necesidad de asistencia - EXPANDIDA
     frustration_indicators = [
         # Enojo directo
         'no funciona', 'no sirve', 'terrible', 'pésimo', 'horrible', 'malísimo',
@@ -41,7 +41,7 @@ async def detect_user_frustration(wrapper: RunContextWrapper[RoyalAgentContext],
         'no me ayuda', 'confundido', 'perdido', 'desastre', 'son un desastre',
         'es un desastre', 'qué desastre', 'no entiendo', 'no logro', 'no puedo',
         
-        # Expresiones de molestia - NUEVAS
+        # Expresiones de disconformidad - NUEVAS
         'me molesta', 'me fastidia', 'me cansa', 'estoy harto', 'estoy cansado',
         'esto no va', 'no me gusta esto', 'esto es horrible', 'esto es terrible',
         
@@ -53,20 +53,20 @@ async def detect_user_frustration(wrapper: RunContextWrapper[RoyalAgentContext],
         'urgente', 'rápido', 'ya', 'inmediatamente', 'problema grave',
         'error', 'falla', 'no me llega', 'perdí', 'se perdió',
         
-        # Expresiones argentinas de frustración
+        # Expresiones argentinas de disconformidad
         'qué quilombo', 'qué bardo', 'no da', 'una garompa', 'un desastre',
         'no va', 'está roto', 'no me anda', 'qué embole', 'es un bodrio'
     ]
     
     message_lower = user_message.lower()
     
-    # Detectar indicadores de frustración
+    # Detectar indicadores de asistencia necesaria
     frustration_found: List[str] = []
     for indicator in frustration_indicators:
         if indicator in message_lower:
             frustration_found.append(indicator)
     
-    # Detectar patrones de frustración - MEJORADOS
+    # Detectar patrones de asistencia necesaria - MEJORADOS
     patterns = [
         r'no (me )?(\w+)',  # "no me funciona", "no anda", "no me gusta"
         r'por qué no (\w+)',  # "por qué no funciona"
@@ -91,7 +91,7 @@ async def detect_user_frustration(wrapper: RunContextWrapper[RoyalAgentContext],
             if phrase in message_lower:
                 frustration_found.append(f"negative_short: {phrase}")
     
-    # Determinar nivel de frustración - MEJORADO
+    # Determinar nivel de asistencia necesaria - MEJORADO
     frustration_level = 0
     
     # Nivel alto: múltiples indicadores o frases muy negativas
@@ -111,11 +111,11 @@ async def detect_user_frustration(wrapper: RunContextWrapper[RoyalAgentContext],
     
     # Registrar en contexto
     if frustration_level > 0:
-        conversation.add_interaction("system", f"Frustración detectada: nivel {frustration_level}")
-        conversation.update_user_profile("frustration_level", frustration_level)
+        conversation.add_interaction("system", f"Usuario necesita asistencia adicional: nivel {frustration_level}")
+        conversation.update_user_profile("assistance_level", frustration_level)
         conversation.current_state = "needs_assistance"
         
-        logger.warning(f"⚠️ FRUSTRACIÓN DETECTADA - Nivel: {frustration_level}")
+        logger.warning(f"⚠️ ASISTENCIA REQUERIDA - Nivel: {frustration_level}")
         logger.warning(f"   Indicadores: {frustration_found}")
         logger.warning(f"   Patrones: {pattern_matches}")
         
@@ -123,7 +123,7 @@ async def detect_user_frustration(wrapper: RunContextWrapper[RoyalAgentContext],
         pattern_strings = [str(match) for match in pattern_matches]
         total_indicators = len(frustration_found + pattern_strings)
         
-        return f"FRUSTRATION_DETECTED|level={frustration_level}|indicators={total_indicators}"
+        return f"ASSISTANCE_NEEDED|level={frustration_level}|indicators={total_indicators}"
     
     return "NO_FRUSTRATION_DETECTED"
 
@@ -320,9 +320,9 @@ async def escalate_to_human_support(
     # Respuesta natural argentina para el usuario
     escalation_responses = {
         'frustration': [
-            "Dale, veo que esto te está complicando. Ya le paso el tema a mi supervisor para que te atienda personalmente",
-            "Uh, perdón por la vuelta que te dimos. Ya escalé esto para que te contacte alguien del equipo",
-            "Mejor que te atienda directamente alguien más especializado. Ya aviso para que te llamen",
+            "Dale, mejor que hable con vos directamente alguien del equipo. Ya le paso tu consulta a mi supervisor",
+            "Te voy a conectar con alguien más especializado que te va a resolver esto al toque",
+            "Para esto necesitás hablar directamente con el equipo. Ya les aviso para que te contacten",
         ],
         'missing_info': [
             "Mirá, mejor que hable con vos directamente alguien que tenga toda la info. Ya los contacto",
@@ -373,9 +373,9 @@ async def get_context_summary(wrapper: RunContextWrapper[RoyalAgentContext]) -> 
     if conversation.user_profile.get("needs_human_assistance"):
         summary_parts.append("🚨 **ALERTA:** Usuario necesita asistencia humana")
         
-    if conversation.user_profile.get("frustration_level", 0) > 0:
-        level = conversation.user_profile.get("frustration_level")
-        summary_parts.append(f"😤 **FRUSTRACIÓN:** Nivel {level}/3")
+    if conversation.user_profile.get("assistance_level", 0) > 0:
+        level = conversation.user_profile.get("assistance_level")
+        summary_parts.append(f"🆘 **NECESITA ASISTENCIA:** Nivel {level}/3")
     
     # Perfil del usuario
     if conversation.is_entrepreneur:
