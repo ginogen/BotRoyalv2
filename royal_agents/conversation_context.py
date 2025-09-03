@@ -55,7 +55,28 @@ class ConversationMemory:
     def to_dict(self) -> Dict[str, Any]:
         """Convertir a diccionario para almacenamiento"""
         from dataclasses import asdict
-        return asdict(self)
+        data = asdict(self)
+        
+        # Convertir datetime a ISO string para JSON serialization
+        for key, value in data.items():
+            if isinstance(value, datetime):
+                data[key] = value.isoformat()
+            elif isinstance(value, list):
+                # Manejar listas que puedan contener objetos con datetime
+                for i, item in enumerate(value):
+                    if isinstance(item, dict):
+                        for k, v in item.items():
+                            if isinstance(v, datetime):
+                                item[k] = v.isoformat()
+        
+        # Manejar ProductReference objects en recent_products
+        if 'recent_products' in data:
+            for product in data['recent_products']:
+                if isinstance(product, dict) and 'shown_at' in product:
+                    if isinstance(product['shown_at'], datetime):
+                        product['shown_at'] = product['shown_at'].isoformat()
+        
+        return data
     
     def add_product_reference(self, product: ProductReference):
         """Agrega referencia a producto mostrado"""

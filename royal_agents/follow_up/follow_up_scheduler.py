@@ -304,7 +304,10 @@ class FollowUpScheduler:
             logger.info(f"📤 Ejecutando follow-up etapa {stage} para usuario {user_id}")
             
             # Verificar si el usuario sigue inactivo
-            if await self._is_user_still_inactive(user_id):
+            is_inactive = await self._is_user_still_inactive(user_id)
+            logger.info(f"🔍 [DEBUG] Usuario {user_id} inactivo: {is_inactive}")
+            
+            if is_inactive:
                 # Importar el manager para enviar el mensaje
                 from .follow_up_manager import FollowUpManager
                 
@@ -359,6 +362,12 @@ class FollowUpScheduler:
                     
                     # Considerar inactivo si no ha interactuado en la última hora
                     cutoff = datetime.now(self.timezone) - timedelta(hours=1)
+                    
+                    # DEBUG: Log para entender la comparación
+                    logger.debug(f"🕐 [DEBUG] last_interaction: {last_interaction} (tzinfo: {last_interaction.tzinfo})")
+                    logger.debug(f"🕐 [DEBUG] cutoff: {cutoff} (tzinfo: {cutoff.tzinfo})")
+                    logger.debug(f"🕐 [DEBUG] is inactive: {last_interaction < cutoff}")
+                    
                     return last_interaction < cutoff
                     
         except Exception as e:

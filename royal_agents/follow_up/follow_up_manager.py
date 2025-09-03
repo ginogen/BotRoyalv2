@@ -216,12 +216,18 @@ ETAPA {stage}: {self._get_stage_description(stage)}
     async def _send_whatsapp_message(self, phone: str, message: str) -> bool:
         """Enviar mensaje via Evolution API"""
         try:
+            logger.info(f"📱 [DEBUG] Intentando enviar mensaje a {phone}")
+            logger.info(f"🔗 [DEBUG] Evolution API URL: {self.evolution_api_url}")
+            logger.info(f"📱 [DEBUG] Instance: {self.instance_name}")
+            
             # Limpiar número de teléfono
             clean_phone = phone.replace('+', '').replace('-', '').replace(' ', '')
             if not clean_phone.startswith('54'):
                 clean_phone = f"54{clean_phone}"
             
             url = f"{self.evolution_api_url}/message/sendText/{self.instance_name}"
+            logger.info(f"🔗 [DEBUG] URL completa: {url}")
+            logger.info(f"📱 [DEBUG] Número limpio: {clean_phone}")
             
             payload = {
                 "number": clean_phone,
@@ -229,9 +235,11 @@ ETAPA {stage}: {self._get_stage_description(stage)}
             }
             
             response = await self.http_client.post(url, json=payload)
+            logger.info(f"📡 [DEBUG] Response status: {response.status_code}")
+            logger.info(f"📡 [DEBUG] Response body: {response.text}")
             
             if response.status_code == 200:
-                logger.debug(f"📱 Mensaje enviado a {phone}")
+                logger.info(f"✅ [DEBUG] Mensaje enviado exitosamente a {phone}")
                 return True
             else:
                 logger.error(f"❌ Error Evolution API: {response.status_code} - {response.text}")
