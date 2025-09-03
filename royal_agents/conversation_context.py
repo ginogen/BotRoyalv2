@@ -38,6 +38,10 @@ class ConversationMemory:
     last_question: Optional[str] = None  # Última pregunta hecha al usuario
     context_data: Dict[str, Any] = field(default_factory=dict)  # Datos adicionales del contexto
     
+    # Información de contacto para escalaciones
+    conversation_id: Optional[str] = None  # ID de conversación en Chatwoot
+    phone: Optional[str] = None  # Número de teléfono del usuario
+    
     # Productos mostrados recientemente (máximo 10)
     recent_products: List[ProductReference] = field(default_factory=list)
     

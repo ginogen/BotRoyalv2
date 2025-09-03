@@ -356,6 +356,11 @@ async def escalate_to_human_support(
     
     # 🚨 NUEVA FUNCIONALIDAD: Notificación automática a equipo via WhatsApp
     try:
+        logger.info(f"🔍 ESCALATION DEBUG - Iniciando notificación automática")
+        logger.info(f"🔍 ESCALATION DEBUG - Reason: {escalation_reason}")
+        logger.info(f"🔍 ESCALATION DEBUG - Context attributes: {dir(wrapper.context)}")
+        logger.info(f"🔍 ESCALATION DEBUG - Context type: {type(wrapper.context)}")
+        
         # Determinar team_id según el tipo de escalación
         team_id = 0
         if escalation_reason == 'frustration':
@@ -367,37 +372,127 @@ async def escalate_to_human_support(
         else:
             team_id = getattr(__import__('royal_server_optimized'), 'CHATWOOT_TEAM_ASSISTANCE_ID', 0)
         
+        logger.info(f"🔍 ESCALATION DEBUG - Team ID determinado: {team_id}")
+        
         # Obtener funciones del server
         if team_id > 0:
             server_module = __import__('royal_server_optimized')
             assign_conversation_func = getattr(server_module, 'assign_conversation_to_team', None)
             send_notification_func = getattr(server_module, 'send_team_whatsapp_notification', None)
             
+            logger.info(f"🔍 ESCALATION DEBUG - assign_conversation_func available: {assign_conversation_func is not None}")
+            logger.info(f"🔍 ESCALATION DEBUG - send_notification_func available: {send_notification_func is not None}")
+            
             if assign_conversation_func and send_notification_func:
+                # Buscar conversation_id en diferentes lugares del contexto
+                conversation_id = None
+                user_phone = 'No disponible'
+                
+                # Método 1: Desde metadata global (nuevo sistema)
+                try:
+                    import sys
+                    server_module = sys.modules.get('royal_server_optimized')
+                    if server_module and hasattr(server_module, 'current_escalation_metadata'):
+                        metadata = server_module.current_escalation_metadata
+                        conversation_id = metadata.get('conversation_id')
+                        user_phone = metadata.get('phone', 'No disponible')
+                        logger.info(f"🔍 ESCALATION DEBUG - Metadata desde server: conversation_id={conversation_id}, phone={user_phone}")
+                except Exception as meta_e:
+                    logger.warning(f"⚠️ No se pudo obtener metadata desde server: {meta_e}")
+                
+                # Método 2: Atributo directo en contexto (fallback)
+                if not conversation_id and hasattr(wrapper.context, 'conversation') and hasattr(wrapper.context.conversation, 'conversation_id'):
+                    conversation_id = wrapper.context.conversation.conversation_id
+                    logger.info(f"🔍 ESCALATION DEBUG - conversation_id desde conversation: {conversation_id}")
+                
+                # Método 3: Desde conversation.phone
+                if user_phone == 'No disponible' and hasattr(wrapper.context, 'conversation') and hasattr(wrapper.context.conversation, 'phone'):
+                    user_phone = wrapper.context.conversation.phone
+                    logger.info(f"🔍 ESCALATION DEBUG - phone desde conversation: {user_phone}")
+                
+                # Método 4: En conversation.context_data
+                if not conversation_id and hasattr(wrapper.context, 'conversation') and hasattr(wrapper.context.conversation, 'context_data'):
+                    conversation_id = wrapper.context.conversation.context_data.get('conversation_id')
+                    if not user_phone or user_phone == 'No disponible':
+                        user_phone = wrapper.context.conversation.context_data.get('phone', 'No disponible')
+                    logger.info(f"🔍 ESCALATION DEBUG - Desde context_data: conversation_id={conversation_id}, phone={user_phone}")
+                
+                logger.info(f"🔍 ESCALATION DEBUG - FINAL: conversation_id={conversation_id}, phone={user_phone}")
+                
                 # Asignar conversación al equipo (si tenemos conversation_id)
-                conversation_id = getattr(wrapper.context, 'conversation_id', None)
                 if conversation_id:
-                    await assign_conversation_func(conversation_id, team_id, f"Escalación: {escalation_reason}")
+                    logger.info(f"🔄 Asignando conversación {conversation_id} a team {team_id}")
+                    assign_result = await assign_conversation_func(conversation_id, team_id, f"Escalación: {escalation_reason}")
+                    logger.info(f"🔍 ESCALATION DEBUG - assign_result: {assign_result}")
+                else:
+                    logger.warning("⚠️ No se pudo obtener conversation_id para asignación")
                 
                 # Enviar notificación WhatsApp al equipo
-                await send_notification_func(
+                logger.info(f"📱 Enviando notificación WhatsApp a team {team_id}")
+                notification_result = await send_notification_func(
                     team_id=team_id,
                     user_name=context.user_id,
-                    user_phone=getattr(wrapper.context, 'phone', 'No disponible'),
+                    user_phone=user_phone,
                     escalation_reason=escalation_reason,
                     context_summary=user_summary
                 )
+                logger.info(f"🔍 ESCALATION DEBUG - notification_result: {notification_result}")
                 
                 logger.info(f"✅ Escalación completa: Chatwoot + WhatsApp team {team_id}")
             else:
                 logger.warning("⚠️ Funciones de escalación no disponibles")
+                logger.warning(f"⚠️ assign_conversation_func: {assign_conversation_func}")
+                logger.warning(f"⚠️ send_notification_func: {send_notification_func}")
         else:
-            logger.warning(f"⚠️ No hay team_id configurado para {escalation_reason}")
+            logger.warning(f"⚠️ No hay team_id configurado para {escalation_reason} (team_id: {team_id})")
+            
+            # Fallback: intentar notificación con team_id por defecto
+            default_team_id = getattr(__import__('royal_server_optimized'), 'CHATWOOT_TEAM_ASSISTANCE_ID', 0)
+            if default_team_id > 0 and default_team_id != team_id:
+                logger.info(f"🔄 FALLBACK - Usando team_id por defecto: {default_team_id}")
+                try:
+                    server_module = __import__('royal_server_optimized')
+                    send_notification_func = getattr(server_module, 'send_team_whatsapp_notification', None)
+                    
+                    if send_notification_func:
+                        # Obtener metadata para phone
+                        user_phone = 'No disponible'
+                        conversation_id = None
+                        
+                        try:
+                            import sys
+                            server_module_meta = sys.modules.get('royal_server_optimized')
+                            if server_module_meta and hasattr(server_module_meta, 'current_escalation_metadata'):
+                                metadata = server_module_meta.current_escalation_metadata
+                                conversation_id = metadata.get('conversation_id')
+                                user_phone = metadata.get('phone', 'No disponible')
+                                logger.info(f"🔍 FALLBACK DEBUG - metadata: conversation_id={conversation_id}, phone={user_phone}")
+                        except Exception as meta_e:
+                            logger.warning(f"⚠️ FALLBACK - No se pudo obtener metadata: {meta_e}")
+                        
+                        # Enviar notificación con team por defecto
+                        notification_result = await send_notification_func(
+                            team_id=default_team_id,
+                            user_name=context.user_id,
+                            user_phone=user_phone,
+                            escalation_reason=f"FALLBACK: {escalation_reason}",
+                            context_summary=user_summary
+                        )
+                        logger.info(f"✅ FALLBACK - Notificación enviada con team por defecto: {notification_result}")
+                    else:
+                        logger.warning("⚠️ FALLBACK - Función de notificación no disponible")
+                        
+                except Exception as fallback_e:
+                    logger.error(f"❌ FALLBACK - Error en notificación por defecto: {fallback_e}")
+            else:
+                logger.warning(f"⚠️ FALLBACK - Team por defecto tampoco configurado: {default_team_id}")
             
     except Exception as e:
         # Si falla la notificación, no afectar la escalación principal
         logger.error(f"❌ Error en notificación automática: {e}")
         logger.warning("⚠️ Escalación continúa sin notificación automática")
+        import traceback
+        logger.error(f"❌ Stack trace: {traceback.format_exc()}")
     
     return f"ESCALATED_TO_HUMAN|{selected_response}"
 

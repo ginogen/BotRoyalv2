@@ -243,6 +243,25 @@ async def process_royal_message(user_id: str, message: str, message_data: Option
         logger.info(f"🤖 Llamando a run_contextual_conversation_sync para {user_id}")
         logger.info(f"🤖 Royal agents disponible: {ROYAL_AGENTS_AVAILABLE}")
         
+        # Preparar metadata para escalaciones (conversation_id y phone)
+        escalation_metadata = {}
+        if message_data and message_data.conversation_id:
+            escalation_metadata['conversation_id'] = message_data.conversation_id
+        if message_data and message_data.phone:
+            escalation_metadata['phone'] = message_data.phone
+        
+        # Pasar metadata al agente (temporal - necesitará refactor del agente)
+        if escalation_metadata:
+            logger.info(f"🔍 ESCALATION METADATA - Pasando al agente: {escalation_metadata}")
+            # Para ahora, guardarlo globalmente para que contextual_tools.py pueda accederlo
+            import threading
+            thread_local = threading.local()
+            thread_local.escalation_metadata = escalation_metadata
+            
+            # Hacer disponible para contextual_tools
+            import sys
+            sys.modules[__name__].current_escalation_metadata = escalation_metadata
+        
         response = run_contextual_conversation_sync(user_id, message)
         
         logger.info(f"🤖 Respuesta recibida: {response[:50] if response else 'None'}...")
