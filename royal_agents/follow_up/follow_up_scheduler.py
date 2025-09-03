@@ -35,7 +35,7 @@ class FollowUpScheduler:
         
         # Configuración de etapas (en horas)
         self.stage_delays = {
-            1: 1,      # 1 hora
+            1: 0.167,  # TEMPORAL: 10 minutos para pruebas (antes 1 hora)
             2: 6,      # 6 horas  
             3: 24,     # 1 día
             4: 48,     # 2 días
@@ -174,9 +174,11 @@ class FollowUpScheduler:
                     )
                     """
                     
-                    cutoff_time = datetime.now(self.timezone) - timedelta(hours=1)
+                    # TEMPORAL: Reducido a 10 minutos para pruebas
+                    cutoff_time = datetime.now(self.timezone) - timedelta(minutes=10)
                     
                     logger.debug(f"🔍 Checking inactive users since: {cutoff_time}")
+                    logger.info(f"🧪 [PRUEBA] Detectando usuarios inactivos por más de 10 minutos")
                     logger.debug(f"🔍 Timezone: {self.timezone}")
                     
                     cursor.execute(query, (cutoff_time,))
@@ -360,8 +362,8 @@ class FollowUpScheduler:
                     else:
                         last_interaction = last_interaction.astimezone(self.timezone)
                     
-                    # Considerar inactivo si no ha interactuado en la última hora
-                    cutoff = datetime.now(self.timezone) - timedelta(hours=1)
+                    # TEMPORAL: Reducido a 10 minutos para pruebas
+                    cutoff = datetime.now(self.timezone) - timedelta(minutes=10)
                     
                     # DEBUG: Log para entender la comparación
                     logger.debug(f"🕐 [DEBUG] last_interaction: {last_interaction} (tzinfo: {last_interaction.tzinfo})")
