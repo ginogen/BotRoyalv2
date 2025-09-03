@@ -195,11 +195,12 @@ class FollowUpScheduler:
                     FROM conversation_contexts cc
                     LEFT JOIN follow_up_blacklist bl ON cc.user_id = bl.user_id
                     WHERE bl.user_id IS NULL  -- No está en blacklist
-                    AND cc.last_interaction < %s  -- Inactivo por más de 1 hora
-                    AND NOT EXISTS (  -- No tiene follow-ups pendientes
+                    AND cc.last_interaction < %s  -- Inactivo por más de X minutos
+                    AND NOT EXISTS (  -- No tiene follow-ups pendientes Y recientes
                         SELECT 1 FROM follow_up_jobs fj 
                         WHERE fj.user_id = cc.user_id 
                         AND fj.status = 'pending'
+                        AND fj.created_at > cc.last_interaction  -- Solo follow-ups creados después de la última interacción
                     )
                     """
                     
