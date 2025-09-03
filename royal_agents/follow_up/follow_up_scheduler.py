@@ -49,6 +49,35 @@ class FollowUpScheduler:
         self.start_hour = 9   # 9 AM
         self.end_hour = 21    # 9 PM
         self.allowed_weekdays = [1, 2, 3, 4, 5, 6]  # Lunes a sábado
+    
+    def _ensure_argentina_timezone(self, dt_input) -> datetime:
+        """
+        Helper para asegurar que cualquier datetime tenga timezone de Argentina
+        """
+        if isinstance(dt_input, str):
+            # Parsear el datetime string con manejo correcto de timezone
+            if dt_input.endswith('Z'):
+                # UTC format - convertir a Argentina
+                dt = datetime.fromisoformat(dt_input.replace('Z', '+00:00'))
+                return dt.astimezone(self.timezone)
+            elif '+' in dt_input or '-' in dt_input[-6:]:
+                # Ya tiene timezone - parsear y convertir a Argentina
+                dt = datetime.fromisoformat(dt_input)
+                return dt.astimezone(self.timezone)
+            else:
+                # Sin timezone - asumir Argentina timezone
+                dt = datetime.fromisoformat(dt_input)
+                if dt.tzinfo is None:
+                    return self.timezone.localize(dt)
+                return dt
+        elif isinstance(dt_input, datetime):
+            # Ya es datetime object
+            if dt_input.tzinfo is None:
+                return self.timezone.localize(dt_input)
+            else:
+                return dt_input.astimezone(self.timezone)
+        else:
+            raise ValueError(f"Tipo no soportado para datetime: {type(dt_input)}")
         
     async def initialize(self):
         """Inicializar el scheduler"""
@@ -218,8 +247,14 @@ class FollowUpScheduler:
                     """, (user_id,))
                     last_msg = cursor.fetchone()
             
-            if isinstance(last_interaction, str):
-                last_interaction = datetime.fromisoformat(last_interaction.replace('Z', '+00:00'))
+            # Usar helper para asegurar timezone correcto
+            last_interaction = self._ensure_argentina_timezone(last_interaction)
+            
+            # TEMPORAL: Debug logging para timezone
+            logger.info(f"🕐 [TIMEZONE DEBUG] Usuario: {user_id}")
+            logger.info(f"🕐 [TIMEZONE DEBUG] last_interaction original: {user_data.get('last_interaction')}")
+            logger.info(f"🕐 [TIMEZONE DEBUG] last_interaction procesado: {last_interaction}")
+            logger.info(f"🕐 [TIMEZONE DEBUG] timezone actual: {self.timezone}")
             
             # Programar cada etapa del follow-up
             for stage, delay_hours in self.stage_delays.items():
@@ -354,15 +389,13 @@ class FollowUpScheduler:
                     if not result:
                         return False
                     
-                    last_interaction = result['last_interaction']
-                    if isinstance(last_interaction, str):
-                        last_interaction = datetime.fromisoformat(last_interaction.replace('Z', '+00:00'))
+                    # Usar helper para asegurar timezone correcto
+                    last_interaction = self._ensure_argentina_timezone(result['last_interaction'])
                     
-                    # Asegurar que last_interaction tenga timezone
-                    if last_interaction.tzinfo is None:
-                        last_interaction = self.timezone.localize(last_interaction)
-                    else:
-                        last_interaction = last_interaction.astimezone(self.timezone)
+                    # TEMPORAL: Debug logging para timezone en inactividad
+                    logger.info(f"🕐 [INACTIVE DEBUG] Usuario: {user_id}")
+                    logger.info(f"🕐 [INACTIVE DEBUG] last_interaction desde BD: {result['last_interaction']}")
+                    logger.info(f"🕐 [INACTIVE DEBUG] last_interaction procesado: {last_interaction}")
                     
                     # TEMPORAL: Reducido a 10 minutos para pruebas
                     cutoff = datetime.now(self.timezone) - timedelta(minutes=10)

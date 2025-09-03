@@ -3559,6 +3559,49 @@ async def clear_user_followups_endpoint(request: Request):
         logger.error(f"❌ Error limpiando follow-ups: {e}")
         return {"error": str(e)}
 
+@app.post("/debug/clear-all-followups")
+async def clear_all_followups_endpoint():
+    """
+    Endpoint para limpiar TODAS las tablas de follow-ups
+    """
+    try:
+        import psycopg2
+        
+        database_url = os.getenv("DATABASE_URL")
+        if not database_url:
+            return {"error": "DATABASE_URL no configurada"}
+        
+        with psycopg2.connect(database_url) as conn:
+            with conn.cursor() as cursor:
+                # Contar registros antes de borrar
+                cursor.execute("SELECT COUNT(*) FROM follow_up_jobs")
+                jobs_count = cursor.fetchone()[0]
+                
+                cursor.execute("SELECT COUNT(*) FROM conversation_contexts")
+                contexts_count = cursor.fetchone()[0]
+                
+                cursor.execute("SELECT COUNT(*) FROM follow_up_history")
+                history_count = cursor.fetchone()[0]
+                
+                # Limpiar todas las tablas
+                cursor.execute("DELETE FROM follow_up_jobs")
+                cursor.execute("DELETE FROM conversation_contexts") 
+                cursor.execute("DELETE FROM follow_up_history")
+                
+                return {
+                    "success": True,
+                    "message": "Todas las tablas de follow-up limpiadas",
+                    "deleted": {
+                        "follow_up_jobs": jobs_count,
+                        "conversation_contexts": contexts_count,
+                        "follow_up_history": history_count
+                    }
+                }
+        
+    except Exception as e:
+        logger.error(f"❌ Error limpiando todas las tablas: {e}")
+        return {"error": str(e)}
+
 # =====================================================
 # MAIN EXECUTION
 # =====================================================
