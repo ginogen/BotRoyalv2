@@ -425,13 +425,18 @@ ETAPA {stage}: {self._get_stage_description(stage)}
                     logger.warning(f"⏳ Rate limit, esperando {wait_time}s...")
                     await asyncio.sleep(wait_time)
                     continue
-                else:
-                    logger.error(f"❌ Error Evolution API: {response.status_code}")
-                    # TEMPORAL: Log detallado del error en reintentos
-                    logger.error(f"📋 [RETRY ERROR] Response body: {response.text}")
+                elif response.status_code in [500, 502, 503, 504]:  # Server errors
+                    logger.warning(f"🔄 Error del servidor {response.status_code}, reintentando...")
                     if attempt == max_retries - 1:
+                        logger.error(f"❌ Error Evolution API después de {max_retries} intentos: {response.status_code}")
                         return False
-                    await asyncio.sleep(1)
+                    await asyncio.sleep(2)  # Pausa más larga para errores del servidor
+                    continue
+                else:
+                    # Errores 4xx (Bad Request, etc.) - No reintentar
+                    logger.error(f"❌ Error Evolution API (no reintentable): {response.status_code}")
+                    logger.error(f"📋 [ERROR] Response body: {response.text}")
+                    return False  # Fallar inmediatamente
                     
             except Exception as e:
                 logger.error(f"❌ Error intento {attempt + 1}: {e}")
