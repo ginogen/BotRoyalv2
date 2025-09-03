@@ -97,6 +97,13 @@ CHATWOOT_TEAM_SHIPPING_ID = int(os.getenv("CHATWOOT_TEAM_SHIPPING_ID", "0"))
 CHATWOOT_TEAM_SUPPORT_ID = int(os.getenv("CHATWOOT_TEAM_SUPPORT_ID", "0"))
 CHATWOOT_TEAM_BILLING_ID = int(os.getenv("CHATWOOT_TEAM_BILLING_ID", "0"))
 CHATWOOT_TEAM_GENERAL_ID = int(os.getenv("CHATWOOT_TEAM_GENERAL_ID", "0"))  # Para consultas generales sin información
+CHATWOOT_TEAM_ASSISTANCE_ID = int(os.getenv("CHATWOOT_TEAM_ASSISTANCE_ID", "0"))  # Para escalaciones de asistencia
+
+# Team WhatsApp numbers for notifications
+TEAM_SHIPPING_WHATSAPP = os.getenv("TEAM_SHIPPING_WHATSAPP", "")
+TEAM_SUPPORT_WHATSAPP = os.getenv("TEAM_SUPPORT_WHATSAPP", "")
+TEAM_BILLING_WHATSAPP = os.getenv("TEAM_BILLING_WHATSAPP", "")
+TEAM_ASSISTANCE_WHATSAPP = os.getenv("TEAM_ASSISTANCE_WHATSAPP", "")
 
 # Performance tuning
 ENABLE_PERFORMANCE_MONITORING = os.getenv("ENABLE_PERFORMANCE_MONITORING", "true").lower() == "true"
@@ -526,6 +533,69 @@ async def send_evolution_message(phone: str, message: str) -> bool:
             
     except Exception as e:
         logger.error(f"❌ Evolution send error: {e}")
+        return False
+
+async def send_team_whatsapp_notification(
+    team_id: int, 
+    user_name: str, 
+    user_phone: str, 
+    escalation_reason: str,
+    context_summary: str = ""
+) -> bool:
+    """
+    Envía notificación WhatsApp al equipo cuando se escala asistencia
+    
+    Args:
+        team_id: ID del equipo en Chatwoot
+        user_name: Nombre/ID del usuario
+        user_phone: Teléfono del usuario
+        escalation_reason: Razón de la escalación
+        context_summary: Resumen del contexto (opcional)
+    
+    Returns:
+        bool: True si la notificación fue enviada exitosamente
+    """
+    
+    # Mapear team_id a número de WhatsApp
+    team_whatsapp_map = {
+        CHATWOOT_TEAM_SHIPPING_ID: TEAM_SHIPPING_WHATSAPP,
+        CHATWOOT_TEAM_SUPPORT_ID: TEAM_SUPPORT_WHATSAPP, 
+        CHATWOOT_TEAM_BILLING_ID: TEAM_BILLING_WHATSAPP,
+        CHATWOOT_TEAM_ASSISTANCE_ID: TEAM_ASSISTANCE_WHATSAPP,
+        CHATWOOT_TEAM_GENERAL_ID: TEAM_SUPPORT_WHATSAPP  # Fallback a soporte
+    }
+    
+    team_whatsapp = team_whatsapp_map.get(team_id, "")
+    if not team_whatsapp:
+        logger.warning(f"⚠️ No WhatsApp configurado para team {team_id}")
+        return False
+    
+    # Generar mensaje de notificación
+    notification_message = f"""🚨 *Usuario asignado*
+
+👤 *Usuario:* {user_name}
+📱 *Teléfono:* {user_phone}
+🆘 *Motivo:* {escalation_reason}
+
+📋 *Contexto:*
+{context_summary[:200] + '...' if len(context_summary) > 200 else context_summary}
+
+💬 *Acción:* Revisar conversación en Chatwoot"""
+    
+    try:
+        # Enviar notificación usando Evolution API existente
+        success = await send_evolution_message(team_whatsapp, notification_message)
+        
+        if success:
+            logger.info(f"✅ Notificación WhatsApp enviada a team {team_id} ({team_whatsapp})")
+            logger.info(f"   Usuario: {user_name} - Motivo: {escalation_reason}")
+            return True
+        else:
+            logger.error(f"❌ Falló notificación WhatsApp a team {team_id}")
+            return False
+            
+    except Exception as e:
+        logger.error(f"❌ Error enviando notificación a team {team_id}: {e}")
         return False
 
 # =====================================================

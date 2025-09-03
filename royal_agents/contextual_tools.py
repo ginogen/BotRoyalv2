@@ -348,6 +348,51 @@ async def escalate_to_human_support(
     # Agregar timeframe realista
     selected_response += " En breve te van a contactar. 📞"
     
+    # 🚨 NUEVA FUNCIONALIDAD: Notificación automática a equipo via WhatsApp
+    try:
+        # Determinar team_id según el tipo de escalación
+        team_id = 0
+        if escalation_reason == 'frustration':
+            team_id = getattr(__import__('royal_server_optimized'), 'CHATWOOT_TEAM_ASSISTANCE_ID', 0)
+        elif escalation_reason in ['missing_info', 'technical_issue']:
+            team_id = getattr(__import__('royal_server_optimized'), 'CHATWOOT_TEAM_SUPPORT_ID', 0)
+        elif escalation_reason == 'complex_query':
+            team_id = getattr(__import__('royal_server_optimized'), 'CHATWOOT_TEAM_GENERAL_ID', 0)
+        else:
+            team_id = getattr(__import__('royal_server_optimized'), 'CHATWOOT_TEAM_ASSISTANCE_ID', 0)
+        
+        # Obtener funciones del server
+        if team_id > 0:
+            server_module = __import__('royal_server_optimized')
+            assign_conversation_func = getattr(server_module, 'assign_conversation_to_team', None)
+            send_notification_func = getattr(server_module, 'send_team_whatsapp_notification', None)
+            
+            if assign_conversation_func and send_notification_func:
+                # Asignar conversación al equipo (si tenemos conversation_id)
+                conversation_id = getattr(wrapper.context, 'conversation_id', None)
+                if conversation_id:
+                    await assign_conversation_func(conversation_id, team_id, f"Escalación: {escalation_reason}")
+                
+                # Enviar notificación WhatsApp al equipo
+                await send_notification_func(
+                    team_id=team_id,
+                    user_name=context.user_id,
+                    user_phone=getattr(wrapper.context, 'phone', 'No disponible'),
+                    escalation_reason=escalation_reason,
+                    context_summary=user_summary
+                )
+                
+                logger.info(f"✅ Escalación completa: Chatwoot + WhatsApp team {team_id}")
+            else:
+                logger.warning("⚠️ Funciones de escalación no disponibles")
+        else:
+            logger.warning(f"⚠️ No hay team_id configurado para {escalation_reason}")
+            
+    except Exception as e:
+        # Si falla la notificación, no afectar la escalación principal
+        logger.error(f"❌ Error en notificación automática: {e}")
+        logger.warning("⚠️ Escalación continúa sin notificación automática")
+    
     return f"ESCALATED_TO_HUMAN|{selected_response}"
 
 @function_tool
