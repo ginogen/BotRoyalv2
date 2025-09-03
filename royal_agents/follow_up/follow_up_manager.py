@@ -35,7 +35,7 @@ class FollowUpManager:
         self.http_client = httpx.AsyncClient(
             timeout=30.0,
             headers={
-                "Authorization": f"Bearer {evolution_token}",
+                "apikey": evolution_token,  # CORRECTED: Evolution API uses 'apikey', not 'Authorization: Bearer'
                 "Content-Type": "application/json"
             }
         )
@@ -219,6 +219,9 @@ ETAPA {stage}: {self._get_stage_description(stage)}
             logger.info(f"📱 [DEBUG] Intentando enviar mensaje a {phone}")
             logger.info(f"🔗 [DEBUG] Evolution API URL: {self.evolution_api_url}")
             logger.info(f"📱 [DEBUG] Instance: {self.instance_name}")
+            # TEMPORAL: Log token parcial para debug
+            token_preview = self.evolution_token[:10] + "..." if self.evolution_token else "NO_TOKEN"
+            logger.info(f"🔑 [DEBUG] Token preview: {token_preview}")
             
             # Limpiar número de teléfono
             clean_phone = phone.replace('+', '').replace('-', '').replace(' ', '')
