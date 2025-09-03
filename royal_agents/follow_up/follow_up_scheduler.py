@@ -225,8 +225,10 @@ class FollowUpScheduler:
             for stage, delay_hours in self.stage_delays.items():
                 scheduled_time = last_interaction + timedelta(hours=delay_hours)
                 
-                # Ajustar al horario permitido
-                scheduled_time = self._adjust_to_business_hours(scheduled_time)
+                # Stage 1 se envía inmediatamente, otros stages respetan horario comercial
+                if stage > 1:
+                    scheduled_time = self._adjust_to_business_hours(scheduled_time)
+                # Stage 1 no ajusta horario - se envía inmediatamente cuando es hora
                 
                 await self._create_followup_job(
                     user_id=user_id,
@@ -447,7 +449,10 @@ class FollowUpScheduler:
             
             for stage, delay_hours in self.stage_delays.items():
                 scheduled_time = base_time + timedelta(hours=delay_hours)
-                scheduled_time = self._adjust_to_business_hours(scheduled_time)
+                
+                # Stage 1 se envía inmediatamente, otros stages respetan horario comercial  
+                if stage > 1:
+                    scheduled_time = self._adjust_to_business_hours(scheduled_time)
                 
                 await self._create_followup_job(
                     user_id=user_id,
