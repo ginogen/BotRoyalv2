@@ -35,14 +35,13 @@ class FollowUpScheduler:
         
         # Configuración de etapas (en horas)
         self.stage_delays = {
-            1: 0.167,  # TEMPORAL: 10 minutos para pruebas (antes 1 hora)
-            2: 6,      # 6 horas  
-            3: 24,     # 1 día
-            4: 48,     # 2 días
-            5: 72,     # 3 días
-            6: 96,     # 4 días
-            7: 120,    # 5 días
-            8: 168     # 7 días
+            1: 1,      # 1 hora
+            2: 24,     # 1 día
+            3: 48,     # 2 días
+            4: 72,     # 3 días
+            5: 96,     # 4 días
+            6: 120,    # 5 días
+            7: 168     # 7 días
         }
         
         # Horarios permitidos
@@ -112,7 +111,7 @@ class FollowUpScheduler:
             self.scheduler.add_job(
                 func=self._check_inactive_users,
                 trigger='interval',
-                minutes=5,  # Revisar cada 5 minutos
+                minutes=60,  # Revisar cada 1 hora
                 id='check_inactive_users',
                 replace_existing=True
             )
@@ -189,29 +188,36 @@ class FollowUpScheduler:
             
             with psycopg2.connect(self.database_url) as conn:
                 with conn.cursor(cursor_factory=RealDictCursor) as cursor:
-                    # Buscar usuarios inactivos que no tienen follow-ups programados
+                    # Buscar usuarios inactivos que no tienen follow-ups programados o recientes
                     query = """
                     SELECT DISTINCT cc.user_id, cc.last_interaction, cc.context_data
                     FROM conversation_contexts cc
                     LEFT JOIN follow_up_blacklist bl ON cc.user_id = bl.user_id
                     WHERE bl.user_id IS NULL  -- No está en blacklist
-                    AND cc.last_interaction < %s  -- Inactivo por más de X minutos
-                    AND NOT EXISTS (  -- No tiene follow-ups pendientes Y recientes
+                    AND cc.last_interaction < %s  -- Inactivo por más de 1 hora
+                    AND NOT EXISTS (  -- No tiene follow-ups pendientes recientes
                         SELECT 1 FROM follow_up_jobs fj 
                         WHERE fj.user_id = cc.user_id 
                         AND fj.status = 'pending'
-                        AND fj.created_at > cc.last_interaction  -- Solo follow-ups creados después de la última interacción
+                        AND fj.created_at > cc.last_interaction
+                    )
+                    AND NOT EXISTS (  -- No se envió follow-up en la última hora (COOLDOWN)
+                        SELECT 1 FROM follow_up_jobs fj2
+                        WHERE fj2.user_id = cc.user_id
+                        AND fj2.sent_at > %s  -- No enviado en la última hora
                     )
                     """
                     
-                    # TEMPORAL: Reducido a 10 minutos para pruebas
-                    cutoff_time = datetime.now(self.timezone) - timedelta(minutes=10)
+                    # Detección de usuarios inactivos después de 1 hora
+                    cutoff_time = datetime.now(self.timezone) - timedelta(hours=1)
+                    cooldown_time = datetime.now(self.timezone) - timedelta(hours=1)  # Cooldown de 1 hora
                     
                     logger.debug(f"🔍 Checking inactive users since: {cutoff_time}")
-                    logger.info(f"🧪 [PRUEBA] Detectando usuarios inactivos por más de 10 minutos")
+                    logger.info(f"🕐 Detectando usuarios inactivos por más de 1 hora")
+                    logger.debug(f"🔍 Cooldown time: {cooldown_time}")
                     logger.debug(f"🔍 Timezone: {self.timezone}")
                     
-                    cursor.execute(query, (cutoff_time,))
+                    cursor.execute(query, (cutoff_time, cooldown_time,))
                     inactive_users = cursor.fetchall()
                     
                     logger.info(f"👥 Encontrados {len(inactive_users)} usuarios inactivos")
@@ -411,8 +417,8 @@ class FollowUpScheduler:
                     logger.info(f"🕐 [INACTIVE DEBUG] last_interaction usado final: {last_interaction_raw}")
                     logger.info(f"🕐 [INACTIVE DEBUG] last_interaction procesado: {last_interaction}")
                     
-                    # TEMPORAL: Reducido a 10 minutos para pruebas
-                    cutoff = datetime.now(self.timezone) - timedelta(minutes=10)
+                    # Detección de usuarios inactivos después de 1 hora
+                    cutoff = datetime.now(self.timezone) - timedelta(hours=1)
                     
                     # DEBUG: Log para entender la comparación
                     logger.debug(f"🕐 [DEBUG] last_interaction: {last_interaction} (tzinfo: {last_interaction.tzinfo})")
