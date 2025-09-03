@@ -982,7 +982,29 @@ async def check_and_route_by_keywords(message: str, conversation_id: str, phone:
     message_lower = message.lower()
     logger.info(f"🔍 check_and_route_by_keywords - Analizando: '{message_lower[:100]}...'")
     
-    # Revisar cada categoría de keywords
+    # 🆕 PRIMERA PRIORIDAD: Detectar consultas sobre productos (enviar al bot)
+    product_inquiry_keywords = [
+        "tienen", "hay", "venden", "tenés", "vendés", "stock", "disponible", "disponibles",
+        "busco", "necesito", "quiero", "me interesa", "consulta sobre", "info sobre",
+        "tipos de", "clases de", "variedad de", "modelos de", "categorías de"
+    ]
+    
+    is_product_query = any(kw in message_lower for kw in product_inquiry_keywords)
+    
+    # Verificar que no sea consulta específica de pedido/problema
+    specific_issue_keywords = [
+        "mi pedido", "mi orden", "mi compra", "estado de mi", "donde esta mi",
+        "reclamo", "problema con mi", "defectuoso", "roto", "garantía",
+        "factura", "pago mal", "me cobraron"
+    ]
+    
+    is_specific_issue = any(kw in message_lower for kw in specific_issue_keywords)
+    
+    if is_product_query and not is_specific_issue:
+        logger.info("🤖 Detectada consulta de productos → Enviando al bot para usar CategoryMatcher")
+        return False  # No asignar a equipo, que continúe al bot
+    
+    # Revisar cada categoría de keywords para asignación a equipos
     for route_type, config in KEYWORD_ROUTING.items():
         logger.info(f"🔍 Revisando categoría: {route_type}")
         

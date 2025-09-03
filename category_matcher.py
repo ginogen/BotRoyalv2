@@ -51,7 +51,7 @@ class CategoryMatcher:
     """
     
     def __init__(self, json_path: str = None):
-        self.json_path = json_path or "/Users/gino/BotRoyalv2/Entrenamiento/todas-las-categorias.json"
+        # Inicializar atributos primero
         self.categories: List[Category] = []
         self.keyword_to_categories: Dict[str, List[Category]] = {}
         
@@ -59,11 +59,41 @@ class CategoryMatcher:
         self.min_relevance_score = 0.3
         self.max_results = 8
         
+        # Buscar archivo JSON en múltiples ubicaciones
+        if json_path:
+            self.json_path = json_path
+        else:
+            self.json_path = self._find_categories_json()
+        
+        if not self.json_path:
+            logger.error("❌ No se pudo encontrar el archivo todas-las-categorias.json")
+            return
+            
         # Cargar categorías
         self._load_categories()
         self._build_keyword_mappings()
         
         logger.info(f"🔍 CategoryMatcher inicializado: {len(self.categories)} categorías cargadas")
+            
+    def _find_categories_json(self) -> str:
+        """Buscar el archivo JSON en ubicaciones posibles"""
+        possible_paths = [
+            "/Users/gino/BotRoyalv2/Entrenamiento/todas-las-categorias.json",
+            "./Entrenamiento/todas-las-categorias.json",
+            "../Entrenamiento/todas-las-categorias.json",
+            "../../Entrenamiento/todas-las-categorias.json",
+            os.path.join(os.path.dirname(__file__), "Entrenamiento", "todas-las-categorias.json"),
+            os.path.join(os.path.dirname(os.path.dirname(__file__)), "Entrenamiento", "todas-las-categorias.json")
+        ]
+        
+        for path in possible_paths:
+            abs_path = os.path.abspath(path)
+            if os.path.exists(abs_path):
+                logger.info(f"✅ Archivo JSON encontrado en: {abs_path}")
+                return abs_path
+        
+        logger.error(f"❌ Archivo JSON no encontrado en ninguna ubicación: {possible_paths}")
+        return ""
     
     def _load_categories(self) -> None:
         """Cargar categorías desde el JSON"""
