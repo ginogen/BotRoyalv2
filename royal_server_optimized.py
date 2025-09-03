@@ -41,6 +41,9 @@ from advanced_message_queue import (
 )
 from dynamic_worker_pool import initialize_worker_pool, shutdown_worker_pool, dynamic_pool
 
+# Message grouping system
+from message_grouper import should_group_message, start_grouper_maintenance, get_grouper_stats
+
 # Bot state management
 from bot_state_manager import BotStateManager
 
@@ -523,6 +526,59 @@ async def send_evolution_message(phone: str, message: str) -> bool:
             
     except Exception as e:
         logger.error(f"❌ Evolution send error: {e}")
+        return False
+
+# =====================================================
+# MESSAGE GROUPING CALLBACK
+# =====================================================
+
+async def _process_grouped_message_callback(
+    user_id: str, 
+    message: str, 
+    metadata: Dict[str, Any],
+    group_size: int = 1
+) -> bool:
+    """
+    Callback para procesar mensajes agrupados desde MessageGrouper.
+    Evita dependencias circulares.
+    """
+    try:
+        from advanced_message_queue import MessageSource, MessagePriority
+        
+        # Determinar source desde metadata
+        source_str = metadata.get('source', 'evolution')
+        if source_str == 'chatwoot':
+            source = MessageSource.CHATWOOT
+        elif source_str == 'evolution':  
+            source = MessageSource.EVOLUTION
+        else:
+            source = MessageSource.TEST
+        
+        # Determinar prioridad
+        priority = MessagePriority.NORMAL
+        if any(word in message.lower() for word in ['urgente', 'problema', 'error']):
+            priority = MessagePriority.HIGH
+        
+        # Usar process_message_pipeline existente
+        success = await process_message_pipeline(
+            user_id=user_id,
+            message=message,
+            source=source,
+            conversation_id=metadata.get('conversation_id'),
+            phone=metadata.get('phone'),
+            priority=priority,
+            metadata={
+                **metadata,
+                "grouped_messages": group_size,
+                "processed_by_grouper": True
+            }
+        )
+        
+        logger.info(f"🔗 Mensaje agrupado procesado: {user_id} ({group_size} mensajes)")
+        return success
+        
+    except Exception as e:
+        logger.error(f"❌ Error en callback de agrupamiento: {e}")
         return False
 
 # =====================================================
@@ -1702,22 +1758,44 @@ async def chatwoot_webhook(request: Request, background_tasks: BackgroundTasks):
                         logger.info(f"🔍 CHATWOOT - NO se detectaron keywords de asignación en: '{content[:50]}...'")
                         # CONTINUAR con el procesamiento normal del bot solo si NO hubo asignación
                     
-                    # Determine priority based on content
+                    # Check if message should be grouped with previous messages
+                    should_wait, grouped_message = await should_group_message(
+                        user_id, 
+                        content,
+                        {
+                            "source": "chatwoot",
+                            "conversation_id": conversation_id,
+                            "contact_id": contact_id,
+                            "conversation_type": conversation.get("channel")
+                        }
+                    )
+                    
+                    # If should_wait=True, message is buffered, return early
+                    if should_wait:
+                        logger.info(f"🔄 Mensaje de {user_id} agregado al buffer de agrupamiento")
+                        return {"status": "buffered", "conversation_id": conversation_id}
+                    
+                    # Use grouped message if available, otherwise original content
+                    final_message = grouped_message if grouped_message else content
+                    
+                    # Determine priority based on final message content
                     priority = MessagePriority.NORMAL
-                    if any(word in content.lower() for word in ['urgente', 'problema', 'error']):
+                    if any(word in final_message.lower() for word in ['urgente', 'problema', 'error']):
                         priority = MessagePriority.HIGH
                     
                     # Add to processing pipeline
                     success = await process_message_pipeline(
                         user_id=user_id,
-                        message=content,
+                        message=final_message,
                         source=MessageSource.CHATWOOT,
                         conversation_id=conversation_id,
                         priority=priority,
                         metadata={
                             "contact_id": contact_id,
                             "conversation_type": conversation.get("channel"),
-                            "webhook_data": data
+                            "webhook_data": data,
+                            "grouped": grouped_message is not None,
+                            "original_message": content if grouped_message else None
                         }
                     )
                     
@@ -1869,23 +1947,45 @@ async def evolution_webhook(request: Request, background_tasks: BackgroundTasks)
                 
                 logger.info(f"ℹ️ Continuando con bot normal para {from_number} (sin conversation_id)")
             
-            # Auto-prioritize based on content
+            # Check if message should be grouped with previous messages
+            should_wait, grouped_message = await should_group_message(
+                user_id, 
+                message_content,
+                {
+                    "source": "evolution",
+                    "phone": from_number,
+                    "instance": INSTANCE_NAME,
+                    "conversation_id": conversation_id
+                }
+            )
+            
+            # If should_wait=True, message is buffered, return early
+            if should_wait:
+                logger.info(f"🔄 Mensaje de {user_id} agregado al buffer de agrupamiento (Evolution)")
+                return {"status": "buffered", "phone": from_number}
+            
+            # Use grouped message if available, otherwise original content
+            final_message = grouped_message if grouped_message else message_content
+            
+            # Auto-prioritize based on final message content
             priority = MessagePriority.NORMAL
-            if any(word in message_content.lower() for word in ['urgente', 'problema', 'error']):
+            if any(word in final_message.lower() for word in ['urgente', 'problema', 'error']):
                 priority = MessagePriority.HIGH
-            elif any(word in message_content.lower() for word in ['comprar', 'precio', 'stock']):
+            elif any(word in final_message.lower() for word in ['comprar', 'precio', 'stock']):
                 priority = MessagePriority.HIGH
             
             # Add to processing pipeline
             success = await process_message_pipeline(
                 user_id=user_id,
-                message=message_content,
+                message=final_message,
                 source=MessageSource.EVOLUTION,
                 phone=from_number,
                 priority=priority,
                 metadata={
                     "instance": INSTANCE_NAME,
-                    "webhook_data": data
+                    "webhook_data": data,
+                    "grouped": grouped_message is not None,
+                    "original_message": message_content if grouped_message else None
                 }
             )
         else:
@@ -2091,6 +2191,59 @@ async def get_bot_stats():
         logger.error(f"❌ Error obteniendo estadísticas: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.post("/test/grouped-message")
+async def test_grouped_message(request: Request):
+    """Test endpoint para probar el agrupamiento de mensajes"""
+    try:
+        data = await request.json()
+        user_id = data.get("user_id", "test_user")
+        messages = data.get("messages", [])
+        
+        if not messages:
+            raise HTTPException(status_code=400, detail="Se requiere array de mensajes")
+        
+        logger.info(f"🧪 Testing agrupamiento para {user_id} con {len(messages)} mensajes")
+        
+        responses = []
+        for i, message in enumerate(messages):
+            # Simular delay entre mensajes si se especifica
+            if i > 0 and data.get("message_delay"):
+                await asyncio.sleep(float(data.get("message_delay", 1)))
+            
+            should_wait, grouped_message = await should_group_message(
+                user_id, 
+                message,
+                {"source": "test", "test_mode": True}
+            )
+            
+            responses.append({
+                "message": message,
+                "should_wait": should_wait,
+                "grouped_message": grouped_message,
+                "timestamp": datetime.now().isoformat()
+            })
+            
+            logger.info(f"  Mensaje {i+1}: '{message}' -> Esperar: {should_wait}")
+        
+        # Esperar a que se procesen los grupos pendientes
+        from message_grouper import MESSAGE_GROUPING_DELAY
+        await asyncio.sleep(MESSAGE_GROUPING_DELAY + 1)
+        
+        # Obtener estadísticas finales
+        stats = get_grouper_stats()
+        
+        return {
+            "status": "test_completed",
+            "user_id": user_id,
+            "total_messages": len(messages),
+            "responses": responses,
+            "final_stats": stats
+        }
+        
+    except Exception as e:
+        logger.error(f"❌ Error en test de agrupamiento: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.post("/test/assignment")
 async def test_assignment_endpoint(test_data: TestAssignment):
     """
@@ -2185,6 +2338,13 @@ async def get_metrics():
         metrics["message_queue"] = queue_metrics
     except Exception as e:
         metrics["message_queue"] = {"error": str(e)}
+    
+    # Get message grouper metrics
+    try:
+        grouper_metrics = get_grouper_stats()
+        metrics["message_grouper"] = grouper_metrics
+    except Exception as e:
+        metrics["message_grouper"] = {"error": str(e)}
     
     # Get worker pool metrics
     try:
@@ -2832,6 +2992,14 @@ async def startup_event():
     # Initialize advanced message queue
     logger.info("📬 Initializing advanced message queue...")
     await initialize_queue()
+    
+    # Initialize message grouper maintenance
+    logger.info("📬 Initializing message grouper...")
+    await start_grouper_maintenance()
+    
+    # Configure message processor callback for grouper
+    from message_grouper import message_grouper
+    message_grouper._message_processor_callback = _process_grouped_message_callback
     
     # Initialize dynamic worker pool with our message processor
     logger.info("⚡ Initializing dynamic worker pool...")
