@@ -233,7 +233,10 @@ class FollowUpScheduler:
         """Programar todos los follow-ups para un usuario"""
         try:
             user_id = user_data['user_id']
-            last_interaction = user_data['last_interaction']
+            
+            # CRITICAL FIX: Usar timestamp desde context_data que tiene timezone correcto
+            context_data = user_data.get('context_data', {})
+            last_interaction = context_data.get('last_interaction') or user_data['last_interaction']
             
             # Obtener el último mensaje del usuario
             with psycopg2.connect(self.database_url) as conn:
@@ -252,8 +255,9 @@ class FollowUpScheduler:
             
             # TEMPORAL: Debug logging para timezone
             logger.info(f"🕐 [TIMEZONE DEBUG] Usuario: {user_id}")
-            logger.info(f"🕐 [TIMEZONE DEBUG] last_interaction original: {user_data.get('last_interaction')}")
-            logger.info(f"🕐 [TIMEZONE DEBUG] last_interaction procesado: {last_interaction}")
+            logger.info(f"🕐 [TIMEZONE DEBUG] last_interaction desde campo BD: {user_data.get('last_interaction')}")
+            logger.info(f"🕐 [TIMEZONE DEBUG] last_interaction desde context_data: {context_data.get('last_interaction')}")
+            logger.info(f"🕐 [TIMEZONE DEBUG] last_interaction procesado final: {last_interaction}")
             logger.info(f"🕐 [TIMEZONE DEBUG] timezone actual: {self.timezone}")
             
             # Programar cada etapa del follow-up
@@ -380,7 +384,7 @@ class FollowUpScheduler:
             with psycopg2.connect(self.database_url) as conn:
                 with conn.cursor(cursor_factory=RealDictCursor) as cursor:
                     cursor.execute("""
-                        SELECT last_interaction 
+                        SELECT last_interaction, context_data
                         FROM conversation_contexts 
                         WHERE user_id = %s
                     """, (user_id,))
@@ -389,12 +393,21 @@ class FollowUpScheduler:
                     if not result:
                         return False
                     
+                    # CRITICAL FIX: Usar timestamp desde context_data que tiene timezone correcto
+                    context_data = result.get('context_data', {})
+                    last_interaction_from_context = context_data.get('last_interaction')
+                    
+                    # Usar context_data si está disponible, fallback a campo directo
+                    last_interaction_raw = last_interaction_from_context or result['last_interaction']
+                    
                     # Usar helper para asegurar timezone correcto
-                    last_interaction = self._ensure_argentina_timezone(result['last_interaction'])
+                    last_interaction = self._ensure_argentina_timezone(last_interaction_raw)
                     
                     # TEMPORAL: Debug logging para timezone en inactividad
                     logger.info(f"🕐 [INACTIVE DEBUG] Usuario: {user_id}")
-                    logger.info(f"🕐 [INACTIVE DEBUG] last_interaction desde BD: {result['last_interaction']}")
+                    logger.info(f"🕐 [INACTIVE DEBUG] last_interaction desde campo BD: {result['last_interaction']}")
+                    logger.info(f"🕐 [INACTIVE DEBUG] last_interaction desde context_data: {last_interaction_from_context}")
+                    logger.info(f"🕐 [INACTIVE DEBUG] last_interaction usado final: {last_interaction_raw}")
                     logger.info(f"🕐 [INACTIVE DEBUG] last_interaction procesado: {last_interaction}")
                     
                     # TEMPORAL: Reducido a 10 minutos para pruebas
