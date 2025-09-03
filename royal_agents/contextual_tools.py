@@ -9,6 +9,12 @@ from .training_mcp_tools import training_parser, TRAINING_PARSER_AVAILABLE
 import logging
 import re
 
+# Category matcher para búsqueda de categorías
+import sys
+import os
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from category_matcher import find_categories, format_categories_for_user, extract_product_keywords
+
 logger = logging.getLogger(__name__)
 
 # Tipos para respuestas de API WooCommerce
@@ -977,6 +983,89 @@ async def set_awaiting_user_response(wrapper: RunContextWrapper[RoyalAgentContex
     return f"✅ Marcado como esperando respuesta para: {pending_action}"
 
 @function_tool
+async def search_categories_by_query(
+    wrapper: RunContextWrapper[RoyalAgentContext], 
+    user_query: str
+) -> str:
+    """
+    Busca categorías de productos relevantes en el catálogo completo y devuelve URLs directas.
+    Útil cuando el usuario pregunta sobre disponibilidad de tipos de productos.
+    
+    Args:
+        user_query: Consulta del usuario (ej: "tienen lentes de sol", "anillos de plata")
+    """
+    
+    context = wrapper.context
+    conversation = context.conversation
+    user_id = context.user_id
+    
+    logger.info(f"🔍 SEARCH_CATEGORIES_BY_QUERY para usuario: {user_id}")
+    logger.info(f"   Query: {user_query}")
+    
+    try:
+        # Buscar categorías relevantes
+        matches = find_categories(user_query, max_results=6)
+        
+        if not matches:
+            # Si no encuentra categorías específicas, activar HITL para consulta personalizada
+            conversation.add_interaction("system", "Información faltante: category_search")
+            conversation.update_user_profile("needs_human_assistance", True)
+            conversation.current_state = "pending_human_assistance"
+            
+            import random
+            fallback_responses = [
+                f"Dale, dejame que chequeo puntualmente si tenemos {user_query} y te confirmo con toda la info 👍",
+                f"Tengo que verificar específicamente sobre {user_query}. Dame un momento que te traigo las opciones disponibles 👍",
+                f"Déjame que reviso {user_query} en detalle y te paso la información completa 👍"
+            ]
+            return random.choice(fallback_responses)
+        
+        # Registrar categorías encontradas en el contexto
+        conversation.add_interaction("assistant", f"Mostré {len(matches)} categorías relacionadas con: {user_query}")
+        
+        # Guardar categorías en el contexto como productos de referencia
+        for match in matches[:3]:  # Máximo 3 para no sobrecargar contexto
+            category_ref = ProductReference(
+                name=match.category.name,
+                price="Ver productos", 
+                id="",
+                permalink=match.category.url,
+                category="category_link"
+            )
+            conversation.add_product_reference(category_ref)
+        
+        # Actualizar estado de conversación
+        conversation.current_state = "browsing_categories"
+        conversation.add_interaction("assistant", f"Mostré categorías para: {user_query}")
+        
+        # Formatear respuesta usando la función del category_matcher
+        formatted_response = format_categories_for_user(matches, max_display=5)
+        
+        # Agregar contexto personalizado argentino
+        if len(matches) > 1:
+            formatted_response += f"\n\n💡 **Tip:** Podés explorar cualquiera de estos links y si te gusta algo específico, decime cuál te interesa y te ayudo con más detalles."
+        else:
+            formatted_response += f"\n\n💡 **¡Dale!** Explorá el link y si ves algo que te gusta, decime y te doy más info específica."
+        
+        logger.info(f"✅ {len(matches)} categorías encontradas para '{user_query}'")
+        return formatted_response
+        
+    except Exception as e:
+        logger.error(f"❌ Error buscando categorías: {e}")
+        
+        # Fallback a HITL en caso de error
+        conversation.add_interaction("system", "Error técnico: category_search")
+        conversation.update_user_profile("needs_human_assistance", True)
+        conversation.current_state = "pending_human_assistance"
+        
+        import random
+        error_responses = [
+            "Uy, se me complicó el sistema de búsqueda. Dame un momento que lo soluciono y te ayudo 👍",
+            "Tengo un problemita técnico buscando categorías. Ya lo arreglo y te traigo toda la info 👍"
+        ]
+        return random.choice(error_responses)
+
+@function_tool
 async def analyze_user_message_and_update_profile(wrapper: RunContextWrapper[RoyalAgentContext], user_message: str) -> str:
     """
     HERRAMIENTA CRÍTICA: Analiza automáticamente el mensaje del usuario para extraer 
@@ -1171,8 +1260,11 @@ def create_contextual_tools():
         handle_conversation_continuity,
         set_awaiting_user_response,
         analyze_user_message_and_update_profile,
-        should_ask_about_experience
+        should_ask_about_experience,
+        
+        # Búsqueda de categorías
+        search_categories_by_query
     ]
     
-    logger.info(f"✅ Contextual Tools creadas: {len(tools)} herramientas disponibles (HITL habilitado)")
+    logger.info(f"✅ Contextual Tools creadas: {len(tools)} herramientas disponibles (HITL + Categorías habilitado)")
     return tools 
