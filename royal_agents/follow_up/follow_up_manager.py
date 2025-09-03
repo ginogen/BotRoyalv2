@@ -223,10 +223,8 @@ ETAPA {stage}: {self._get_stage_description(stage)}
             token_preview = self.evolution_token[:10] + "..." if self.evolution_token else "NO_TOKEN"
             logger.info(f"🔑 [DEBUG] Token preview: {token_preview}")
             
-            # Limpiar número de teléfono
+            # Limpiar número de teléfono (sin auto-prefijo de país)
             clean_phone = phone.replace('+', '').replace('-', '').replace(' ', '')
-            if not clean_phone.startswith('54'):
-                clean_phone = f"54{clean_phone}"
             
             url = f"{self.evolution_api_url}/message/sendText/{self.instance_name}"
             logger.info(f"🔗 [DEBUG] URL completa: {url}")
@@ -246,6 +244,8 @@ ETAPA {stage}: {self._get_stage_description(stage)}
                 return True
             else:
                 logger.error(f"❌ Error Evolution API: {response.status_code} - {response.text}")
+                # TEMPORAL: Log detallado del error 400
+                logger.error(f"📋 [ERROR DEBUG] Response body: {response.text}")
                 return False
                 
         except Exception as e:
@@ -402,10 +402,8 @@ ETAPA {stage}: {self._get_stage_description(stage)}
         
         for attempt in range(max_retries):
             try:
-                # Limpiar número
+                # Limpiar número (sin auto-prefijo de país)
                 clean_phone = phone.replace('+', '').replace('-', '').replace(' ', '')
-                if not clean_phone.startswith('54'):
-                    clean_phone = f"54{clean_phone}"
                 
                 url = f"{self.evolution_api_url}/message/sendText/{self.instance_name}"
                 
@@ -413,6 +411,9 @@ ETAPA {stage}: {self._get_stage_description(stage)}
                     "number": clean_phone,
                     "text": message
                 }
+                
+                # TEMPORAL: Log payload completo para debug
+                logger.info(f"📋 [DEBUG] Payload enviado: {payload}")
                 
                 response = await self.http_client.post(url, json=payload)
                 
@@ -426,6 +427,8 @@ ETAPA {stage}: {self._get_stage_description(stage)}
                     continue
                 else:
                     logger.error(f"❌ Error Evolution API: {response.status_code}")
+                    # TEMPORAL: Log detallado del error en reintentos
+                    logger.error(f"📋 [RETRY ERROR] Response body: {response.text}")
                     if attempt == max_retries - 1:
                         return False
                     await asyncio.sleep(1)
