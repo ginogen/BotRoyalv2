@@ -35,13 +35,13 @@ class FollowUpScheduler:
         
         # Configuración de etapas (en horas)
         self.stage_delays = {
-            1: 1,      # 1 hora
-            2: 24,     # 1 día
-            3: 48,     # 2 días
-            4: 72,     # 3 días
-            5: 96,     # 4 días
-            6: 120,    # 5 días
-            7: 168     # 7 días
+            1: 0.25,   # 15 minutos
+            2: 1,      # 1 hora
+            3: 24,     # 1 día
+            4: 48,     # 2 días
+            5: 72,     # 3 días
+            6: 96,     # 4 días
+            7: 120     # 5 días
         }
         
         # Horarios permitidos
@@ -194,7 +194,7 @@ class FollowUpScheduler:
                     FROM conversation_contexts cc
                     LEFT JOIN follow_up_blacklist bl ON cc.user_id = bl.user_id
                     WHERE bl.user_id IS NULL  -- No está en blacklist
-                    AND cc.last_interaction < %s  -- Inactivo por más de 1 hora
+                    AND cc.last_interaction < %s  -- Inactivo por más de 15 minutos
                     AND NOT EXISTS (  -- No tiene follow-ups pendientes recientes
                         SELECT 1 FROM follow_up_jobs fj 
                         WHERE fj.user_id = cc.user_id 
@@ -204,16 +204,16 @@ class FollowUpScheduler:
                     AND NOT EXISTS (  -- No se envió follow-up en la última hora (COOLDOWN)
                         SELECT 1 FROM follow_up_jobs fj2
                         WHERE fj2.user_id = cc.user_id
-                        AND fj2.sent_at > %s  -- No enviado en la última hora
+                        AND fj2.sent_at > %s  -- No enviado en los últimos 15 minutos
                     )
                     """
                     
-                    # Detección de usuarios inactivos después de 1 hora
-                    cutoff_time = datetime.now(self.timezone) - timedelta(hours=1)
-                    cooldown_time = datetime.now(self.timezone) - timedelta(hours=1)  # Cooldown de 1 hora
+                    # Detección de usuarios inactivos después de 15 minutos
+                    cutoff_time = datetime.now(self.timezone) - timedelta(minutes=15)
+                    cooldown_time = datetime.now(self.timezone) - timedelta(minutes=15)  # Cooldown de 15 minutos
                     
                     logger.debug(f"🔍 Checking inactive users since: {cutoff_time}")
-                    logger.info(f"🕐 Detectando usuarios inactivos por más de 1 hora")
+                    logger.info(f"🕐 Detectando usuarios inactivos por más de 15 minutos")
                     logger.debug(f"🔍 Cooldown time: {cooldown_time}")
                     logger.debug(f"🔍 Timezone: {self.timezone}")
                     
@@ -381,6 +381,17 @@ class FollowUpScheduler:
             return context_snapshot
     
     def _get_stage_description(self, stage: int) -> str:
+        """Obtener descripción de la etapa"""
+        descriptions = {
+            1: "Recordatorio inicial (15 minutos)",
+            2: "Seguimiento temprano (1 hora)",
+            3: "Seguimiento del día siguiente",
+            4: "Recordatorio a 48 horas",
+            5: "Seguimiento a 3 días",
+            6: "Recordatorio a 4 días",
+            7: "Último intento (5 días)"
+        }
+        return descriptions.get(stage, f"Etapa {stage}")
     
     async def _execute_followup(self, user_id: str, stage: int):
         """Ejecutar un follow-up específico"""
@@ -451,8 +462,8 @@ class FollowUpScheduler:
                     logger.info(f"🕐 [INACTIVE DEBUG] last_interaction usado final: {last_interaction_raw}")
                     logger.info(f"🕐 [INACTIVE DEBUG] last_interaction procesado: {last_interaction}")
                     
-                    # Detección de usuarios inactivos después de 1 hora
-                    cutoff = datetime.now(self.timezone) - timedelta(hours=1)
+                    # Detección de usuarios inactivos después de 15 minutos
+                    cutoff = datetime.now(self.timezone) - timedelta(minutes=15)
                     
                     # DEBUG: Log para entender la comparación
                     logger.debug(f"🕐 [DEBUG] last_interaction: {last_interaction} (tzinfo: {last_interaction.tzinfo})")
