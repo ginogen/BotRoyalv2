@@ -318,19 +318,23 @@ class FollowUpScheduler:
     async def _create_followup_job(self, user_id: str, stage: int, 
                                   scheduled_for: datetime, context_snapshot: Dict,
                                   last_user_message: Optional[str] = None):
-        """Crear un trabajo de follow-up en la base de datos"""
+        """Crear un trabajo de follow-up en la base de datos con contexto completo"""
         try:
             from psycopg2.extras import Json
+            
+            # Enriquecer context_snapshot con historial de interacciones completo
+            enriched_context = await self._enrich_context_with_interactions(user_id, context_snapshot)
             
             with psycopg2.connect(self.database_url) as conn:
                 with conn.cursor() as cursor:
                     # Obtener el teléfono del contexto
-                    phone = context_snapshot.get('phone', 'unknown')
+                    phone = enriched_context.get('phone', 'unknown')
                     if phone == 'unknown' and user_id.startswith('whatsapp_'):
                         phone = user_id.replace('whatsapp_', '')
                     
                     # TEMPORAL: Para diagnóstico
                     logger.info(f"🔍 [DEBUG] Creando follow-up job: user_id={user_id}, stage={stage}, scheduled_for={scheduled_for}, phone={phone}")
+                    logger.info(f"🔍 [DEBUG] Context snapshot incluye {len(enriched_context.get('interaction_history', []))} interacciones")
                     
                     cursor.execute("""
                         INSERT INTO follow_up_jobs 
@@ -341,12 +345,42 @@ class FollowUpScheduler:
                             context_snapshot = EXCLUDED.context_snapshot,
                             status = 'pending'
                     """, (user_id, phone, stage, scheduled_for, 
-                          Json(context_snapshot), last_user_message))
+                          Json(enriched_context), last_user_message))
                     
                     logger.debug(f"📋 Follow-up programado en BD: usuario {user_id} etapa {stage} para {scheduled_for}")
                     
         except Exception as e:
             logger.error(f"❌ Error creando job de follow-up: {e}")
+    
+    async def _enrich_context_with_interactions(self, user_id: str, context_snapshot: Dict) -> Dict:
+        """Enriquecer context snapshot con historial completo de interacciones"""
+        try:
+            with psycopg2.connect(self.database_url) as conn:
+                with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+                    # Obtener últimas 20 interacciones
+                    cursor.execute("""
+                        SELECT role, message, created_at, metadata
+                        FROM user_interactions 
+                        WHERE user_id = %s 
+                        ORDER BY created_at DESC 
+                        LIMIT 20
+                    """, (user_id,))
+                    
+                    interactions = [dict(row) for row in cursor.fetchall()]
+                    interactions.reverse()  # Orden cronológico
+                    
+                    # Enriquecer contexto
+                    enriched = dict(context_snapshot)
+                    enriched['interaction_history'] = interactions
+                    
+                    logger.debug(f"✅ Context enriched: {len(interactions)} interacciones agregadas")
+                    return enriched
+                    
+        except Exception as e:
+            logger.error(f"❌ Error enriching context: {e}")
+            return context_snapshot
+    
+    def _get_stage_description(self, stage: int) -> str:
     
     async def _execute_followup(self, user_id: str, stage: int):
         """Ejecutar un follow-up específico"""

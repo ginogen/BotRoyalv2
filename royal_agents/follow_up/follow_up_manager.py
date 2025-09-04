@@ -130,14 +130,17 @@ class FollowUpManager:
             # Generar mensaje personalizado
             prompt = self._build_generation_prompt(stage, context, job_data, base_template)
             
+            # Sistema personalizado según perfil del usuario
+            system_prompt = self._build_system_prompt(context)
+            
             response = await self.openai_client.chat.completions.create(
                 model="gpt-4o-mini",
                 messages=[
-                    {"role": "system", "content": "Eres Royal Bot, un asistente especializado en productos para emprendedores. Genera mensajes de follow-up naturales y conversacionales."},
+                    {"role": "system", "content": system_prompt},
                     {"role": "user", "content": prompt}
                 ],
-                max_tokens=200,
-                temperature=0.7
+                max_tokens=300,  # Más espacio para mensajes personalizados
+                temperature=0.8  # Más creatividad para personalización
             )
             
             message = response.choices[0].message.content.strip()
@@ -150,35 +153,155 @@ class FollowUpManager:
     
     def _build_generation_prompt(self, stage: int, context: Dict[str, Any], 
                                job_data: Dict[str, Any], base_template: str) -> str:
-        """Construir prompt para generar mensaje personalizado"""
+        """Construir prompt avanzado usando conversación completa y contexto rico"""
         user_profile = context.get('user_profile', {})
         recent_products = context.get('recent_products', [])
         is_entrepreneur = context.get('is_entrepreneur', False)
+        experience_level = context.get('experience_level', '')
+        product_interests = context.get('product_interests', [])
+        budget_range = context.get('budget_range', '')
+        
+        # Obtener historial completo de interacciones
+        interaction_history = context.get('interaction_history', [])
         last_message = job_data.get('last_user_message', '')
         
+        # Construir contexto conversacional
+        conversation_context = ""
+        if interaction_history:
+            conversation_context = "\nHISTORIAL DE LA CONVERSACIÓN (últimos mensajes):\n"
+            # Mostrar últimos 15 mensajes para contexto completo
+            for i, interaction in enumerate(interaction_history[-15:], 1):
+                role = "Usuario" if interaction["role"] == "user" else "Royalia"
+                message = interaction["message"][:200]  # Más espacio para contexto
+                conversation_context += f"{i}. {role}: {message}\n"
+        
+        # Construir contexto de productos vistos
+        products_context = ""
+        if recent_products:
+            products_context = "\nPRODUCTOS QUE EL USUARIO VIO:\n"
+            for i, product in enumerate(recent_products[-5:], 1):
+                products_context += f"{i}. {product.get('name', 'Sin nombre')} - ${product.get('price', 'N/A')}\n"
+        
+        # Construir perfil detallado
+        profile_context = f"""
+PERFIL DEL USUARIO:
+- Tipo: {'Emprendedor' if is_entrepreneur else 'Comprador/Cliente'}
+- Experiencia: {experience_level or 'No determinada'}
+- Intereses detectados: {', '.join(product_interests) if product_interests else 'Ninguno específico'}
+- Presupuesto mencionado: {budget_range or 'No mencionado'}
+- Estado actual: {context.get('current_state', 'navegando')}
+"""
+
+        # Instrucciones específicas por etapa
+        stage_instructions = {
+            1: "Mensaje de reconexión suave que haga referencia a la conversación previa",
+            2: "Ofrecimiento de ayuda basado en lo que discutieron antes", 
+            3: "Propuesta específica relacionada con sus productos de interés",
+            4: "Recomendaciones personalizadas basadas en su perfil",
+            5: "Casos de éxito relevantes a su tipo de emprendimiento",
+            6: "Oferta especial con urgencia moderada",
+            7: "Mensaje de cierre respetuoso y no insistente"
+        }
+        
         prompt = f"""
-Genera un mensaje de follow-up para la etapa {stage} con estas características:
+Eres Royalia, el asistente de Royal Company. Vas a generar un mensaje de follow-up personalizado para reconectar con este usuario después de un tiempo de inactividad.
 
-CONTEXTO DEL USUARIO:
-- Tipo: {'Emprendedor' if is_entrepreneur else 'Comprador'}
-- Último mensaje: "{last_message}"
-- Productos vistos: {recent_products[:3] if recent_products else 'Ninguno'}
-- Perfil: {user_profile}
+{profile_context}
+{conversation_context}
+{products_context}
 
-TEMPLATE BASE:
-{base_template}
+ÚLTIMO MENSAJE DEL USUARIO: "{last_message}"
 
-REQUISITOS:
-- Máximo 150 caracteres
-- Tono conversacional y amigable
-- Mencionar productos específicos si los vió
-- No usar emojis excesivos
-- Incluir call-to-action sutil
-- Hacer referencia al contexto previo
+OBJETIVO DE ESTA ETAPA ({stage}): {stage_instructions.get(stage, 'Follow-up general')}
 
-ETAPA {stage}: {self._get_stage_description(stage)}
+INSTRUCCIONES CRÍTICAS:
+- Este mensaje debe parecer una CONTINUACIÓN NATURAL de la conversación previa
+- Haz referencia específica a productos que vio o temas que discutieron
+- Usa un tono conversacional argentino, como si fueras un amigo que retoma la charla
+- El usuario ya te conoce, NO te presentes de nuevo
+- Si vio productos específicos, mencionálos por nombre
+- Si es emprendedor con experiencia conocida, adapta el mensaje a su nivel
+- Si mencionó intereses específicos, conecta con esos intereses
+- Máximo 250 caracteres para WhatsApp
+- Incluye una pregunta o call-to-action natural
+- NO uses templates genéricos, personaliza 100% basado en SU conversación
+
+EJEMPLOS DEL TONO DESEADO:
+- "Che, ¿seguís pensando en el combo de joyas que vimos la otra vez?"
+- "¿Cómo va todo? Me quedé pensando en lo que me contaste sobre tu emprendimiento"
+- "¡Dale! ¿Al final te decidiste por alguno de los productos que te mostré?"
+
+GENERA SOLO EL MENSAJE, sin explicaciones adicionales.
 """
         return prompt
+    
+    def _build_system_prompt(self, context: Dict[str, Any]) -> str:
+        """Construir system prompt personalizado según el perfil del usuario"""
+        is_entrepreneur = context.get('is_entrepreneur', False)
+        experience_level = context.get('experience_level', '')
+        product_interests = context.get('product_interests', [])
+        
+        base_system = """Eres Royalia, el asistente de Royal Company. Tu personalidad es amigable, argentina, y conversacional. 
+
+CARACTERÍSTICAS CLAVE:
+- Usas lenguaje argentino natural ("che", "dale", "bárbaro", "genial")
+- Eres cálida pero profesional
+- Te enfocas en ayudar genuinamente al usuario
+- NO eres insistente ni agresiva en ventas
+- Recuerdas conversaciones previas y haces referencias naturales"""
+        
+        if is_entrepreneur:
+            if experience_level == "empezando":
+                base_system += """
+
+ESPECIALIZACIÓN: Este usuario es un EMPRENDEDOR PRINCIPIANTE
+- Tono de mentora y acompañante 
+- Enfócate en educación y guía
+- Menciona que "todos empezamos así"
+- Ofrece tips y consejos además de productos
+- Usa frases como "para arrancar te conviene...", "ideal para principiantes"
+"""
+            elif experience_level == "experimentado":
+                base_system += """
+
+ESPECIALIZACIÓN: Este usuario es un EMPRENDEDOR EXPERIMENTADO
+- Tono de colega y partner comercial
+- Habla de números, márgenes, y rentabilidad
+- Menciona "para tu negocio", "sabés que...", "como ya tenés experiencia"
+- Enfócate en expansión y optimización
+- Usa frases como "para ampliar tu catálogo", "sabés cómo funciona esto"
+"""
+            elif experience_level == "renovando_stock":
+                base_system += """
+
+ESPECIALIZACIÓN: Este usuario RENUEVA STOCK
+- Tono directo y eficiente
+- Enfócate en disponibilidad y reposición
+- Menciona "para reponer", "tenemos stock nuevo", "las novedades"
+- Habla de productos que "se venden rápido"
+- Usa frases como "para renovar tu stock", "llegaron productos nuevos"
+"""
+        else:
+            base_system += """
+
+ESPECIALIZACIÓN: Este usuario es COMPRADOR/CLIENTE
+- Tono amigable y servicial
+- Enfócate en beneficios personales del producto
+- Menciona calidad, diseño, y satisfacción personal
+- Usa frases como "para vos", "te va a encantar", "perfecto para tu estilo"
+"""
+        
+        if product_interests:
+            interests_text = ', '.join(product_interests)
+            base_system += f"""
+
+INTERESES CONOCIDOS: {interests_text}
+- Conecta siempre con estos intereses específicos
+- Haz referencias naturales a estos productos
+- Usa frases como "seguís interesada en {interests_text}?"
+"""
+        
+        return base_system
     
     def _get_stage_description(self, stage: int) -> str:
         """Obtener descripción de la etapa"""
@@ -195,19 +318,50 @@ ETAPA {stage}: {self._get_stage_description(stage)}
         return descriptions.get(stage, "Follow-up general")
     
     async def _get_user_context(self, user_id: str) -> Optional[Dict[str, Any]]:
-        """Obtener contexto completo del usuario"""
+        """Obtener contexto completo del usuario incluyendo historial de interacciones"""
         try:
             with psycopg2.connect(self.database_url) as conn:
                 with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+                    # Obtener contexto principal
                     cursor.execute("""
                         SELECT context_data, user_profile, preferences, 
-                               is_entrepreneur, product_interests, current_state
+                               is_entrepreneur, experience_level, product_interests, 
+                               current_state, budget_range
                         FROM conversation_contexts 
                         WHERE user_id = %s
                     """, (user_id,))
                     
-                    result = cursor.fetchone()
-                    return dict(result) if result else None
+                    context_result = cursor.fetchone()
+                    if not context_result:
+                        return None
+                    
+                    # Obtener historial completo de interacciones (últimos 20 mensajes)
+                    cursor.execute("""
+                        SELECT role, message, created_at, metadata
+                        FROM user_interactions 
+                        WHERE user_id = %s 
+                        ORDER BY created_at DESC 
+                        LIMIT 20
+                    """, (user_id,))
+                    
+                    interactions = [dict(row) for row in cursor.fetchall()]
+                    # Revertir orden para cronológico (más antiguo primero)
+                    interactions.reverse()
+                    
+                    # Combinar contexto con historial
+                    full_context = dict(context_result)
+                    full_context['interaction_history'] = interactions
+                    
+                    # Extraer datos del context_data si están allí
+                    context_data = full_context.get('context_data', {})
+                    if isinstance(context_data, dict):
+                        # Mergear datos del context_data con el contexto principal
+                        for key in ['recent_products', 'user_profile', 'preferences']:
+                            if key in context_data and context_data[key]:
+                                full_context[key] = context_data[key]
+                    
+                    logger.debug(f"✅ Contexto obtenido: {len(interactions)} interacciones")
+                    return full_context
                     
         except Exception as e:
             logger.error(f"❌ Error obteniendo contexto: {e}")
