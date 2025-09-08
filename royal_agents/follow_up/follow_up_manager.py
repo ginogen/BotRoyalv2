@@ -112,7 +112,7 @@ class FollowUpManager:
     
     async def _generate_followup_message(self, user_id: str, stage: int, 
                                        job_data: Dict[str, Any]) -> Optional[str]:
-        """Generar mensaje de follow-up personalizado usando IA"""
+        """🚨 VERSIÓN SIMPLIFICADA: Generar follow-up basado solo en conversación real"""
         try:
             # Obtener contexto del usuario
             context = await self._get_user_context(user_id)
@@ -120,36 +120,99 @@ class FollowUpManager:
                 logger.error(f"❌ No se encontró contexto para {user_id}")
                 return None
             
-            # Importar templates
-            from .follow_up_templates import FollowUpTemplateEngine
-            template_engine = FollowUpTemplateEngine()
+            # 🔍 VERIFICAR SI HAY CONVERSACIÓN REAL
+            if not context.get('has_real_conversation', False):
+                logger.warning(f"⚠️ {user_id} no tiene conversación real, usando template básico")
+                return self._get_fallback_template(stage)
             
-            # Obtener template base para la etapa
-            base_template = template_engine.get_stage_template(stage)
-            
-            # Generar mensaje personalizado
-            prompt = self._build_generation_prompt(stage, context, job_data, base_template)
-            
-            # Sistema personalizado según perfil del usuario
-            system_prompt = self._build_system_prompt(context)
+            # 🤖 PROMPT SIMPLIFICADO - Solo basado en conversación
+            conversation_text = self._build_conversation_context(context['interaction_history'])
+            prompt = self._build_simple_prompt(stage, conversation_text)
             
             response = await self.openai_client.chat.completions.create(
                 model="gpt-4o-mini",
                 messages=[
-                    {"role": "system", "content": system_prompt},
+                    {"role": "system", "content": self._get_simple_system_prompt()},
                     {"role": "user", "content": prompt}
                 ],
-                max_tokens=300,  # Más espacio para mensajes personalizados
-                temperature=0.8  # Más creatividad para personalización
+                max_tokens=200,  # Mensajes más concisos
+                temperature=0.7  # Balance entre creatividad y consistencia
             )
             
             message = response.choices[0].message.content.strip()
-            logger.debug(f"🤖 Mensaje generado para {user_id} etapa {stage}")
+            logger.info(f"🤖 Follow-up generado para {user_id} etapa {stage} con conversación real")
             return message
             
         except Exception as e:
             logger.error(f"❌ Error generando mensaje: {e}")
-            return None
+            # Fallback a template básico
+            return self._get_fallback_template(stage)
+    
+    def _build_conversation_context(self, interactions: List[Dict[str, Any]]) -> str:
+        """Construir contexto de conversación simple"""
+        if not interactions:
+            return "Sin conversación previa"
+        
+        conversation_lines = []
+        for i, interaction in enumerate(interactions[-15:], 1):  # Últimos 15 mensajes
+            role = "Usuario" if interaction.get('role') == 'user' else "Royalia"
+            message = interaction.get('message', '')[:150]  # Limitar longitud
+            conversation_lines.append(f"{i}. {role}: {message}")
+        
+        return "\n".join(conversation_lines)
+    
+    def _build_simple_prompt(self, stage: int, conversation_text: str) -> str:
+        """Prompt simplificado basado solo en conversación"""
+        stage_goals = {
+            1: "retomar la conversación de manera natural",
+            2: "ofrecer ayuda basándote en lo que habló antes",
+            3: "hacer una sugerencia específica relacionada con la charla",
+            4: "dar una recomendación personalizada",
+            5: "compartir algo útil o interesante",
+            6: "hacer una oferta con urgencia moderada",
+            7: "mensaje de cierre amigable"
+        }
+        
+        goal = stage_goals.get(stage, "hacer seguimiento general")
+        
+        return f"""Basándote en esta conversación previa con el usuario, genera un mensaje de follow-up para {goal}.
+
+CONVERSACIÓN PREVIA:
+{conversation_text}
+
+INSTRUCCIONES:
+- Usa tono argentino natural (che, dale, bárbaro)
+- Haz referencia específica a algo que se habló antes
+- Máximo 150 caracteres
+- No te presentes de nuevo
+- Incluye una pregunta o call-to-action natural
+- El mensaje debe sonar como continuación natural de la charla
+
+Genera SOLO el mensaje, sin explicaciones."""
+    
+    def _get_simple_system_prompt(self) -> str:
+        """System prompt simplificado"""
+        return """Eres Royalia de Royal Company. Tu personalidad es amigable, argentina, y conversacional.
+        
+- Usas lenguaje argentino natural ("che", "dale", "bárbaro", "genial")
+- Eres cálida pero profesional
+- Te enfocas en ayudar genuinamente al usuario
+- Recuerdas conversaciones previas y haces referencias naturales
+- NO eres insistente en ventas
+- Generas mensajes concisos y naturales"""
+    
+    def _get_fallback_template(self, stage: int) -> str:
+        """Templates básicos cuando no hay conversación real"""
+        templates = {
+            1: "Hola! ¿Cómo andás? Vi que estuviste por la tienda. ¿En qué te puedo ayudar?",
+            2: "¡Dale! ¿Seguís viendo productos o necesitás que te ayude con algo específico?",
+            3: "¿Todo bien? ¿Encontraste algo que te guste o querés que te recomiende algo?",
+            4: "Che, ¿pudiste ver bien los productos? ¿Te ayudo a elegir algo?",
+            5: "¿Cómo va todo? ¿Alguna consulta sobre los productos que viste?",
+            6: "¡Última oportunidad! Tenemos ofertas especiales por poco tiempo. ¿Te interesa?",
+            7: "No quiero molestarte, pero si necesitás algo, estoy acá. ¿Todo bien?"
+        }
+        return templates.get(stage, templates[1])
     
     def _build_generation_prompt(self, stage: int, context: Dict[str, Any], 
                                job_data: Dict[str, Any], base_template: str) -> str:
@@ -318,50 +381,51 @@ INTERESES CONOCIDOS: {interests_text}
         return descriptions.get(stage, "Follow-up general")
     
     async def _get_user_context(self, user_id: str) -> Optional[Dict[str, Any]]:
-        """Obtener contexto completo del usuario incluyendo historial de interacciones"""
+        """🚨 VERSIÓN SIMPLIFICADA: Obtener contexto SOLO de conversation_contexts"""
         try:
             with psycopg2.connect(self.database_url) as conn:
                 with conn.cursor(cursor_factory=RealDictCursor) as cursor:
-                    # Obtener contexto principal
+                    # Obtener contexto completo de conversation_contexts
                     cursor.execute("""
-                        SELECT context_data, user_profile, preferences, 
-                               is_entrepreneur, experience_level, product_interests, 
-                               current_state, budget_range
+                        SELECT context_data, last_interaction
                         FROM conversation_contexts 
                         WHERE user_id = %s
                     """, (user_id,))
                     
                     context_result = cursor.fetchone()
                     if not context_result:
+                        logger.warning(f"⚠️ No se encontró contexto para {user_id}")
                         return None
                     
-                    # Obtener historial completo de interacciones (últimos 20 mensajes)
-                    cursor.execute("""
-                        SELECT role, message, created_at, metadata
-                        FROM user_interactions 
-                        WHERE user_id = %s 
-                        ORDER BY created_at DESC 
-                        LIMIT 20
-                    """, (user_id,))
+                    context_data = context_result.get('context_data', {})
                     
-                    interactions = [dict(row) for row in cursor.fetchall()]
-                    # Revertir orden para cronológico (más antiguo primero)
-                    interactions.reverse()
+                    # Extraer historial de interacciones del context_data
+                    interaction_history = context_data.get('interaction_history', [])
                     
-                    # Combinar contexto con historial
-                    full_context = dict(context_result)
-                    full_context['interaction_history'] = interactions
+                    # Filtrar solo mensajes relevantes (user/assistant, no system internos)
+                    relevant_interactions = []
+                    for interaction in interaction_history:
+                        role = interaction.get('role', '')
+                        message = interaction.get('message', '')
+                        
+                        # Solo incluir mensajes reales de conversación
+                        if role in ['user', 'assistant'] and message and not any(skip_phrase in message.lower() for skip_phrase in [
+                            'escalado a humano', 'información faltante', 'necesita asistencia', 
+                            'mostré categorías', 'mostré productos'
+                        ]):
+                            relevant_interactions.append(interaction)
                     
-                    # Extraer datos del context_data si están allí
-                    context_data = full_context.get('context_data', {})
-                    if isinstance(context_data, dict):
-                        # Mergear datos del context_data con el contexto principal
-                        for key in ['recent_products', 'user_profile', 'preferences']:
-                            if key in context_data and context_data[key]:
-                                full_context[key] = context_data[key]
+                    # Tomar últimos 20 mensajes relevantes
+                    recent_interactions = relevant_interactions[-20:] if relevant_interactions else []
                     
-                    logger.debug(f"✅ Contexto obtenido: {len(interactions)} interacciones")
-                    return full_context
+                    logger.info(f"✅ Contexto para {user_id}: {len(recent_interactions)} mensajes relevantes de {len(interaction_history)} totales")
+                    
+                    return {
+                        'user_id': user_id,
+                        'interaction_history': recent_interactions,
+                        'last_interaction': context_result.get('last_interaction'),
+                        'has_real_conversation': len(recent_interactions) >= 2  # Al menos 2 mensajes reales
+                    }
                     
         except Exception as e:
             logger.error(f"❌ Error obteniendo contexto: {e}")

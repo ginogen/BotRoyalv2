@@ -123,6 +123,37 @@ class FollowUpScheduler:
         
         return emergency_timestamp
     
+    def _has_real_conversation(self, context_data: dict) -> bool:
+        """🚨 NUEVO: Verificar si el usuario tiene conversación real"""
+        try:
+            interaction_history = context_data.get('interaction_history', [])
+            
+            if not interaction_history:
+                return False
+            
+            # Contar mensajes reales (user/assistant, no system internos)
+            real_messages = 0
+            for interaction in interaction_history:
+                role = interaction.get('role', '')
+                message = interaction.get('message', '')
+                
+                # Solo incluir mensajes reales de conversación
+                if role in ['user', 'assistant'] and message and not any(skip_phrase in message.lower() for skip_phrase in [
+                    'escalado a humano', 'información faltante', 'necesita asistencia', 
+                    'mostré categorías', 'mostré productos'
+                ]):
+                    real_messages += 1
+            
+            # Necesita al menos 2 mensajes reales para justificar follow-up
+            has_conversation = real_messages >= 2
+            logger.debug(f"📊 Usuario: {real_messages} mensajes reales, follow-up justificado: {has_conversation}")
+            
+            return has_conversation
+            
+        except Exception as e:
+            logger.error(f"❌ Error verificando conversación real: {e}")
+            return False
+    
     def _check_migration_mode(self):
         """Verificar si el modo migración está activo"""
         try:
@@ -361,9 +392,17 @@ class FollowUpScheduler:
             logger.error(f"❌ Error revisando usuarios inactivos: {e}")
     
     async def _schedule_user_followups(self, user_data: Dict[str, Any]):
-        """Programar todos los follow-ups para un usuario"""
+        """🚨 PROGRAMAR FOLLOW-UPS: Solo usuarios con conversación real"""
         try:
             user_id = user_data['user_id']
+            
+            # 🔍 VALIDACIÓN CRÍTICA: Solo follow-ups para usuarios con conversación real
+            context_data = user_data.get('context_data', {})
+            if not self._has_real_conversation(context_data):
+                logger.info(f"⏭️ [SKIP] {user_id} sin conversación real, omitiendo follow-ups")
+                return
+            
+            logger.info(f"✅ [VALID] {user_id} tiene conversación real, programando follow-ups")
             
             # 🚨 SISTEMA DE FALLBACK TRIPLE para timestamp base
             last_interaction = None

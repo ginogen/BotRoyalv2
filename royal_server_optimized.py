@@ -240,7 +240,10 @@ async def process_royal_message(user_id: str, message: str, message_data: Option
         logger.debug(f"✅ Worker: Bot activo para {user_id}, procesando mensaje...")
         
         # ✨ NUEVO: Verificar si es cierre de conversación
-        if is_conversation_closure(user_id, message):
+        closure_result = is_conversation_closure(user_id, message)
+        logger.info(f"🔍 Closure detection for {user_id} message '{message}': {closure_result}")
+        
+        if closure_result:
             logger.info(f"💤 Cierre de conversación detectado para {user_id}: '{message}'")
             
             # Registrar el mensaje en el historial pero no generar respuesta
@@ -256,6 +259,8 @@ async def process_royal_message(user_id: str, message: str, message_data: Option
             processing_time = time.time() - start_time
             logger.info(f"🔇 No response sent for conversation closure from {user_id}, processed in {processing_time:.2f}s")
             return ""  # No enviar respuesta
+        else:
+            logger.info(f"✅ NOT a conversation closure for {user_id}, continuing to process")
         
         # Process with Royal agent (using sync version for thread compatibility)
         logger.info(f"🤖 Llamando a run_contextual_conversation_sync para {user_id}")
@@ -873,6 +878,7 @@ def is_conversation_closure(user_id: str, current_message: str) -> bool:
     analizando el contexto de los últimos 2-3 mensajes
     """
     try:
+        logger.debug(f"🔍 CLOSURE DETECTION START for {user_id}: '{current_message}'")
         # Mensajes típicos de cierre
         closure_keywords = [
             "ok", "oki", "okay", "okis", "okei",
@@ -935,16 +941,24 @@ def is_conversation_closure(user_id: str, current_message: str) -> bool:
                     last_user_msg_before = interaction["message"].lower()
             
             if not last_bot_msg:
+                logger.debug(f"🔍 CLOSURE: No bot message found in history for {user_id}")
                 return False
             
+            logger.debug(f"🔍 CLOSURE: last_bot_msg for {user_id}: '{last_bot_msg[:100]}...'")
+            logger.debug(f"🔍 CLOSURE: Full length: {len(last_bot_msg)} chars")
+            
             # Si el bot hizo una pregunta directa, NO es cierre
-            question_indicators = ["?", "¿", "querés", "queres", "preferís", "preferis", 
+            question_indicators = ["?", "¿", 
+                                 "querés", "queres", "preferís", "preferis", "tenés", "tenes",
                                  "cuál", "cual", "qué", "que", "cómo", "como", 
-                                 "dónde", "donde", "cuánto", "cuanto"]
+                                 "dónde", "donde", "cuándo", "cuando", "cuánto", "cuanto",
+                                 "podés", "podes", "sabés", "sabes", "conocés", "conoces"]
             
             if any(indicator in last_bot_msg for indicator in question_indicators):
+                logger.debug(f"🔍 CLOSURE: Found question indicators in bot message for {user_id}")
                 # Verificar si realmente es una pregunta
                 if "?" in last_bot_msg or "¿" in last_bot_msg:
+                    logger.info(f"❌ CLOSURE: Question detected for {user_id}, NOT a closure (? or ¿ found)")
                     return False
                 # Si tiene palabras interrogativas al principio de una oración
                 for word in question_indicators[2:]:  # Skip ? and ¿
@@ -954,15 +968,16 @@ def is_conversation_closure(user_id: str, current_message: str) -> bool:
             
             # Patrones que indican que el bot cerró/completó algo
             closure_from_bot_patterns = [
-                "te confirmo", "te aviso", "te comento",
-                "cualquier cosa", "cualquier consulta", "lo que necesites",
-                "estoy acá", "estoy aquí", "estamos acá", "acá para",
-                "me decís", "me dices", "me avisas", "avisame",
-                "quedo atento", "quedo a disposición",
-                "no dudes en", "no hay problema",
-                "con gusto", "un placer", "fue un placer",
-                "suerte con", "éxitos", "exitos",
-                "para ayudarte", "para ayudar"
+                "te confirmo", "te aviso", "te comento", "te escribo",
+                "cualquier cosa", "cualquier consulta", "lo que necesites", "lo que precisés", "lo que precises",
+                "estoy acá", "estoy aquí", "estamos acá", "acá para", "aquí para",
+                "me decís", "me dices", "me avisas", "avisame", "avísame", "me escribís", "me escribes",
+                "quedo atento", "quedo a disposición", "quedamos en contacto",
+                "no dudes en", "no hay problema", "sin problemas", "dale tranqui",
+                "con gusto", "un placer", "fue un placer", "encantado",
+                "suerte con", "éxitos", "exitos", "que te vaya bien",
+                "para ayudarte", "para ayudar", "en lo que necesites",
+                "saludos", "abrazo", "besos", "nos vemos"
             ]
             
             # Si el bot usó patrones de cierre, es más probable que sea cierre
@@ -1012,6 +1027,7 @@ def is_conversation_closure(user_id: str, current_message: str) -> bool:
                 return bot_closing
             
             # Por defecto, si tiene keyword de cierre y no hay indicadores contrarios, es cierre
+            logger.info(f"✅ CLOSURE: Default case - IS a closure for {user_id}")
             return True
             
         except Exception as e:

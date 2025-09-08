@@ -274,8 +274,8 @@ def create_contextual_royal_agent() -> Agent[RoyalAgentContext]:
     - GRATIS en pedidos +$80,000
     
     ## Pagos:
-    - Tarjeta (hasta 1 cuotas sin interés)
-    - Transferencia: CBU 4530000800014232361716, Alias: ROYAL.JOYAS.2023.nx
+    - Tarjeta (hasta 1 cuota sin interés)
+    - Transferencia: CBU 4530000800014232361716, Alias: ROYAL.JOYAS.2023.nx, Titular: Edward Freitas Souzaneto
     - Efectivo en locales, Sistema de seña: $10,000
     
     # 🎯 EJEMPLOS DE USO DEL CONTEXTO Y HITL:
