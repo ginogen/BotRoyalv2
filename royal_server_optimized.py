@@ -3089,69 +3089,80 @@ async def get_followup_dashboard():
         
         conn = advanced_queue.pg_pool.getconn()
         try:
-            with conn.cursor(cursor_factory=RealDictCursor) as cursor:
-                # Obtener todos los usuarios con contexto y estado de follow-up
-                cursor.execute("""
-                    SELECT 
-                        cc.user_id,
-                        CASE WHEN cc.user_id LIKE 'whatsapp_%' THEN 
-                            REPLACE(cc.user_id, 'whatsapp_', '') 
-                        ELSE cc.user_id END as phone,
-                        cc.last_interaction,
-                        cc.current_state,
-                        jsonb_array_length(cc.context_data->'interaction_history') as msg_count,
-                        -- Follow-up status
-                        (SELECT COUNT(*) FROM follow_up_jobs fj 
-                         WHERE fj.user_id = cc.user_id AND fj.status = 'pending') as pending_jobs,
-                        (SELECT MIN(fj.stage) FROM follow_up_jobs fj 
-                         WHERE fj.user_id = cc.user_id AND fj.status = 'pending') as current_stage,
-                        (SELECT MIN(fj.scheduled_for) FROM follow_up_jobs fj 
-                         WHERE fj.user_id = cc.user_id AND fj.status = 'pending') as next_scheduled,
-                        -- Blacklist status
-                        (SELECT COUNT(*) FROM follow_up_blacklist bl 
-                         WHERE bl.user_id = cc.user_id) > 0 as is_blacklisted,
-                        -- History
-                        (SELECT COUNT(*) FROM follow_up_history fh 
-                         WHERE fh.user_id = cc.user_id) as total_sent,
-                        (SELECT COUNT(*) FROM follow_up_history fh 
-                         WHERE fh.user_id = cc.user_id AND fh.user_responded = true) as responded_count
-                    FROM conversation_contexts cc
-                    ORDER BY cc.last_interaction DESC
-                """)
+            cursor = conn.cursor()
+            
+            # Obtener todos los usuarios con contexto y estado de follow-up
+            cursor.execute("""
+                SELECT 
+                    cc.user_id,
+                    CASE WHEN cc.user_id LIKE 'whatsapp_%' THEN 
+                        REPLACE(cc.user_id, 'whatsapp_', '') 
+                    ELSE cc.user_id END as phone,
+                    cc.last_interaction,
+                    cc.current_state,
+                    COALESCE(jsonb_array_length(cc.context_data->'interaction_history'), 0) as msg_count,
+                    -- Follow-up status
+                    (SELECT COUNT(*) FROM follow_up_jobs fj 
+                     WHERE fj.user_id = cc.user_id AND fj.status = 'pending') as pending_jobs,
+                    (SELECT MIN(fj.stage) FROM follow_up_jobs fj 
+                     WHERE fj.user_id = cc.user_id AND fj.status = 'pending') as current_stage,
+                    (SELECT MIN(fj.scheduled_for) FROM follow_up_jobs fj 
+                     WHERE fj.user_id = cc.user_id AND fj.status = 'pending') as next_scheduled,
+                    -- Blacklist status
+                    (SELECT COUNT(*) FROM follow_up_blacklist bl 
+                     WHERE bl.user_id = cc.user_id) > 0 as is_blacklisted,
+                    -- History
+                    (SELECT COUNT(*) FROM follow_up_history fh 
+                     WHERE fh.user_id = cc.user_id) as total_sent,
+                    (SELECT COUNT(*) FROM follow_up_history fh 
+                     WHERE fh.user_id = cc.user_id AND fh.user_responded = true) as responded_count
+                FROM conversation_contexts cc
+                ORDER BY cc.last_interaction DESC
+            """)
+            
+            users = []
+            columns = [desc[0] for desc in cursor.description]
+            for row in cursor.fetchall():
+                user_data = dict(zip(columns, row))
                 
-                users = []
-                for row in cursor.fetchall():
-                    user_data = dict(row)
-                    # Determinar estado del follow-up
-                    if user_data['is_blacklisted']:
-                        user_data['followup_status'] = 'blacklisted'
-                    elif user_data['pending_jobs'] > 0:
-                        user_data['followup_status'] = 'active'
-                    elif user_data['total_sent'] > 0:
-                        user_data['followup_status'] = 'completed'
-                    else:
-                        user_data['followup_status'] = 'none'
-                    
-                    users.append(user_data)
+                # Determinar estado del follow-up
+                if user_data['is_blacklisted']:
+                    user_data['followup_status'] = 'blacklisted'
+                elif user_data['pending_jobs'] > 0:
+                    user_data['followup_status'] = 'active'
+                elif user_data['total_sent'] > 0:
+                    user_data['followup_status'] = 'completed'
+                else:
+                    user_data['followup_status'] = 'none'
                 
-                # Estadísticas generales
-                cursor.execute("""
-                    SELECT 
-                        COUNT(*) as total_users,
-                        SUM(CASE WHEN EXISTS(SELECT 1 FROM follow_up_jobs fj WHERE fj.user_id = cc.user_id AND fj.status = 'pending') THEN 1 ELSE 0 END) as users_with_active_followups,
-                        (SELECT COUNT(*) FROM follow_up_blacklist) as blacklisted_users,
-                        (SELECT COUNT(*) FROM follow_up_jobs WHERE status = 'pending') as total_pending_jobs,
-                        (SELECT COUNT(*) FROM follow_up_history WHERE sent_at > NOW() - INTERVAL '24 hours') as sent_last_24h
-                    FROM conversation_contexts cc
-                """)
+                # Convert datetime objects to strings
+                if user_data['last_interaction']:
+                    user_data['last_interaction'] = user_data['last_interaction'].isoformat()
+                if user_data['next_scheduled']:
+                    user_data['next_scheduled'] = user_data['next_scheduled'].isoformat()
                 
-                stats = dict(cursor.fetchone())
-                
-                return {
-                    "users": users,
-                    "stats": stats,
-                    "generated_at": datetime.now().isoformat()
-                }
+                users.append(user_data)
+            
+            # Estadísticas generales
+            cursor.execute("""
+                SELECT 
+                    COUNT(*) as total_users,
+                    SUM(CASE WHEN EXISTS(SELECT 1 FROM follow_up_jobs fj WHERE fj.user_id = cc.user_id AND fj.status = 'pending') THEN 1 ELSE 0 END) as users_with_active_followups,
+                    (SELECT COUNT(*) FROM follow_up_blacklist) as blacklisted_users,
+                    (SELECT COUNT(*) FROM follow_up_jobs WHERE status = 'pending') as total_pending_jobs,
+                    (SELECT COUNT(*) FROM follow_up_history WHERE sent_at > NOW() - INTERVAL '24 hours') as sent_last_24h
+                FROM conversation_contexts cc
+            """)
+            
+            stats_row = cursor.fetchone()
+            stats_columns = [desc[0] for desc in cursor.description]
+            stats = dict(zip(stats_columns, stats_row))
+            
+            return {
+                "users": users,
+                "stats": stats,
+                "generated_at": datetime.now().isoformat()
+            }
                 
         finally:
             advanced_queue.pg_pool.putconn(conn)

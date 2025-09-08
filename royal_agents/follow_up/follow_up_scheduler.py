@@ -392,14 +392,22 @@ class FollowUpScheduler:
             logger.error(f"❌ Error revisando usuarios inactivos: {e}")
     
     async def _schedule_user_followups(self, user_data: Dict[str, Any]):
-        """🚨 PROGRAMAR FOLLOW-UPS: Solo usuarios con conversación real"""
+        """🚨 PROGRAMAR FOLLOW-UPS: Solo usuarios con conversación real + validación integral"""
         try:
             user_id = user_data['user_id']
+            
+            # 🛡️ VALIDACIÓN INTEGRAL ANTI-SPAM
+            validation = await self._comprehensive_followup_validation(user_id)
+            if not validation['can_schedule']:
+                logger.warning(f"🚫 [BLOCKED] {user_id} falló validación: {validation['reasons']}")
+                return
             
             # 🔍 VALIDACIÓN CRÍTICA: Solo follow-ups para usuarios con conversación real
             context_data = user_data.get('context_data', {})
             if not self._has_real_conversation(context_data):
                 logger.info(f"⏭️ [SKIP] {user_id} sin conversación real, omitiendo follow-ups")
+                # Liberar lock si no hay conversación real
+                await self._release_recovery_lock(user_id)
                 return
             
             logger.info(f"✅ [VALID] {user_id} tiene conversación real, programando follow-ups")
@@ -939,3 +947,218 @@ class FollowUpScheduler:
                     
         except Exception as e:
             logger.critical(f"🚨 [EMERGENCY] ERROR CRÍTICO en verificación de emergencia: {e}")
+    
+    # 🛡️ RATE LIMITING FUNCTIONS - Anti-Spam Protection
+    
+    async def _check_daily_rate_limit(self, user_id: str) -> bool:
+        """🛡️ CRITICAL: Verificar rate limit diario - máximo 1 follow-up por día"""
+        try:
+            with psycopg2.connect(self.database_url) as conn:
+                with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+                    # Reset automático si cambió el día
+                    cursor.execute("""
+                        UPDATE follow_up_rate_limits 
+                        SET daily_count = 0, reset_date = CURRENT_DATE 
+                        WHERE user_id = %s AND reset_date < CURRENT_DATE
+                    """, (user_id,))
+                    
+                    # Verificar límite actual
+                    cursor.execute("""
+                        SELECT daily_count, last_followup_sent, reset_date
+                        FROM follow_up_rate_limits 
+                        WHERE user_id = %s
+                    """, (user_id,))
+                    
+                    result = cursor.fetchone()
+                    
+                    if not result:
+                        # Primera vez - crear registro
+                        cursor.execute("""
+                            INSERT INTO follow_up_rate_limits (user_id, daily_count, reset_date)
+                            VALUES (%s, 0, CURRENT_DATE)
+                        """, (user_id,))
+                        conn.commit()
+                        logger.info(f"🛡️ [RATE_LIMIT] Nuevo usuario registrado: {user_id}")
+                        return True
+                    
+                    daily_count = result['daily_count']
+                    last_sent = result['last_followup_sent']
+                    reset_date = result['reset_date']
+                    
+                    # REGLA CRÍTICA: Máximo 1 follow-up por día
+                    if daily_count >= 1:
+                        logger.warning(f"🛡️ [RATE_LIMIT] BLOQUEADO - Usuario {user_id} ya envió {daily_count} follow-ups hoy ({reset_date})")
+                        logger.warning(f"🛡️ [RATE_LIMIT] Último envío: {last_sent}")
+                        return False
+                    
+                    logger.info(f"🛡️ [RATE_LIMIT] Usuario {user_id} puede enviar follow-up (count: {daily_count})")
+                    return True
+                    
+        except Exception as e:
+            logger.error(f"❌ [RATE_LIMIT] Error verificando rate limit para {user_id}: {e}")
+            # En caso de error, ser conservador y DENEGAR
+            return False
+    
+    async def _increment_daily_count(self, user_id: str) -> bool:
+        """🛡️ Incrementar contador diario después de envío exitoso"""
+        try:
+            with psycopg2.connect(self.database_url) as conn:
+                with conn.cursor() as cursor:
+                    cursor.execute("""
+                        INSERT INTO follow_up_rate_limits (user_id, daily_count, last_followup_sent, reset_date)
+                        VALUES (%s, 1, CURRENT_TIMESTAMP, CURRENT_DATE)
+                        ON CONFLICT (user_id) 
+                        DO UPDATE SET 
+                            daily_count = follow_up_rate_limits.daily_count + 1,
+                            last_followup_sent = CURRENT_TIMESTAMP,
+                            updated_at = CURRENT_TIMESTAMP
+                    """, (user_id,))
+                    
+                    conn.commit()
+                    logger.info(f"🛡️ [RATE_LIMIT] Contador incrementado para {user_id}")
+                    return True
+                    
+        except Exception as e:
+            logger.error(f"❌ [RATE_LIMIT] Error incrementando contador para {user_id}: {e}")
+            return False
+    
+    async def _acquire_recovery_lock(self, user_id: str, recovery_type: str = 'critical', lock_minutes: int = 30) -> bool:
+        """🔒 Obtener lock para recovery operation - prevenir race conditions"""
+        try:
+            with psycopg2.connect(self.database_url) as conn:
+                with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+                    # Limpiar locks expirados primero
+                    cursor.execute("""
+                        DELETE FROM follow_up_recovery_locks 
+                        WHERE locked_until < CURRENT_TIMESTAMP
+                    """)
+                    
+                    # Verificar si hay lock activo
+                    cursor.execute("""
+                        SELECT recovery_type, locked_until, last_recovery_attempt
+                        FROM follow_up_recovery_locks 
+                        WHERE user_id = %s AND locked_until > CURRENT_TIMESTAMP
+                    """, (user_id,))
+                    
+                    existing_lock = cursor.fetchone()
+                    if existing_lock:
+                        logger.info(f"🔒 [RECOVERY_LOCK] Usuario {user_id} tiene lock activo ({existing_lock['recovery_type']}) hasta {existing_lock['locked_until']}")
+                        return False
+                    
+                    # Obtener lock
+                    cursor.execute("""
+                        INSERT INTO follow_up_recovery_locks (user_id, recovery_type, locked_until)
+                        VALUES (%s, %s, CURRENT_TIMESTAMP + INTERVAL '%s minutes')
+                        ON CONFLICT (user_id) 
+                        DO UPDATE SET 
+                            recovery_type = %s,
+                            locked_until = CURRENT_TIMESTAMP + INTERVAL '%s minutes',
+                            last_recovery_attempt = CURRENT_TIMESTAMP
+                    """, (user_id, recovery_type, lock_minutes, recovery_type, lock_minutes))
+                    
+                    conn.commit()
+                    logger.info(f"🔒 [RECOVERY_LOCK] Lock adquirido para {user_id} ({recovery_type}) por {lock_minutes} minutos")
+                    return True
+                    
+        except Exception as e:
+            logger.error(f"❌ [RECOVERY_LOCK] Error adquiriendo lock para {user_id}: {e}")
+            return False
+    
+    async def _release_recovery_lock(self, user_id: str):
+        """🔓 Liberar lock de recovery operation"""
+        try:
+            with psycopg2.connect(self.database_url) as conn:
+                with conn.cursor() as cursor:
+                    cursor.execute("""
+                        DELETE FROM follow_up_recovery_locks 
+                        WHERE user_id = %s
+                    """, (user_id,))
+                    
+                    conn.commit()
+                    logger.info(f"🔓 [RECOVERY_LOCK] Lock liberado para {user_id}")
+                    
+        except Exception as e:
+            logger.error(f"❌ [RECOVERY_LOCK] Error liberando lock para {user_id}: {e}")
+    
+    async def _check_existing_pending_jobs(self, user_id: str, stage: int = None) -> bool:
+        """🔍 Verificar si ya existen jobs pendientes para evitar duplicados"""
+        try:
+            with psycopg2.connect(self.database_url) as conn:
+                with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+                    if stage:
+                        cursor.execute("""
+                            SELECT COUNT(*) as count
+                            FROM follow_up_jobs 
+                            WHERE user_id = %s AND stage = %s AND status = 'pending'
+                        """, (user_id, stage))
+                    else:
+                        cursor.execute("""
+                            SELECT COUNT(*) as count
+                            FROM follow_up_jobs 
+                            WHERE user_id = %s AND status = 'pending'
+                        """, (user_id,))
+                    
+                    result = cursor.fetchone()
+                    pending_count = result['count'] if result else 0
+                    
+                    if pending_count > 0:
+                        logger.info(f"🔍 [DUPLICATE_CHECK] Usuario {user_id} tiene {pending_count} jobs pendientes (stage: {stage or 'all'})")
+                        return True
+                    
+                    return False
+                    
+        except Exception as e:
+            logger.error(f"❌ [DUPLICATE_CHECK] Error verificando jobs pendientes para {user_id}: {e}")
+            return True  # En caso de error, asumir que hay duplicados
+    
+    async def _comprehensive_followup_validation(self, user_id: str, stage: int = None) -> dict:
+        """🛡️ VALIDACIÓN INTEGRAL antes de programar follow-ups"""
+        validation_result = {
+            'can_schedule': False,
+            'reasons': [],
+            'rate_limit_ok': False,
+            'no_pending_jobs': False,
+            'lock_acquired': False,
+            'user_id': user_id
+        }
+        
+        try:
+            # 1. Verificar rate limit diario
+            rate_limit_ok = await self._check_daily_rate_limit(user_id)
+            validation_result['rate_limit_ok'] = rate_limit_ok
+            if not rate_limit_ok:
+                validation_result['reasons'].append('rate_limit_exceeded')
+            
+            # 2. Verificar jobs pendientes existentes
+            has_pending = await self._check_existing_pending_jobs(user_id, stage)
+            validation_result['no_pending_jobs'] = not has_pending
+            if has_pending:
+                validation_result['reasons'].append('pending_jobs_exist')
+            
+            # 3. Intentar obtener lock de recovery
+            lock_acquired = await self._acquire_recovery_lock(user_id, 'scheduled', 60)
+            validation_result['lock_acquired'] = lock_acquired
+            if not lock_acquired:
+                validation_result['reasons'].append('recovery_lock_active')
+            
+            # 4. Verificar blacklist (usar función existente si existe)
+            # TODO: Agregar verificación de blacklist si no está implementada
+            
+            # RESULTADO FINAL
+            validation_result['can_schedule'] = (
+                rate_limit_ok and 
+                not has_pending and 
+                lock_acquired
+            )
+            
+            if validation_result['can_schedule']:
+                logger.info(f"✅ [VALIDATION] Usuario {user_id} puede programar follow-ups")
+            else:
+                logger.warning(f"🚫 [VALIDATION] Usuario {user_id} NO puede programar follow-ups: {validation_result['reasons']}")
+            
+            return validation_result
+            
+        except Exception as e:
+            logger.error(f"❌ [VALIDATION] Error en validación integral para {user_id}: {e}")
+            validation_result['reasons'].append('validation_error')
+            return validation_result

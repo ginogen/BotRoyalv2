@@ -6,6 +6,11 @@ from agents import function_tool  # type: ignore
 import httpx
 from datetime import datetime
 import logging
+import sys
+
+# Importar función de fallback para categorías locales
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from category_matcher import find_categories
 
 # Configurar logging
 logging.basicConfig(level=logging.INFO)
@@ -470,12 +475,38 @@ async def search_products(search_term: str) -> str:
     result = await wc_client.make_request('products', {
         'search': search_term,
         'per_page': 10,
-        'orderby': 'relevance'
+        'orderby': 'popularity'
     })
     
     if 'error' in result:
         logger.error(f"❌ Error en search_products: {result['error']}")
-        return "No pude realizar la búsqueda en este momento. El equipo técnico está trabajando en ello."
+        logger.info(f"🔄 Activando fallback con categorías locales para: '{search_term}'")
+        
+        # FALLBACK: Usar búsqueda local de categorías
+        try:
+            matches = find_categories(search_term, max_results=6)
+            
+            if matches:
+                logger.info(f"✅ Fallback exitoso: {len(matches)} categorías encontradas")
+                
+                # Formatear respuesta usando categorías locales
+                categories_info = []
+                for match in matches[:5]:  # Máximo 5 categorías
+                    category_info = f"• **{match.category.name}** 🔗 [Ver productos]({match.category.url})"
+                    categories_info.append(category_info)
+                
+                response = f"🔍 **Encontré estas categorías para '{search_term}':**\n\n"
+                response += "\n".join(categories_info)
+                response += "\n\n💬 **¡Hacé clic en cualquier categoría para ver todos los productos disponibles!**"
+                
+                return response
+            else:
+                logger.warning(f"⚠️ Fallback: No se encontraron categorías para '{search_term}'")
+                return f"No encontré productos específicos de '{search_term}' en el sistema. Dejame consultar con el equipo para darte información precisa."
+                
+        except Exception as e:
+            logger.error(f"❌ Error en fallback: {str(e)}")
+            return "No pude realizar la búsqueda en este momento. El equipo técnico está trabajando en ello."
     
     products = result if isinstance(result, list) else []
     
