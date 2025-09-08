@@ -817,7 +817,7 @@ async def process_purchase_intent(
 3. Método de pago preferido
 
 💡 **Opciones de pago:**
-• Tarjeta (hasta 3 cuotas sin interés)
+• Tarjeta (hasta 1 cuota sin interés)
 • Transferencia bancaria
 • Efectivo en locales
 

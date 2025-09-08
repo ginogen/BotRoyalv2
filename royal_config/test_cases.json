@@ -121,7 +121,7 @@
       "input": "¿Cómo puedo pagar?",
       "expected_elements": [
         "tarjeta", 
-        "3 cuotas sin interés",
+        "1 cuota sin interés",
         "transferencia",
         "CBU 4530000800014232361716",
         "efectivo en locales"

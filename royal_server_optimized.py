@@ -239,6 +239,24 @@ async def process_royal_message(user_id: str, message: str, message_data: Option
         # Si llegamos aquí, el bot está activo - procesar normalmente
         logger.debug(f"✅ Worker: Bot activo para {user_id}, procesando mensaje...")
         
+        # ✨ NUEVO: Verificar si es cierre de conversación
+        if is_conversation_closure(user_id, message):
+            logger.info(f"💤 Cierre de conversación detectado para {user_id}: '{message}'")
+            
+            # Registrar el mensaje en el historial pero no generar respuesta
+            try:
+                from royal_agents.conversation_context import context_manager
+                context = context_manager.get_or_create_context(user_id)
+                context.conversation.add_interaction("user", message)
+                logger.debug(f"📝 Mensaje de cierre registrado en contexto para {user_id}")
+            except Exception as e:
+                logger.debug(f"No se pudo registrar mensaje de cierre en contexto: {e}")
+            
+            # Calcular tiempo de procesamiento pero sin respuesta
+            processing_time = time.time() - start_time
+            logger.info(f"🔇 No response sent for conversation closure from {user_id}, processed in {processing_time:.2f}s")
+            return ""  # No enviar respuesta
+        
         # Process with Royal agent (using sync version for thread compatibility)
         logger.info(f"🤖 Llamando a run_contextual_conversation_sync para {user_id}")
         logger.info(f"🤖 Royal agents disponible: {ROYAL_AGENTS_AVAILABLE}")
@@ -848,6 +866,162 @@ def is_duplicate_message(phone: str, content: str, source: str = "") -> bool:
     # Marcar como procesado
     processed_messages.add(message_hash)
     return False
+
+def is_conversation_closure(user_id: str, current_message: str) -> bool:
+    """
+    Detecta si el mensaje actual es un cierre natural de conversación
+    analizando el contexto de los últimos 2-3 mensajes
+    """
+    try:
+        # Mensajes típicos de cierre
+        closure_keywords = [
+            "ok", "oki", "okay", "okis", "okei",
+            "gracias", "grax", "thanks", "ty",
+            "está bien", "esta bien", "ta bien", 
+            "perfecto", "perfect", "perf",
+            "genial", "buenisimo", "buenísimo", 
+            "bueno", "bno", "bn",
+            "vale", "de acuerdo", "dale", "daleee",
+            "entendido", "entiendo", "comprendo",
+            "no gracias", "no, gracias", "no por ahora",
+            "por ahora no", "ahora no", "después",
+            "👍", "👌", "✅", "💯"
+        ]
+        
+        # Normalizar mensaje
+        message_lower = current_message.lower().strip()
+        message_words = message_lower.split()
+        
+        # Si el mensaje es muy largo, probablemente no es un cierre
+        if len(message_words) > 5 or len(message_lower) > 30:
+            return False
+        
+        # Verificar si contiene palabras de cierre
+        is_closure_keyword = any(
+            keyword == message_lower or  # Match exacto
+            keyword in message_lower.split() or  # Como palabra completa
+            (len(keyword) >= 3 and keyword in message_lower)  # Substring para palabras largas
+            for keyword in closure_keywords
+        )
+        
+        # Caso especial: si contiene "buenísimo" pero también pregunta, NO es cierre
+        if "buenísimo" in message_lower or "buenisimo" in message_lower:
+            if "?" in current_message or "cuándo" in message_lower or "cuando" in message_lower:
+                return False
+        
+        if not is_closure_keyword:
+            return False
+        
+        # Obtener contexto de conversación
+        try:
+            from royal_agents.conversation_context import context_manager
+            context = context_manager.get_or_create_context(user_id)
+            
+            # Si no hay suficiente historial, no es cierre
+            if len(context.conversation.interaction_history) < 2:
+                return False
+            
+            # Obtener últimas 3 interacciones para mejor contexto
+            last_interactions = context.conversation.interaction_history[-3:]
+            
+            # Buscar el último mensaje del bot
+            last_bot_msg = None
+            last_user_msg_before = None
+            
+            for i, interaction in enumerate(reversed(last_interactions)):
+                if interaction["role"] == "assistant" and not last_bot_msg:
+                    last_bot_msg = interaction["message"].lower()
+                elif interaction["role"] == "user" and last_bot_msg and not last_user_msg_before:
+                    last_user_msg_before = interaction["message"].lower()
+            
+            if not last_bot_msg:
+                return False
+            
+            # Si el bot hizo una pregunta directa, NO es cierre
+            question_indicators = ["?", "¿", "querés", "queres", "preferís", "preferis", 
+                                 "cuál", "cual", "qué", "que", "cómo", "como", 
+                                 "dónde", "donde", "cuánto", "cuanto"]
+            
+            if any(indicator in last_bot_msg for indicator in question_indicators):
+                # Verificar si realmente es una pregunta
+                if "?" in last_bot_msg or "¿" in last_bot_msg:
+                    return False
+                # Si tiene palabras interrogativas al principio de una oración
+                for word in question_indicators[2:]:  # Skip ? and ¿
+                    # Buscar como palabra completa, no substring
+                    if any(sentence.strip().split()[0] == word for sentence in last_bot_msg.split(".") if sentence.strip().split()):
+                        return False
+            
+            # Patrones que indican que el bot cerró/completó algo
+            closure_from_bot_patterns = [
+                "te confirmo", "te aviso", "te comento",
+                "cualquier cosa", "cualquier consulta", "lo que necesites",
+                "estoy acá", "estoy aquí", "estamos acá", "acá para",
+                "me decís", "me dices", "me avisas", "avisame",
+                "quedo atento", "quedo a disposición",
+                "no dudes en", "no hay problema",
+                "con gusto", "un placer", "fue un placer",
+                "suerte con", "éxitos", "exitos",
+                "para ayudarte", "para ayudar"
+            ]
+            
+            # Si el bot usó patrones de cierre, es más probable que sea cierre
+            bot_closing = any(pattern in last_bot_msg for pattern in closure_from_bot_patterns)
+            
+            # Si el bot está esperando respuesta específica, NO es cierre
+            awaiting_patterns = [
+                "esperando", "aguardando", "confirma", "confirmame",
+                "enviame", "envíame", "manda", "mandame", 
+                "pasame", "pásame", "compartí", "comparti"
+            ]
+            
+            if any(pattern in last_bot_msg for pattern in awaiting_patterns):
+                return False
+            
+            # Si hay una acción pendiente en el contexto, NO es cierre
+            if hasattr(context.conversation, 'pending_action') and context.conversation.pending_action:
+                return False
+            
+            # Análisis más granular para decidir si es cierre
+            # Si el bot claramente estaba cerrando, es cierre
+            if bot_closing:
+                return True
+            
+            # Si el bot NO estaba cerrando, verificar otros indicadores
+            # Mensajes que indican que el bot espera acción específica
+            expects_specific_action = any(pattern in last_bot_msg for pattern in [
+                "necesito", "requiero", "envía", "envia", "manda", "pasá", "pasa"
+            ])
+            
+            if expects_specific_action:
+                return False
+            
+            # Si contiene palabras que sugieren continuidad, no es cierre
+            continuity_words = ["después", "luego", "más tarde", "cuando", "si"]
+            if any(word in current_message.lower() for word in continuity_words):
+                return False
+                
+            # Si el mensaje del usuario contiene pregunta, no es cierre
+            if "?" in current_message or "cuándo" in current_message.lower() or "cuando" in current_message.lower():
+                return False
+            
+            # Análisis de longitud del mensaje del bot
+            # Si el bot escribió mucho, probablemente no es cierre natural
+            if len(last_bot_msg.split()) > 15:
+                # Solo es cierre si hay patrones explícitos de cierre
+                return bot_closing
+            
+            # Por defecto, si tiene keyword de cierre y no hay indicadores contrarios, es cierre
+            return True
+            
+        except Exception as e:
+            logger.debug(f"No se pudo obtener contexto para cierre: {e}")
+            # Sin contexto, solo basarse en keywords
+            return True
+            
+    except Exception as e:
+        logger.error(f"Error en detección de cierre: {e}")
+        return False
 
 def get_phone_from_conversation(conversation_id: str) -> Optional[str]:
     """Obtener número de teléfono desde conversación de Chatwoot"""

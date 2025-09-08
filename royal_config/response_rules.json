@@ -60,7 +60,7 @@
         },
         "pagos": {
           "metodos": [
-            "Tarjeta (hasta 3 cuotas sin interés)",
+            "Tarjeta (hasta 1 cuota sin interés)",
             "Transferencia",
             "Efectivo en locales"
           ],

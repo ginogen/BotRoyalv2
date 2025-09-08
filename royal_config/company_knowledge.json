@@ -85,7 +85,7 @@
   "payment_methods": {
     "credit_card": {
       "available": true,
-      "installments": "hasta 3 cuotas sin interés"
+      "installments": "hasta 1 cuota sin interés"
     },
     "debit_card": {
       "available": true

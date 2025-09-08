@@ -274,7 +274,7 @@ def create_contextual_royal_agent() -> Agent[RoyalAgentContext]:
     - GRATIS en pedidos +$80,000
     
     ## Pagos:
-    - Tarjeta (hasta 3 cuotas sin interés)
+    - Tarjeta (hasta 1 cuotas sin interés)
     - Transferencia: CBU 4530000800014232361716, Alias: ROYAL.JOYAS.2023.nx
     - Efectivo en locales, Sistema de seña: $10,000
     

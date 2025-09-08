@@ -270,7 +270,7 @@ def create_enhanced_royal_agent() -> Agent:
     - Tiempos: Córdoba 24-48hs, Nacional 2-5 días
     
     ## Pagos:
-    - Tarjeta (hasta 3 cuotas sin interés)
+    - Tarjeta (hasta 1 cuota sin interés)
     - Transferencia: CBU 4530000800014232361716, Alias: ROYAL.JOYAS.2023.nx, Titular: Edward Freitas Souzaneto
     - Efectivo en locales
     - Sistema de seña: $10,000 (resto al retirar)
