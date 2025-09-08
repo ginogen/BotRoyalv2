@@ -406,6 +406,20 @@ class ContextManager:
             with psycopg2.connect(database_url) as conn:
                 with conn.cursor() as cursor:
                     logger.debug(f"📝 Executing INSERT/UPDATE for: {user_id}")
+                    # 🚨 CRÍTICO: Asegurar que last_interaction siempre tenga timezone Argentina
+                    argentina_tz = pytz.timezone("America/Argentina/Cordoba")
+                    last_interaction_with_tz = conversation.last_interaction
+                    if last_interaction_with_tz.tzinfo is None:
+                        last_interaction_with_tz = argentina_tz.localize(last_interaction_with_tz)
+                    else:
+                        last_interaction_with_tz = last_interaction_with_tz.astimezone(argentina_tz)
+                    
+                    # Agregar timestamp con timezone al context_data también
+                    conversation_dict = conversation.to_dict()
+                    conversation_dict['last_interaction'] = last_interaction_with_tz.isoformat()
+                    
+                    logger.debug(f"💾 [CONTEXT] Guardando timestamp: {last_interaction_with_tz} (tzinfo: {last_interaction_with_tz.tzinfo})")
+                    
                     cursor.execute("""
                         INSERT INTO conversation_contexts 
                         (user_id, context_data, last_interaction, current_state, user_intent, is_entrepreneur, experience_level)
@@ -420,8 +434,8 @@ class ContextManager:
                             updated_at = CURRENT_TIMESTAMP
                     """, (
                         user_id,
-                        Json(conversation.to_dict()),
-                        conversation.last_interaction,
+                        Json(conversation_dict),  # Incluye timestamp con timezone en context_data
+                        last_interaction_with_tz,  # Timestamp con timezone en campo directo
                         conversation.current_state,
                         conversation.user_intent,
                         conversation.is_entrepreneur,

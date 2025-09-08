@@ -44,6 +44,10 @@ class FollowUpScheduler:
             7: 120     # 5 días
         }
         
+        # 🚨 MODO MIGRACIÓN: Protección anti-duplicación temporal
+        self.migration_mode_until = None
+        self._check_migration_mode()
+        
         # Horarios permitidos
         self.start_hour = 9   # 9 AM
         self.end_hour = 21    # 9 PM
@@ -51,32 +55,134 @@ class FollowUpScheduler:
     
     def _ensure_argentina_timezone(self, dt_input) -> datetime:
         """
-        Helper para asegurar que cualquier datetime tenga timezone de Argentina
+        🚨 VERSIÓN CRÍTICA: Helper ultra-robusto para timezone Argentina con múltiples fallbacks
+        VITAL para follow-ups - NUNCA debe fallar
         """
-        if isinstance(dt_input, str):
-            # Parsear el datetime string con manejo correcto de timezone
-            if dt_input.endswith('Z'):
-                # UTC format - convertir a Argentina
-                dt = datetime.fromisoformat(dt_input.replace('Z', '+00:00'))
-                return dt.astimezone(self.timezone)
-            elif '+' in dt_input or '-' in dt_input[-6:]:
-                # Ya tiene timezone - parsear y convertir a Argentina
-                dt = datetime.fromisoformat(dt_input)
-                return dt.astimezone(self.timezone)
-            else:
-                # Sin timezone - asumir Argentina timezone
-                dt = datetime.fromisoformat(dt_input)
-                if dt.tzinfo is None:
-                    return self.timezone.localize(dt)
-                return dt
-        elif isinstance(dt_input, datetime):
-            # Ya es datetime object
-            if dt_input.tzinfo is None:
-                return self.timezone.localize(dt_input)
-            else:
-                return dt_input.astimezone(self.timezone)
-        else:
-            raise ValueError(f"Tipo no soportado para datetime: {type(dt_input)}")
+        argentina_tz = self.timezone
+        current_time = datetime.now(argentina_tz)
+        
+        try:
+            # FALLBACK 1: String con timezone explícito (preferido)
+            if isinstance(dt_input, str):
+                logger.info(f"🕐 [TIMEZONE] Procesando string: {dt_input}")
+                
+                # Sub-fallback 1a: Timezone Argentina explícito
+                if '-03:00' in dt_input:
+                    result = datetime.fromisoformat(dt_input).astimezone(argentina_tz)
+                    logger.info(f"✅ [TIMEZONE] Fallback 1a exitoso: {result}")
+                    return result
+                
+                # Sub-fallback 1b: UTC o timezone genérico
+                if dt_input.endswith('Z') or '+' in dt_input or ('-' in dt_input[-6:] and dt_input[-6:] != '-03:00'):
+                    if dt_input.endswith('Z'):
+                        dt_input = dt_input.replace('Z', '+00:00')
+                    result = datetime.fromisoformat(dt_input).astimezone(argentina_tz)
+                    logger.info(f"✅ [TIMEZONE] Fallback 1b exitoso: {result}")
+                    return result
+                
+                # Sub-fallback 1c: String sin timezone (asumir Argentina)
+                try:
+                    dt = datetime.fromisoformat(dt_input)
+                    if dt.tzinfo is None:
+                        result = argentina_tz.localize(dt)
+                        logger.info(f"✅ [TIMEZONE] Fallback 1c exitoso: {result}")
+                        return result
+                    else:
+                        result = dt.astimezone(argentina_tz)
+                        logger.info(f"✅ [TIMEZONE] Fallback 1c-alt exitoso: {result}")
+                        return result
+                except Exception as e:
+                    logger.warning(f"⚠️ [TIMEZONE] Fallback 1c falló: {e}")
+            
+            # FALLBACK 2: Datetime object
+            elif isinstance(dt_input, datetime):
+                logger.info(f"🕐 [TIMEZONE] Procesando datetime object: {dt_input} (tzinfo: {dt_input.tzinfo})")
+                
+                if dt_input.tzinfo is None:
+                    result = argentina_tz.localize(dt_input)
+                    logger.info(f"✅ [TIMEZONE] Fallback 2a exitoso: {result}")
+                    return result
+                else:
+                    result = dt_input.astimezone(argentina_tz)
+                    logger.info(f"✅ [TIMEZONE] Fallback 2b exitoso: {result}")
+                    return result
+            
+            # FALLBACK 3: Tipo no soportado - log error pero continuar
+            logger.error(f"❌ [TIMEZONE] Tipo no soportado: {type(dt_input)} = {dt_input}")
+            
+        except Exception as e:
+            logger.error(f"❌ [TIMEZONE] Error en procesamiento principal: {e}")
+        
+        # 🚨 FALLBACK DE EMERGENCIA: Si todo falla, usar timestamp actual menos tiempo razonable
+        emergency_timestamp = current_time - timedelta(minutes=30)
+        logger.critical(f"🚨 [TIMEZONE] FALLBACK DE EMERGENCIA activado: {emergency_timestamp}")
+        logger.critical(f"🚨 [TIMEZONE] Input original que falló: {dt_input} (tipo: {type(dt_input)})")
+        
+        # Enviar alerta crítica (implementar después)
+        # self._send_critical_alert(f"Timezone fallback emergency: {dt_input}")
+        
+        return emergency_timestamp
+    
+    def _check_migration_mode(self):
+        """Verificar si el modo migración está activo"""
+        try:
+            with psycopg2.connect(self.database_url) as conn:
+                with conn.cursor() as cursor:
+                    # Buscar marca de migración en configuración
+                    cursor.execute("""
+                        SELECT config_value FROM follow_up_config 
+                        WHERE config_key = 'migration_mode_until'
+                    """)
+                    result = cursor.fetchone()
+                    
+                    if result:
+                        migration_until_str = result[0]
+                        try:
+                            self.migration_mode_until = datetime.fromisoformat(migration_until_str)
+                            if self.migration_mode_until > datetime.now(self.timezone):
+                                logger.info(f"🚨 [MIGRATION] Modo migración activo hasta: {self.migration_mode_until}")
+                            else:
+                                # Modo migración expirado, limpiar
+                                cursor.execute("""
+                                    DELETE FROM follow_up_config 
+                                    WHERE config_key = 'migration_mode_until'
+                                """)
+                                conn.commit()
+                                self.migration_mode_until = None
+                                logger.info("✅ [MIGRATION] Modo migración expirado y limpiado")
+                        except Exception as e:
+                            logger.warning(f"⚠️ [MIGRATION] Error parseando fecha de migración: {e}")
+                            self.migration_mode_until = None
+                    
+        except Exception as e:
+            logger.warning(f"⚠️ [MIGRATION] Error verificando modo migración: {e}")
+            self.migration_mode_until = None
+    
+    def _is_migration_mode_active(self) -> bool:
+        """Verificar si el modo migración está activo"""
+        if self.migration_mode_until is None:
+            return False
+        
+        current_time = datetime.now(self.timezone)
+        is_active = current_time < self.migration_mode_until
+        
+        if not is_active and self.migration_mode_until:
+            # Modo migración expirado, limpiar
+            logger.info("✅ [MIGRATION] Modo migración expirado automáticamente")
+            self.migration_mode_until = None
+            # Limpiar de BD también
+            try:
+                with psycopg2.connect(self.database_url) as conn:
+                    with conn.cursor() as cursor:
+                        cursor.execute("""
+                            DELETE FROM follow_up_config 
+                            WHERE config_key = 'migration_mode_until'
+                        """)
+                        conn.commit()
+            except Exception as e:
+                logger.warning(f"⚠️ [MIGRATION] Error limpiando modo migración: {e}")
+        
+        return is_active
         
     async def initialize(self):
         """Inicializar el scheduler"""
@@ -113,6 +219,24 @@ class FollowUpScheduler:
                 trigger='interval',
                 minutes=60,  # Revisar cada 1 hora
                 id='check_inactive_users',
+                replace_existing=True
+            )
+            
+            # 🚨 SISTEMA DE FALLBACK CRÍTICO: Job de recuperación cada 30 minutos
+            self.scheduler.add_job(
+                func=self._critical_followup_recovery,
+                trigger='interval',
+                minutes=30,  # Recuperación cada 30 minutos
+                id='critical_followup_recovery',
+                replace_existing=True
+            )
+            
+            # 🚨 SISTEMA DE FALLBACK: Verificación hourly de usuarios sin follow-ups
+            self.scheduler.add_job(
+                func=self._emergency_followup_check,
+                trigger='interval',
+                minutes=15,  # Verificación cada 15 minutos
+                id='emergency_followup_check',
                 replace_existing=True
             )
             
@@ -241,31 +365,58 @@ class FollowUpScheduler:
         try:
             user_id = user_data['user_id']
             
-            # CRITICAL FIX: Usar timestamp desde context_data que tiene timezone correcto
-            context_data = user_data.get('context_data', {})
-            last_interaction = context_data.get('last_interaction') or user_data['last_interaction']
+            # 🚨 SISTEMA DE FALLBACK TRIPLE para timestamp base
+            last_interaction = None
+            source_used = ""
             
-            # Obtener el último mensaje del usuario
-            with psycopg2.connect(self.database_url) as conn:
-                with conn.cursor(cursor_factory=RealDictCursor) as cursor:
-                    cursor.execute("""
-                        SELECT message, created_at 
-                        FROM user_interactions 
-                        WHERE user_id = %s AND role = 'user'
-                        ORDER BY created_at DESC 
-                        LIMIT 1
-                    """, (user_id,))
-                    last_msg = cursor.fetchone()
+            try:
+                # FALLBACK 1: context_data.last_interaction (fuente preferida)
+                context_data = user_data.get('context_data', {})
+                if context_data and context_data.get('last_interaction'):
+                    last_interaction = self._ensure_argentina_timezone(context_data['last_interaction'])
+                    source_used = "context_data"
+                    logger.info(f"✅ [SCHEDULE] Fallback 1 usado para {user_id}: {last_interaction}")
+                
+                # FALLBACK 2: Campo directo user_data['last_interaction']
+                elif user_data.get('last_interaction'):
+                    last_interaction = self._ensure_argentina_timezone(user_data['last_interaction'])
+                    source_used = "direct_field"
+                    logger.info(f"✅ [SCHEDULE] Fallback 2 usado para {user_id}: {last_interaction}")
+                
+                # FALLBACK 3: EMERGENCIA - timestamp actual menos 1 hora
+                else:
+                    last_interaction = datetime.now(self.timezone) - timedelta(hours=1)
+                    source_used = "emergency"
+                    logger.critical(f"🚨 [SCHEDULE] FALLBACK DE EMERGENCIA para {user_id}: {last_interaction}")
+                    
+            except Exception as e:
+                # FALLBACK ÚLTIMO RECURSO
+                logger.critical(f"🚨 [SCHEDULE] ERROR en fallback para {user_id}: {e}")
+                last_interaction = datetime.now(self.timezone) - timedelta(hours=2)
+                source_used = "last_resort"
             
-            # Usar helper para asegurar timezone correcto
-            last_interaction = self._ensure_argentina_timezone(last_interaction)
+            # Obtener el último mensaje del usuario con fallback
+            last_msg = None
+            try:
+                with psycopg2.connect(self.database_url) as conn:
+                    with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+                        cursor.execute("""
+                            SELECT message, created_at 
+                            FROM user_interactions 
+                            WHERE user_id = %s AND role = 'user'
+                            ORDER BY created_at DESC 
+                            LIMIT 1
+                        """, (user_id,))
+                        last_msg = cursor.fetchone()
+            except Exception as e:
+                logger.warning(f"⚠️ [SCHEDULE] No se pudo obtener último mensaje para {user_id}: {e}")
             
-            # TEMPORAL: Debug logging para timezone
-            logger.info(f"🕐 [TIMEZONE DEBUG] Usuario: {user_id}")
-            logger.info(f"🕐 [TIMEZONE DEBUG] last_interaction desde campo BD: {user_data.get('last_interaction')}")
-            logger.info(f"🕐 [TIMEZONE DEBUG] last_interaction desde context_data: {context_data.get('last_interaction')}")
-            logger.info(f"🕐 [TIMEZONE DEBUG] last_interaction procesado final: {last_interaction}")
-            logger.info(f"🕐 [TIMEZONE DEBUG] timezone actual: {self.timezone}")
+            # LOGGING CRÍTICO para debugging
+            logger.info(f"📊 [SCHEDULE] Usuario: {user_id}")
+            logger.info(f"📊 [SCHEDULE] Fuente timestamp: {source_used}")
+            logger.info(f"📊 [SCHEDULE] Last interaction: {last_interaction}")
+            logger.info(f"📊 [SCHEDULE] Timezone: {self.timezone}")
+            logger.info(f"📊 [SCHEDULE] Último mensaje disponible: {last_msg is not None}")
             
             # Programar cada etapa del follow-up
             for stage, delay_hours in self.stage_delays.items():
@@ -431,7 +582,10 @@ class FollowUpScheduler:
             await self._mark_job_failed(user_id, stage)
     
     async def _is_user_still_inactive(self, user_id: str) -> bool:
-        """Verificar si el usuario sigue inactivo"""
+        """
+        🚨 VERSIÓN CRÍTICA: Verificar inactividad con múltiples fallbacks
+        NUNCA debe fallar - vital para follow-ups
+        """
         try:
             with psycopg2.connect(self.database_url) as conn:
                 with conn.cursor(cursor_factory=RealDictCursor) as cursor:
@@ -443,38 +597,66 @@ class FollowUpScheduler:
                     
                     result = cursor.fetchone()
                     if not result:
-                        return False
+                        logger.warning(f"⚠️ [INACTIVE] Usuario {user_id} no encontrado en BD")
+                        # FALLBACK: Usuario no encontrado = considera inactivo por seguridad
+                        return True
                     
-                    # CRITICAL FIX: Usar timestamp desde context_data que tiene timezone correcto
-                    context_data = result.get('context_data', {})
-                    last_interaction_from_context = context_data.get('last_interaction')
+                    # SISTEMA DE FALLBACK TRIPLE para timestamp
+                    last_interaction = None
+                    source_used = ""
                     
-                    # Usar context_data si está disponible, fallback a campo directo
-                    last_interaction_raw = last_interaction_from_context or result['last_interaction']
+                    try:
+                        # FALLBACK 1: context_data.last_interaction (fuente preferida)
+                        context_data = result.get('context_data', {})
+                        if context_data and context_data.get('last_interaction'):
+                            last_interaction = self._ensure_argentina_timezone(context_data['last_interaction'])
+                            source_used = "context_data"
+                            logger.info(f"✅ [INACTIVE] Fallback 1 (context_data) usado para {user_id}: {last_interaction}")
+                        
+                        # FALLBACK 2: Campo directo last_interaction
+                        elif result['last_interaction']:
+                            last_interaction = self._ensure_argentina_timezone(result['last_interaction'])
+                            source_used = "direct_field"
+                            logger.info(f"✅ [INACTIVE] Fallback 2 (direct_field) usado para {user_id}: {last_interaction}")
+                        
+                        # FALLBACK 3: EMERGENCIA - usar timestamp actual menos 1 hora
+                        else:
+                            last_interaction = datetime.now(self.timezone) - timedelta(hours=1)
+                            source_used = "emergency_fallback"
+                            logger.critical(f"🚨 [INACTIVE] FALLBACK DE EMERGENCIA para {user_id}: {last_interaction}")
+                            logger.critical(f"🚨 [INACTIVE] Datos originales - context_data: {context_data}, direct: {result['last_interaction']}")
                     
-                    # Usar helper para asegurar timezone correcto
-                    last_interaction = self._ensure_argentina_timezone(last_interaction_raw)
+                    except Exception as e:
+                        # FALLBACK DE ÚLTIMO RECURSO
+                        logger.critical(f"🚨 [INACTIVE] ERROR en fallback, usando ÚLTIMO RECURSO para {user_id}: {e}")
+                        last_interaction = datetime.now(self.timezone) - timedelta(hours=2)
+                        source_used = "last_resort"
                     
-                    # TEMPORAL: Debug logging para timezone en inactividad
-                    logger.info(f"🕐 [INACTIVE DEBUG] Usuario: {user_id}")
-                    logger.info(f"🕐 [INACTIVE DEBUG] last_interaction desde campo BD: {result['last_interaction']}")
-                    logger.info(f"🕐 [INACTIVE DEBUG] last_interaction desde context_data: {last_interaction_from_context}")
-                    logger.info(f"🕐 [INACTIVE DEBUG] last_interaction usado final: {last_interaction_raw}")
-                    logger.info(f"🕐 [INACTIVE DEBUG] last_interaction procesado: {last_interaction}")
-                    
-                    # Detección de usuarios inactivos después de 15 minutos
+                    # Verificar inactividad con cutoff de 15 minutos
                     cutoff = datetime.now(self.timezone) - timedelta(minutes=15)
+                    is_inactive = last_interaction < cutoff
                     
-                    # DEBUG: Log para entender la comparación
-                    logger.debug(f"🕐 [DEBUG] last_interaction: {last_interaction} (tzinfo: {last_interaction.tzinfo})")
-                    logger.debug(f"🕐 [DEBUG] cutoff: {cutoff} (tzinfo: {cutoff.tzinfo})")
-                    logger.debug(f"🕐 [DEBUG] is inactive: {last_interaction < cutoff}")
+                    # LOGGING DETALLADO para debugging
+                    logger.info(f"📊 [INACTIVE] Usuario: {user_id}")
+                    logger.info(f"📊 [INACTIVE] Fuente timestamp: {source_used}")
+                    logger.info(f"📊 [INACTIVE] Last interaction: {last_interaction}")
+                    logger.info(f"📊 [INACTIVE] Cutoff time: {cutoff}")
+                    logger.info(f"📊 [INACTIVE] Es inactivo: {is_inactive}")
+                    logger.info(f"📊 [INACTIVE] Diferencia minutos: {(cutoff - last_interaction).total_seconds() / 60:.1f}")
                     
-                    return last_interaction < cutoff
+                    # VALIDACIÓN CRÍTICA: Si el timestamp es muy futuro, algo está mal
+                    current_time = datetime.now(self.timezone)
+                    if last_interaction > current_time + timedelta(minutes=5):
+                        logger.critical(f"🚨 [INACTIVE] TIMESTAMP FUTURO DETECTADO para {user_id}: {last_interaction}")
+                        # En caso de timestamp futuro, considera inactivo por seguridad
+                        return True
+                    
+                    return is_inactive
                     
         except Exception as e:
-            logger.error(f"❌ Error verificando inactividad: {e}")
-            return False
+            logger.critical(f"🚨 [INACTIVE] ERROR CRÍTICO verificando inactividad {user_id}: {e}")
+            # FALLBACK FINAL: En caso de error, considera inactivo (mejor enviar que no enviar)
+            return True
     
     async def _cancel_remaining_followups(self, user_id: str):
         """Cancelar follow-ups restantes de un usuario"""
@@ -604,3 +786,103 @@ class FollowUpScheduler:
         except Exception as e:
             logger.error(f"❌ Error obteniendo estadísticas: {e}")
             return {"error": str(e)}
+    
+    async def _critical_followup_recovery(self):
+        """🚨 SISTEMA DE RECUPERACIÓN CRÍTICA: Re-programa follow-ups fallidos o perdidos"""
+        try:
+            # 🛡️ PROTECCIÓN ANTI-DUPLICACIÓN: Verificar modo migración
+            if self._is_migration_mode_active():
+                logger.info("🚨 [RECOVERY] SALTANDO recovery - modo migración activo para prevenir duplicación")
+                return
+            
+            logger.info("🚨 [RECOVERY] Iniciando recuperación crítica de follow-ups")
+            
+            with psycopg2.connect(self.database_url) as conn:
+                with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+                    # Buscar jobs fallidos de las últimas 24 horas que deberían reintentarse
+                    cursor.execute("""
+                        SELECT user_id, stage, scheduled_for, attempts
+                        FROM follow_up_jobs 
+                        WHERE status = 'failed' 
+                        AND attempts < 3
+                        AND scheduled_for < %s
+                        AND created_at > %s
+                    """, (
+                        datetime.now(self.timezone),
+                        datetime.now(self.timezone) - timedelta(hours=24)
+                    ))
+                    
+                    failed_jobs = cursor.fetchall()
+                    
+                    logger.info(f"🚨 [RECOVERY] Encontrados {len(failed_jobs)} jobs fallidos para recuperar")
+                    
+                    for job in failed_jobs:
+                        try:
+                            # Resetear job para reintento
+                            cursor.execute("""
+                                UPDATE follow_up_jobs 
+                                SET status = 'pending', 
+                                    scheduled_for = %s,
+                                    processed_at = NULL
+                                WHERE user_id = %s AND stage = %s
+                            """, (
+                                datetime.now(self.timezone) + timedelta(minutes=5),  # Reintentar en 5 minutos
+                                job['user_id'], 
+                                job['stage']
+                            ))
+                            
+                            logger.info(f"✅ [RECOVERY] Job recuperado: {job['user_id']} stage {job['stage']}")
+                            
+                        except Exception as e:
+                            logger.error(f"❌ [RECOVERY] Error recuperando job {job['user_id']}: {e}")
+                    
+                    conn.commit()
+                    
+        except Exception as e:
+            logger.critical(f"🚨 [RECOVERY] ERROR CRÍTICO en recuperación: {e}")
+    
+    async def _emergency_followup_check(self):
+        """🚨 VERIFICACIÓN DE EMERGENCIA: Encuentra usuarios que deberían tener follow-ups pero no los tienen"""
+        try:
+            logger.info("🚨 [EMERGENCY] Verificación de emergencia de follow-ups faltantes")
+            
+            with psycopg2.connect(self.database_url) as conn:
+                with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+                    # Buscar usuarios inactivos sin follow-ups programados
+                    cursor.execute("""
+                        SELECT cc.user_id, cc.last_interaction, cc.context_data
+                        FROM conversation_contexts cc
+                        LEFT JOIN follow_up_blacklist bl ON cc.user_id = bl.user_id
+                        WHERE bl.user_id IS NULL  -- No en blacklist
+                        AND cc.last_interaction < %s  -- Inactivo por más de 2 horas
+                        AND NOT EXISTS (  -- Sin follow-ups pendientes
+                            SELECT 1 FROM follow_up_jobs fj 
+                            WHERE fj.user_id = cc.user_id 
+                            AND fj.status = 'pending'
+                        )
+                        AND NOT EXISTS (  -- Sin follow-ups enviados recientemente
+                            SELECT 1 FROM follow_up_jobs fj2
+                            WHERE fj2.user_id = cc.user_id
+                            AND fj2.created_at > %s
+                        )
+                        LIMIT 10  -- Procesar máximo 10 por vez
+                    """, (
+                        datetime.now(self.timezone) - timedelta(hours=2),  # 2 horas inactivo
+                        datetime.now(self.timezone) - timedelta(hours=6)   # Sin follow-ups en 6 horas
+                    ))
+                    
+                    missing_followups = cursor.fetchall()
+                    
+                    logger.info(f"🚨 [EMERGENCY] Encontrados {len(missing_followups)} usuarios sin follow-ups")
+                    
+                    for user in missing_followups:
+                        try:
+                            # Programar follow-ups de emergencia
+                            logger.critical(f"🚨 [EMERGENCY] Programando follow-ups de emergencia para {user['user_id']}")
+                            await self._schedule_user_followups(user)
+                            
+                        except Exception as e:
+                            logger.critical(f"🚨 [EMERGENCY] Error programando follow-ups de emergencia para {user['user_id']}: {e}")
+                    
+        except Exception as e:
+            logger.critical(f"🚨 [EMERGENCY] ERROR CRÍTICO en verificación de emergencia: {e}")

@@ -2545,6 +2545,83 @@ async def get_followup_queue():
         logger.error(f"❌ Error obteniendo cola de follow-up: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.post("/api/admin/migrate-timezone")
+async def run_timezone_migration_endpoint():
+    """🚨 ENDPOINT CRÍTICO: Ejecutar migración de timezone manualmente"""
+    try:
+        if not followup_scheduler:
+            raise HTTPException(status_code=503, detail="Follow-up system not available")
+        
+        database_url = os.getenv("DATABASE_URL")
+        if not database_url:
+            raise HTTPException(status_code=500, detail="DATABASE_URL not configured")
+        
+        logger.info("🚨 [API] Ejecutando migración de timezone por solicitud manual...")
+        await _run_timezone_migration(database_url)
+        
+        return {
+            "success": True,
+            "message": "Migración de timezone ejecutada exitosamente",
+            "timestamp": datetime.now().isoformat()
+        }
+        
+    except Exception as e:
+        logger.error(f"❌ Error en migración manual: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/admin/disable-migration-mode")
+async def disable_migration_mode():
+    """🛡️ Desactivar modo migración manualmente (para emergencias)"""
+    try:
+        database_url = os.getenv("DATABASE_URL")
+        if not database_url:
+            raise HTTPException(status_code=500, detail="DATABASE_URL not configured")
+        
+        import psycopg2
+        with psycopg2.connect(database_url) as conn:
+            with conn.cursor() as cursor:
+                cursor.execute("""
+                    DELETE FROM follow_up_config 
+                    WHERE config_key = 'migration_mode_until'
+                """)
+                conn.commit()
+        
+        # Actualizar scheduler si está activo
+        if followup_scheduler:
+            followup_scheduler.migration_mode_until = None
+            logger.info("🛡️ [MIGRATION] Modo migración desactivado manualmente")
+        
+        return {
+            "success": True,
+            "message": "Modo migración desactivado - recovery system reactivado",
+            "timestamp": datetime.now().isoformat()
+        }
+        
+    except Exception as e:
+        logger.error(f"❌ Error desactivando modo migración: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/admin/migration-status")
+async def get_migration_status():
+    """📊 Ver estado del modo migración"""
+    try:
+        if not followup_scheduler:
+            return {"migration_mode_active": False, "message": "Follow-up system not available"}
+        
+        is_active = followup_scheduler._is_migration_mode_active()
+        migration_until = followup_scheduler.migration_mode_until
+        
+        return {
+            "migration_mode_active": is_active,
+            "migration_until": migration_until.isoformat() if migration_until else None,
+            "current_time": datetime.now().isoformat(),
+            "message": "Modo migración activo - recovery system deshabilitado" if is_active else "Modo normal - recovery system activo"
+        }
+        
+    except Exception as e:
+        logger.error(f"❌ Error obteniendo estado de migración: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.post("/api/followup/blacklist")
 async def add_to_blacklist(request: Request):
     """Agregar usuario a blacklist de follow-ups"""
@@ -2970,6 +3047,128 @@ async def search_business_info(q: str = "", category: str = ""):
 # UTILITY FUNCTIONS
 # =====================================================
 
+async def _run_timezone_migration(database_url: str):
+    """🚨 MIGRACIÓN CRÍTICA: Corregir timestamps de timezone para follow-ups"""
+    try:
+        import psycopg2
+        from psycopg2.extras import Json, RealDictCursor
+        import pytz
+        
+        argentina_tz = pytz.timezone("America/Argentina/Cordoba")
+        
+        def fix_timestamp(timestamp_input):
+            """Convertir cualquier timestamp a Argentina timezone"""
+            try:
+                if isinstance(timestamp_input, str):
+                    if '-03:00' in timestamp_input:
+                        return datetime.fromisoformat(timestamp_input)
+                    if timestamp_input.endswith('Z'):
+                        dt = datetime.fromisoformat(timestamp_input.replace('Z', '+00:00'))
+                        return dt.astimezone(argentina_tz)
+                    if '+' in timestamp_input or '-' in timestamp_input[-6:]:
+                        dt = datetime.fromisoformat(timestamp_input)
+                        return dt.astimezone(argentina_tz)
+                    dt = datetime.fromisoformat(timestamp_input)
+                    utc = pytz.UTC.localize(dt)
+                    return utc.astimezone(argentina_tz)
+                elif isinstance(timestamp_input, datetime):
+                    if timestamp_input.tzinfo is None:
+                        utc = pytz.UTC.localize(timestamp_input)
+                        return utc.astimezone(argentina_tz)
+                    else:
+                        return timestamp_input.astimezone(argentina_tz)
+                else:
+                    return None
+            except Exception as e:
+                logger.warning(f"⚠️ Error procesando timestamp {timestamp_input}: {e}")
+                return None
+        
+        logger.info("🚨 [MIGRATION] Iniciando migración crítica de timezone...")
+        
+        with psycopg2.connect(database_url) as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+                # Migrar conversation_contexts
+                cursor.execute("SELECT user_id, context_data, last_interaction FROM conversation_contexts")
+                contexts = cursor.fetchall()
+                
+                migrated_contexts = 0
+                for context in contexts:
+                    try:
+                        user_id = context['user_id']
+                        context_data = context['context_data'] or {}
+                        last_interaction = context['last_interaction']
+                        
+                        # Corregir timestamp
+                        fixed_last_interaction = fix_timestamp(last_interaction)
+                        if not fixed_last_interaction:
+                            continue
+                        
+                        # Corregir context_data también
+                        if isinstance(context_data, dict):
+                            context_data['last_interaction'] = fixed_last_interaction.isoformat()
+                        
+                        cursor.execute("""
+                            UPDATE conversation_contexts 
+                            SET context_data = %s, last_interaction = %s
+                            WHERE user_id = %s
+                        """, (Json(context_data), fixed_last_interaction, user_id))
+                        
+                        migrated_contexts += 1
+                        
+                    except Exception as e:
+                        logger.warning(f"⚠️ [MIGRATION] Error migrando contexto {context.get('user_id')}: {e}")
+                
+                # Migrar follow_up_jobs
+                cursor.execute("SELECT user_id, stage, scheduled_for, context_snapshot FROM follow_up_jobs")
+                jobs = cursor.fetchall()
+                
+                migrated_jobs = 0
+                for job in jobs:
+                    try:
+                        user_id = job['user_id']
+                        stage = job['stage']
+                        scheduled_for = job['scheduled_for']
+                        context_snapshot = job['context_snapshot'] or {}
+                        
+                        # Corregir scheduled_for
+                        fixed_scheduled_for = fix_timestamp(scheduled_for)
+                        if not fixed_scheduled_for:
+                            continue
+                        
+                        # Corregir context_snapshot
+                        if isinstance(context_snapshot, dict) and 'last_interaction' in context_snapshot:
+                            fixed_context_timestamp = fix_timestamp(context_snapshot['last_interaction'])
+                            if fixed_context_timestamp:
+                                context_snapshot['last_interaction'] = fixed_context_timestamp.isoformat()
+                        
+                        cursor.execute("""
+                            UPDATE follow_up_jobs 
+                            SET scheduled_for = %s, context_snapshot = %s
+                            WHERE user_id = %s AND stage = %s
+                        """, (fixed_scheduled_for, Json(context_snapshot), user_id, stage))
+                        
+                        migrated_jobs += 1
+                        
+                    except Exception as e:
+                        logger.warning(f"⚠️ [MIGRATION] Error migrando job {job.get('user_id')} stage {job.get('stage')}: {e}")
+                
+                # 🛡️ ACTIVAR MODO MIGRACIÓN por 24 horas para prevenir duplicación
+                migration_until = datetime.now(argentina_tz) + timedelta(hours=24)
+                cursor.execute("""
+                    INSERT INTO follow_up_config (config_key, config_value)
+                    VALUES ('migration_mode_until', %s)
+                    ON CONFLICT (config_key) DO UPDATE SET 
+                        config_value = EXCLUDED.config_value
+                """, (migration_until.isoformat(),))
+                
+                conn.commit()
+                logger.info(f"✅ [MIGRATION] Migración completada: {migrated_contexts} contextos, {migrated_jobs} jobs")
+                logger.info(f"🛡️ [MIGRATION] Modo protección activo hasta: {migration_until}")
+                
+    except Exception as e:
+        logger.warning(f"⚠️ [MIGRATION] Error en migración de timezone: {e}")
+        # No fallar el startup por problemas de migración
+
 async def _create_followup_tables_if_needed(database_url: str) -> bool:
     """Crear tablas de follow-up automáticamente si no existen"""
     try:
@@ -3129,6 +3328,10 @@ async def startup_event():
             # Crear tablas automáticamente si no existen
             logger.info("🗄️ Verificando/creando tablas de follow-up...")
             await _create_followup_tables_if_needed(database_url)
+            
+            # 🚨 MIGRACIÓN CRÍTICA DE TIMEZONE (automática en startup)
+            logger.info("⚡ Ejecutando migración crítica de timezone...")
+            await _run_timezone_migration(database_url)
             
             followup_scheduler = FollowUpScheduler(
                 database_url=database_url,
