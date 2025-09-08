@@ -2735,6 +2735,132 @@ async def get_followup_queue():
         logger.error(f"❌ Error obteniendo cola de follow-up: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.get("/api/followup/spam-detection")
+async def get_followup_spam_detection():
+    """🛡️ Detectar usuarios con potencial spam de follow-ups"""
+    try:
+        if not followup_manager:
+            return {"error": "Follow-up system not initialized"}
+        
+        database_url = os.getenv("DATABASE_URL")
+        if not database_url:
+            raise HTTPException(status_code=500, detail="DATABASE_URL not configured")
+        
+        import psycopg2
+        from psycopg2.extras import RealDictCursor
+        from datetime import datetime, timedelta
+        
+        spam_detection = {
+            "users_with_multiple_pending": [],
+            "users_over_rate_limit": [],
+            "suspicious_activity": [],
+            "recovery_locks_active": [],
+            "stats": {}
+        }
+        
+        with psycopg2.connect(database_url) as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+                # 1. Usuarios con múltiples jobs pendientes (potencial spam)
+                cursor.execute("""
+                    SELECT user_id, COUNT(*) as pending_count, 
+                           MIN(created_at) as first_created, 
+                           MAX(created_at) as last_created
+                    FROM follow_up_jobs 
+                    WHERE status = 'pending'
+                    GROUP BY user_id 
+                    HAVING COUNT(*) > 3
+                    ORDER BY pending_count DESC
+                    LIMIT 20
+                """)
+                
+                multiple_pending = cursor.fetchall()
+                for user in multiple_pending:
+                    spam_detection["users_with_multiple_pending"].append({
+                        "user_id": user["user_id"],
+                        "pending_count": user["pending_count"],
+                        "first_created": user["first_created"].isoformat() if user["first_created"] else None,
+                        "last_created": user["last_created"].isoformat() if user["last_created"] else None,
+                        "time_span_minutes": (user["last_created"] - user["first_created"]).total_seconds() / 60 if user["first_created"] and user["last_created"] else 0
+                    })
+                
+                # 2. Usuarios que exceden rate limit
+                cursor.execute("""
+                    SELECT user_id, daily_count, last_followup_sent, reset_date
+                    FROM follow_up_rate_limits 
+                    WHERE daily_count >= 1 
+                    AND reset_date = CURRENT_DATE
+                    ORDER BY daily_count DESC
+                    LIMIT 20
+                """)
+                
+                over_limit = cursor.fetchall()
+                for user in over_limit:
+                    spam_detection["users_over_rate_limit"].append({
+                        "user_id": user["user_id"],
+                        "daily_count": user["daily_count"],
+                        "last_followup_sent": user["last_followup_sent"].isoformat() if user["last_followup_sent"] else None,
+                        "reset_date": user["reset_date"].isoformat() if user["reset_date"] else None
+                    })
+                
+                # 3. Actividad sospechosa (múltiples jobs creados en corto tiempo)
+                cursor.execute("""
+                    SELECT user_id, COUNT(*) as jobs_count, 
+                           MIN(created_at) as first_job, 
+                           MAX(created_at) as last_job
+                    FROM follow_up_jobs 
+                    WHERE created_at > %s
+                    GROUP BY user_id
+                    HAVING COUNT(*) > 2
+                    AND MAX(created_at) - MIN(created_at) < INTERVAL '30 minutes'
+                    ORDER BY jobs_count DESC
+                    LIMIT 10
+                """, (datetime.now() - timedelta(hours=2),))
+                
+                suspicious = cursor.fetchall()
+                for user in suspicious:
+                    spam_detection["suspicious_activity"].append({
+                        "user_id": user["user_id"],
+                        "jobs_count": user["jobs_count"],
+                        "first_job": user["first_job"].isoformat() if user["first_job"] else None,
+                        "last_job": user["last_job"].isoformat() if user["last_job"] else None,
+                        "time_span_minutes": (user["last_job"] - user["first_job"]).total_seconds() / 60 if user["first_job"] and user["last_job"] else 0
+                    })
+                
+                # 4. Recovery locks activos
+                cursor.execute("""
+                    SELECT user_id, recovery_type, locked_until, last_recovery_attempt
+                    FROM follow_up_recovery_locks 
+                    WHERE locked_until > CURRENT_TIMESTAMP
+                    ORDER BY locked_until DESC
+                """)
+                
+                active_locks = cursor.fetchall()
+                for lock in active_locks:
+                    spam_detection["recovery_locks_active"].append({
+                        "user_id": lock["user_id"],
+                        "recovery_type": lock["recovery_type"],
+                        "locked_until": lock["locked_until"].isoformat() if lock["locked_until"] else None,
+                        "last_recovery_attempt": lock["last_recovery_attempt"].isoformat() if lock["last_recovery_attempt"] else None
+                    })
+                
+                # 5. Estadísticas generales
+                cursor.execute("""
+                    SELECT 
+                        (SELECT COUNT(*) FROM follow_up_jobs WHERE status = 'pending') as total_pending,
+                        (SELECT COUNT(*) FROM follow_up_jobs WHERE status = 'pending' AND created_at > %s) as pending_last_hour,
+                        (SELECT COUNT(*) FROM follow_up_rate_limits WHERE daily_count >= 1 AND reset_date = CURRENT_DATE) as users_at_limit,
+                        (SELECT COUNT(*) FROM follow_up_recovery_locks WHERE locked_until > CURRENT_TIMESTAMP) as active_locks
+                """, (datetime.now() - timedelta(hours=1),))
+                
+                stats = cursor.fetchone()
+                spam_detection["stats"] = dict(stats) if stats else {}
+        
+        return spam_detection
+        
+    except Exception as e:
+        logger.error(f"❌ Error en detección de spam: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.post("/api/admin/migrate-timezone")
 async def run_timezone_migration_endpoint():
     """🚨 ENDPOINT CRÍTICO: Ejecutar migración de timezone manualmente"""
@@ -3084,11 +3210,15 @@ async def get_business_info():
 async def get_followup_dashboard():
     """📊 Dashboard completo de follow-ups - usuarios, estados, logs"""
     try:
-        if not advanced_queue.pg_pool:
-            raise HTTPException(status_code=503, detail="Database not available")
+        # Use direct connection instead of pool to avoid initialization issues
+        import psycopg2
+        from psycopg2.extras import RealDictCursor
         
-        conn = advanced_queue.pg_pool.getconn()
-        try:
+        database_url = os.getenv("DATABASE_URL")
+        if not database_url:
+            raise HTTPException(status_code=503, detail="Database URL not configured")
+        
+        with psycopg2.connect(database_url) as conn:
             cursor = conn.cursor()
             
             # Obtener todos los usuarios con contexto y estado de follow-up
@@ -3163,9 +3293,6 @@ async def get_followup_dashboard():
                 "stats": stats,
                 "generated_at": datetime.now().isoformat()
             }
-                
-        finally:
-            advanced_queue.pg_pool.putconn(conn)
             
     except Exception as e:
         logger.error(f"❌ Error obteniendo dashboard de follow-ups: {e}")

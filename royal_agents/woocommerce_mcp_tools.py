@@ -181,13 +181,61 @@ async def get_product_info(product_name: str = "", product_id: str = "", categor
         logger.info(f"   Primer producto keys: {list(products[0].keys())}")
         logger.info(f"   Primer producto name: {products[0].get('name', 'Sin nombre')}")
     
-    # Formatear respuesta para Royalia
+    # Filtrar solo productos EN STOCK
+    in_stock_products = []
+    for product in products:
+        # Verificar stock usando múltiples campos de WooCommerce
+        stock_status = product.get('stock_status', 'instock') == 'instock'
+        in_stock = product.get('in_stock', True)  # Default True para compatibilidad
+        stock_quantity = product.get('stock_quantity')
+        
+        # Producto está en stock si stock_status es 'instock'
+        is_available = stock_status and in_stock
+        if stock_quantity is not None and stock_quantity == 0:
+            is_available = False
+            
+        if is_available:
+            in_stock_products.append(product)
+    
+    logger.info(f"📦 Productos EN STOCK: {len(in_stock_products)} de {len(products)} total")
+    
+    # Si NO hay productos en stock, activar fallback con categorías
+    if not in_stock_products:
+        logger.warning(f"⚠️ Productos encontrados pero SIN STOCK para: {product_name or category}")
+        logger.info(f"🔄 Activando fallback con categorías locales")
+        
+        search_term = product_name or category or "productos"
+        try:
+            matches = find_categories(search_term, max_results=6)
+            
+            if matches:
+                logger.info(f"✅ Fallback exitoso: {len(matches)} categorías encontradas")
+                
+                categories_info = []
+                for match in matches[:5]:
+                    category_info = f"""
+📦 **{match.category.name}**
+🔗 Ver productos: {match.category.url}
+"""
+                    categories_info.append(category_info)
+                
+                response = f"📦 **Los productos están agotados, pero encontré estas categorías relacionadas:**\n"
+                response += "\n".join(categories_info)
+                
+                return response
+            else:
+                return f"Los productos están agotados temporalmente. Dejame consultar con el equipo para opciones alternativas."
+                
+        except Exception as e:
+            logger.error(f"❌ Error en fallback: {str(e)}")
+            return f"Los productos están agotados temporalmente. Dejame consultar con el equipo para opciones alternativas."
+    
+    # Formatear solo productos EN STOCK
     products_info = []
-    for product in products[:5]:  # Máximo 5 productos
+    for product in in_stock_products[:5]:  # Máximo 5 productos
         # Adaptarse a la estructura real de WooCommerce
         name = product.get('name', 'Sin nombre')
         price = product.get('price', product.get('regular_price', 'Consultar'))
-        stock_status = product.get('stock_status', 'instock') == 'instock'
         permalink = product.get('permalink', '')
         
         # Manejar categorías
@@ -197,7 +245,7 @@ async def get_product_info(product_name: str = "", product_id: str = "", categor
         info = f"""
 📦 **{name}**
 💰 Precio: ${price}
-📊 Stock: {'✅ Disponible' if stock_status else '❌ Sin stock'}
+📊 Stock: ✅ Disponible
 🏷️ Categoría: {category_name}"""
         
         if product.get('sale_price'):
@@ -303,19 +351,36 @@ async def search_products_by_price_range(min_price: float, max_price: float, cat
     if not products:
         return f"No encontré productos entre ${min_price} y ${max_price}"
     
+    # Filtrar solo productos EN STOCK
+    in_stock_products = []
+    for product in products:
+        stock_status = product.get('stock_status', 'instock') == 'instock'
+        in_stock = product.get('in_stock', True)
+        stock_quantity = product.get('stock_quantity')
+        
+        is_available = stock_status and in_stock
+        if stock_quantity is not None and stock_quantity == 0:
+            is_available = False
+            
+        if is_available:
+            in_stock_products.append(product)
+    
+    if not in_stock_products:
+        return f"No hay productos disponibles en stock entre ${min_price} y ${max_price} en este momento"
+    
     products_list = []
-    for product in products[:8]:  # Máximo 8 productos
+    for product in in_stock_products[:8]:  # Máximo 8 productos
         name = product.get('name', 'Sin nombre')
         price = product.get('price', 0)
         permalink = product.get('permalink', '')
         
-        product_info = f"• {name} - ${price}"
+        product_info = f"• {name} - ${price} ✅ Disponible"
         if permalink:
             product_info += f" 🔗 {permalink}"
         
         products_list.append(product_info)
     
-    return f"💰 **Productos entre ${min_price} y ${max_price}:**\n" + "\n".join(products_list)
+    return f"💰 **Productos disponibles entre ${min_price} y ${max_price}:**\n" + "\n".join(products_list)
 
 @function_tool
 async def get_combo_emprendedor_products() -> str:
@@ -336,21 +401,31 @@ async def get_combo_emprendedor_products() -> str:
         logger.info(f"📦 Combos de categoría encontrados: {len(combo_result)}")
         
         for product in combo_result[:5]:
-            name = product.get('name', 'Sin nombre')
-            price = product.get('price', product.get('regular_price', 'Consultar'))
+            # Verificar stock antes de agregar
             stock_status = product.get('stock_status', 'instock') == 'instock'
-            permalink = product.get('permalink', '')
+            in_stock = product.get('in_stock', True)
+            stock_quantity = product.get('stock_quantity')
             
-            info = f"""
+            is_available = stock_status and in_stock
+            if stock_quantity is not None and stock_quantity == 0:
+                is_available = False
+            
+            # Solo agregar productos EN STOCK
+            if is_available:
+                name = product.get('name', 'Sin nombre')
+                price = product.get('price', product.get('regular_price', 'Consultar'))
+                permalink = product.get('permalink', '')
+                
+                info = f"""
 🎁 **{name}**
 💰 Precio: ${price}
-📊 Stock: {'✅ Disponible' if stock_status else '❌ Sin stock'}"""
-            
-            if permalink:
-                info += f"\n🔗 Ver combo: {permalink}"
-            
-            info += "\n"
-            products_info.append(info)
+📊 Stock: ✅ Disponible"""
+                
+                if permalink:
+                    info += f"\n🔗 Ver combo: {permalink}"
+                
+                info += "\n"
+                products_info.append(info)
     
     # Procesar resultados de búsqueda adicionales
     if isinstance(search_result, list) and len(search_result) > 0:
@@ -360,20 +435,30 @@ async def get_combo_emprendedor_products() -> str:
             name = product.get('name', 'Sin nombre')
             # Evitar duplicados
             if not any(name in info for info in products_info):
-                price = product.get('price', product.get('regular_price', 'Consultar'))
+                # Verificar stock antes de agregar
                 stock_status = product.get('stock_status', 'instock') == 'instock'
-                permalink = product.get('permalink', '')
+                in_stock = product.get('in_stock', True)
+                stock_quantity = product.get('stock_quantity')
                 
-                info = f"""
+                is_available = stock_status and in_stock
+                if stock_quantity is not None and stock_quantity == 0:
+                    is_available = False
+                
+                # Solo agregar productos EN STOCK
+                if is_available:
+                    price = product.get('price', product.get('regular_price', 'Consultar'))
+                    permalink = product.get('permalink', '')
+                    
+                    info = f"""
 💎 **{name}**
 💰 Precio: ${price}
-📊 Stock: {'✅ Disponible' if stock_status else '❌ Sin stock'}"""
-                
-                if permalink:
-                    info += f"\n🔗 Ver combo: {permalink}"
-                
-                info += "\n"
-                products_info.append(info)
+📊 Stock: ✅ Disponible"""
+                    
+                    if permalink:
+                        info += f"\n🔗 Ver combo: {permalink}"
+                    
+                    info += "\n"
+                    products_info.append(info)
     
     logger.info(f"✅ Total combos formateados: {len(products_info)}")
     
@@ -416,9 +501,47 @@ async def get_product_details_with_link(product_name: str) -> str:
     regular_price = product.get('regular_price', '')
     sale_price = product.get('sale_price', '')
     stock_status = product.get('stock_status', 'instock') == 'instock'
+    in_stock = product.get('in_stock', True)
     stock_quantity = product.get('stock_quantity', 'No especificado')
     permalink = product.get('permalink', '')
     sku = product.get('sku', 'No disponible')
+    
+    # Verificar disponibilidad
+    is_available = stock_status and in_stock
+    if stock_quantity is not None and stock_quantity == 0:
+        is_available = False
+    
+    # Si el producto específico NO está en stock, ofrecer categorías relacionadas
+    if not is_available:
+        logger.warning(f"⚠️ Producto '{name}' SIN STOCK")
+        logger.info(f"🔄 Activando fallback con categorías locales para: '{product_name}'")
+        
+        try:
+            matches = find_categories(product_name, max_results=6)
+            
+            if matches:
+                logger.info(f"✅ Fallback exitoso: {len(matches)} categorías encontradas")
+                
+                categories_info = []
+                for match in matches[:5]:
+                    category_info = f"""
+📦 **{match.category.name}**
+🔗 Ver productos: {match.category.url}
+"""
+                    categories_info.append(category_info)
+                
+                response = f"😔 **'{name}' está agotado temporalmente**\n\n"
+                response += f"📦 **Pero encontré estas categorías relacionadas con '{product_name}':**\n"
+                response += "\n".join(categories_info)
+                response += "\n💬 **¡Explorá estas opciones para encontrar productos similares disponibles!**"
+                
+                return response
+            else:
+                return f"😔 **'{name}' está agotado temporalmente**\n\n💬 Dejame consultar con el equipo para opciones alternativas similares."
+                
+        except Exception as e:
+            logger.error(f"❌ Error en fallback: {str(e)}")
+            return f"😔 **'{name}' está agotado temporalmente**\n\n💬 Dejame consultar con el equipo para opciones alternativas similares."
     
     # Descripción corta
     short_description = product.get('short_description', '')
@@ -427,7 +550,7 @@ async def get_product_details_with_link(product_name: str) -> str:
     categories = product.get('categories', [])
     category_names = [cat.get('name', '') for cat in categories]
     
-    # Formatear respuesta detallada
+    # Formatear respuesta detallada para productos EN STOCK
     details = f"""
 📦 **{name}**
 🆔 SKU: {sku}
@@ -437,9 +560,9 @@ async def get_product_details_with_link(product_name: str) -> str:
         details += f"\n🔥 OFERTA: ${sale_price} (antes ${regular_price})"
     
     details += f"""
-📊 Stock: {'✅ Disponible' if stock_status else '❌ Sin stock'}"""
+📊 Stock: ✅ Disponible"""
     
-    if stock_quantity != 'No especificado' and stock_quantity is not None:
+    if stock_quantity != 'No especificado' and stock_quantity is not None and stock_quantity != 0:
         details += f" ({stock_quantity} unidades)"
     
     if category_names:
@@ -513,17 +636,88 @@ async def search_products(search_term: str) -> str:
     logger.info(f"📦 Productos encontrados: {len(products)}")
     
     if not products:
-        # Si no encontramos productos, devolver mensaje que activará HITL
+        # Si no encontramos productos, activar fallback con categorías
         logger.warning(f"⚠️ No se encontraron productos para: {search_term}")
-        return f"No encontré productos específicos de {search_term} en el sistema. Dejame consultar con el equipo para darte información precisa."
+        logger.info(f"🔄 Activando fallback con categorías locales para: '{search_term}'")
+        
+        try:
+            matches = find_categories(search_term, max_results=6)
+            
+            if matches:
+                logger.info(f"✅ Fallback exitoso: {len(matches)} categorías encontradas")
+                
+                categories_info = []
+                for match in matches[:5]:
+                    category_info = f"• **{match.category.name}** 🔗 [Ver productos]({match.category.url})"
+                    categories_info.append(category_info)
+                
+                response = f"🔍 **No encontré productos específicos de '{search_term}' en stock, pero encontré estas categorías relacionadas:**\n\n"
+                response += "\n".join(categories_info)
+                response += "\n\n💬 **¡Hacé clic en cualquier categoría para ver todos los productos disponibles!**"
+                
+                return response
+            else:
+                return f"No encontré productos específicos de '{search_term}' en el sistema. Dejame consultar con el equipo para darte información precisa."
+                
+        except Exception as e:
+            logger.error(f"❌ Error en fallback: {str(e)}")
+            return f"No encontré productos específicos de '{search_term}' en el sistema. Dejame consultar con el equipo para darte información precisa."
     
-    # Formatear resultados encontrados
+    # Filtrar solo productos EN STOCK
+    in_stock_products = []
+    for product in products:
+        # Verificar stock usando múltiples campos de WooCommerce
+        stock_status = product.get('stock_status', 'instock') == 'instock'
+        in_stock = product.get('in_stock', True)  # Default True para compatibilidad
+        stock_quantity = product.get('stock_quantity')
+        
+        # Producto está en stock si:
+        # - stock_status es 'instock' Y
+        # - in_stock es True Y  
+        # - stock_quantity no es 0 (si está definido)
+        is_available = stock_status and in_stock
+        if stock_quantity is not None and stock_quantity == 0:
+            is_available = False
+            
+        if is_available:
+            in_stock_products.append(product)
+    
+    logger.info(f"📦 Productos EN STOCK: {len(in_stock_products)} de {len(products)} total")
+    
+    # Si NO hay productos en stock, activar fallback con categorías
+    if not in_stock_products:
+        logger.warning(f"⚠️ Productos encontrados pero SIN STOCK para: {search_term}")
+        logger.info(f"🔄 Activando fallback con categorías locales para: '{search_term}'")
+        
+        try:
+            matches = find_categories(search_term, max_results=6)
+            
+            if matches:
+                logger.info(f"✅ Fallback exitoso: {len(matches)} categorías encontradas")
+                
+                categories_info = []
+                for match in matches[:5]:
+                    category_info = f"• **{match.category.name}** 🔗 [Ver productos]({match.category.url})"
+                    categories_info.append(category_info)
+                
+                response = f"🔍 **Los productos de '{search_term}' están agotados, pero encontré estas categorías relacionadas:**\n\n"
+                response += "\n".join(categories_info)
+                response += "\n\n💬 **¡Hacé clic en cualquier categoría para ver productos disponibles!**"
+                
+                return response
+            else:
+                return f"Los productos de '{search_term}' están agotados temporalmente. Dejame consultar con el equipo para opciones alternativas."
+                
+        except Exception as e:
+            logger.error(f"❌ Error en fallback: {str(e)}")
+            return f"Los productos de '{search_term}' están agotados temporalmente. Dejame consultar con el equipo para opciones alternativas."
+    
+    # Formatear solo productos EN STOCK
     products_info = []
     
-    for product in products[:5]:  # Máximo 5 productos
+    for product in in_stock_products[:5]:  # Máximo 5 productos
         name = product.get('name', 'Sin nombre')
         price = product.get('price', product.get('regular_price', 'Consultar'))
-        stock = product.get('in_stock', False)
         
         # Formatear precio
         if price and price != 'Consultar':
@@ -532,11 +726,9 @@ async def search_products(search_term: str) -> str:
             except:
                 price = f"${price}"
         
-        stock_status = "✅ Disponible" if stock else "❌ Sin stock"
-        
-        products_info.append(f"• **{name}** - {price} {stock_status}")
+        products_info.append(f"• **{name}** - {price} ✅ Disponible")
     
-    response = f"🔍 **Resultados para '{search_term}':**\n\n"
+    response = f"🔍 **Productos disponibles para '{search_term}':**\n\n"
     response += "\n".join(products_info)
     response += "\n\n💬 **¿Te interesa alguno en particular? Contame cuál para darte más detalles!**"
     

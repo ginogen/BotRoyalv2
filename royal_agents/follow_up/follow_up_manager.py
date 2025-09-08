@@ -43,6 +43,13 @@ class FollowUpManager:
     async def send_followup_message(self, user_id: str, stage: int) -> bool:
         """Enviar mensaje de follow-up para una etapa específica"""
         try:
+            # 🛡️ VALIDACIÓN CRÍTICA: Verificar rate limit antes de enviar
+            rate_limit_ok = await self._check_daily_rate_limit(user_id)
+            if not rate_limit_ok:
+                logger.warning(f"🚫 [RATE_LIMIT] Usuario {user_id} excedió límite diario, cancelando envío")
+                await self._mark_job_failed(user_id, stage, "rate_limit_exceeded")
+                return False
+            
             # Obtener datos del job
             job_data = await self._get_followup_job(user_id, stage)
             if not job_data:
@@ -66,6 +73,9 @@ class FollowUpManager:
             success = await self._send_whatsapp_message(phone, message)
             
             if success:
+                # 🛡️ Incrementar contador de rate limit después de envío exitoso
+                await self._increment_daily_count(user_id)
+                
                 # Registrar en historial
                 await self._record_followup_history(user_id, stage, message, job_data)
                 logger.info(f"✅ Follow-up enviado: {user_id} etapa {stage}")
@@ -719,6 +729,80 @@ INTERESES CONOCIDOS: {interests_text}
         except Exception as e:
             logger.error(f"❌ Error obteniendo contexto: {e}")
             return None
+    
+    # 🛡️ RATE LIMITING FUNCTIONS - Anti-Spam Protection
+    
+    async def _check_daily_rate_limit(self, user_id: str) -> bool:
+        """🛡️ CRITICAL: Verificar rate limit diario - máximo 1 follow-up por día"""
+        try:
+            with psycopg2.connect(self.database_url) as conn:
+                with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+                    # Reset automático si cambió el día
+                    cursor.execute("""
+                        UPDATE follow_up_rate_limits 
+                        SET daily_count = 0, reset_date = CURRENT_DATE 
+                        WHERE user_id = %s AND reset_date < CURRENT_DATE
+                    """, (user_id,))
+                    
+                    # Verificar límite actual
+                    cursor.execute("""
+                        SELECT daily_count, last_followup_sent, reset_date
+                        FROM follow_up_rate_limits 
+                        WHERE user_id = %s
+                    """, (user_id,))
+                    
+                    result = cursor.fetchone()
+                    
+                    if not result:
+                        # Primera vez - crear registro
+                        cursor.execute("""
+                            INSERT INTO follow_up_rate_limits (user_id, daily_count, reset_date)
+                            VALUES (%s, 0, CURRENT_DATE)
+                        """, (user_id,))
+                        conn.commit()
+                        logger.info(f"🛡️ [RATE_LIMIT] Nuevo usuario registrado: {user_id}")
+                        return True
+                    
+                    daily_count = result['daily_count']
+                    last_sent = result['last_followup_sent']
+                    reset_date = result['reset_date']
+                    
+                    # REGLA CRÍTICA: Máximo 1 follow-up por día
+                    if daily_count >= 1:
+                        logger.warning(f"🛡️ [RATE_LIMIT] BLOQUEADO - Usuario {user_id} ya envió {daily_count} follow-ups hoy ({reset_date})")
+                        logger.warning(f"🛡️ [RATE_LIMIT] Último envío: {last_sent}")
+                        return False
+                    
+                    logger.info(f"🛡️ [RATE_LIMIT] Usuario {user_id} puede enviar follow-up (count: {daily_count})")
+                    return True
+                    
+        except Exception as e:
+            logger.error(f"❌ [RATE_LIMIT] Error verificando rate limit para {user_id}: {e}")
+            # En caso de error, ser conservador y DENEGAR
+            return False
+    
+    async def _increment_daily_count(self, user_id: str) -> bool:
+        """🛡️ Incrementar contador diario después de envío exitoso"""
+        try:
+            with psycopg2.connect(self.database_url) as conn:
+                with conn.cursor() as cursor:
+                    cursor.execute("""
+                        INSERT INTO follow_up_rate_limits (user_id, daily_count, last_followup_sent, reset_date)
+                        VALUES (%s, 1, CURRENT_TIMESTAMP, CURRENT_DATE)
+                        ON CONFLICT (user_id) 
+                        DO UPDATE SET 
+                            daily_count = follow_up_rate_limits.daily_count + 1,
+                            last_followup_sent = CURRENT_TIMESTAMP,
+                            updated_at = CURRENT_TIMESTAMP
+                    """, (user_id,))
+                    
+                    conn.commit()
+                    logger.info(f"🛡️ [RATE_LIMIT] Contador incrementado para {user_id}")
+                    return True
+                    
+        except Exception as e:
+            logger.error(f"❌ [RATE_LIMIT] Error incrementando contador para {user_id}: {e}")
+            return False
     
     async def close(self):
         """Cerrar conexiones"""

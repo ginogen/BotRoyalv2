@@ -846,54 +846,69 @@
         // Load Stats
         async function loadStats() {
             try {
-                const response = await fetch(`${API_BASE}/admin/business-info`);
-                const data = await response.json();
+                // TEMPORALMENTE DESHABILITADO: La tabla bot_knowledge no existe
+                // const response = await fetch(`${API_BASE}/admin/business-info`);
+                // const data = await response.json();
                 
-                if (response.ok) {
-                    document.getElementById('totalKnowledge').textContent = data.count || 0;
-                    document.getElementById('lastUpdate').textContent = 
-                        data.updated !== 'never' ? new Date(data.updated).toLocaleDateString('es-ES') : 'Nunca';
+                // Mostrar valores por defecto hasta que se implemente bot_knowledge
+                document.getElementById('totalKnowledge').textContent = '0';
+                document.getElementById('lastUpdate').textContent = 'Pendiente de implementar';
+                
+                // if (response.ok) {
+                //     document.getElementById('totalKnowledge').textContent = data.count || 0;
+                //     document.getElementById('lastUpdate').textContent = 
+                //         data.updated !== 'never' ? new Date(data.updated).toLocaleDateString('es-ES') : 'Nunca';
                     
-                    // Count examples and constraints
-                    let examples = 0, constraints = 0;
-                    if (data.info) {
-                        examples = data.info.filter(i => i.category !== 'constraints').length;
-                        constraints = data.info.filter(i => i.category === 'constraints').length;
-                    }
+                    // // Count examples and constraints
+                    // let examples = 0, constraints = 0;
+                    // if (data.info) {
+                    //     examples = data.info.filter(i => i.category !== 'constraints').length;
+                    //     constraints = data.info.filter(i => i.category === 'constraints').length;
+                    // }
                     
-                    document.getElementById('totalExamples').textContent = examples;
-                    document.getElementById('totalConstraints').textContent = constraints;
-                }
+                    // document.getElementById('totalExamples').textContent = examples;
+                    // document.getElementById('totalConstraints').textContent = constraints;
+                // }
+                
+                // Valores por defecto temporales
+                document.getElementById('totalExamples').textContent = '0';
+                document.getElementById('totalConstraints').textContent = '0';
+                
             } catch (error) {
-                console.error('Error loading stats:', error);
+                console.error('Error loading stats (temporalmente deshabilitado):', error);
             }
         }
         
         // Load Constraints
         async function loadConstraints() {
             try {
-                const response = await fetch(`${API_BASE}/admin/business-info`);
-                const data = await response.json();
+                // TEMPORALMENTE DESHABILITADO: La tabla bot_knowledge no existe
+                // const response = await fetch(`${API_BASE}/admin/business-info`);
+                // const data = await response.json();
                 
-                if (response.ok && data.info) {
-                    const constraints = data.info.filter(i => i.category === 'constraints');
-                    const container = document.getElementById('constraintsContainer');
-                    
-                    container.innerHTML = constraints.map(constraint => `
-                        <div class="constraint-item">
-                            <div class="constraint-header">
-                                <div style="flex: 1;">
-                                    <strong>${constraint.title}:</strong><br>
-                                    ${constraint.content}
-                                    ${constraint.alternative_response ? `<br><em style="color: #666;">→ ${constraint.alternative_response}</em>` : ''}
-                                </div>
-                                <button class="delete-btn" onclick="deleteConstraint('${constraint.id}')">🗑️</button>
-                            </div>
-                        </div>
-                    `).join('') || '<p style="text-align: center; color: #666; padding: 20px;">No hay restricciones configuradas</p>';
+                const container = document.getElementById('constraintsContainer');
+                if (container) {
+                    container.innerHTML = '<p style="text-align: center; color: #666; padding: 20px;">Restricciones pendientes de implementar</p>';
                 }
+                
+                // if (response.ok && data.info) {
+                //     const constraints = data.info.filter(i => i.category === 'constraints');
+                //     
+                //     container.innerHTML = constraints.map(constraint => `
+                //         <div class="constraint-item">
+                //             <div class="constraint-header">
+                //                 <div style="flex: 1;">
+                //                     <strong>${constraint.title}:</strong><br>
+                //                     ${constraint.content}
+                //                     ${constraint.alternative_response ? `<br><em style="color: #666;">→ ${constraint.alternative_response}</em>` : ''}
+                //                 </div>
+                //                 <button class="delete-btn" onclick="deleteConstraint('${constraint.id}')">🗑️</button>
+                //             </div>
+                //         </div>
+                //     `).join('') || '<p style="text-align: center; color: #666; padding: 20px;">No hay restricciones configuradas</p>';
+                // }
             } catch (error) {
-                console.error('Error loading constraints:', error);
+                console.error('Error loading constraints (temporalmente deshabilitado):', error);
             }
         }
         
@@ -961,8 +976,17 @@
         // Load Follow-up Dashboard
         async function loadFollowupDashboard() {
             try {
-                document.getElementById('followupLoading').style.display = 'block';
-                document.getElementById('followupTableContainer').innerHTML = '<div class="loading" id="followupLoading">Cargando usuarios...</div>';
+                // Verificar que los elementos existen antes de acceder
+                const loadingElement = document.getElementById('followupLoading');
+                const containerElement = document.getElementById('followupTableContainer');
+                
+                if (!containerElement) {
+                    console.error('followupTableContainer not found');
+                    return;
+                }
+                
+                // Mostrar indicador de carga
+                containerElement.innerHTML = '<div class="loading" id="followupLoading">Cargando usuarios...</div>';
                 
                 const response = await fetch(`${API_BASE}/api/admin/followup-dashboard`);
                 const data = await response.json();

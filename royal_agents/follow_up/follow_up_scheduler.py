@@ -484,7 +484,12 @@ class FollowUpScheduler:
             
             logger.info(f"📅 Follow-ups programados para usuario {user_id}")
             
+            # 🔓 Liberar lock después de programación exitosa
+            await self._release_recovery_lock(user_id)
+            
         except Exception as e:
+            # 🔓 Liberar lock en caso de error también
+            await self._release_recovery_lock(user_id)
             logger.error(f"❌ Error programando follow-ups para {user_data.get('user_id')}: {e}")
     
     def _adjust_to_business_hours(self, dt: datetime) -> datetime:
@@ -783,6 +788,12 @@ class FollowUpScheduler:
                                     last_message: Optional[str] = None):
         """API pública para programar follow-ups de un usuario específico"""
         try:
+            # 🛡️ VALIDACIÓN INTEGRAL ANTI-SPAM para API manual
+            validation = await self._comprehensive_followup_validation(user_id)
+            if not validation['can_schedule']:
+                logger.warning(f"🚫 [API_BLOCKED] {user_id} falló validación: {validation['reasons']}")
+                return False
+            
             # Cancelar follow-ups existentes primero
             await self._cancel_remaining_followups(user_id)
             
@@ -804,9 +815,14 @@ class FollowUpScheduler:
                 )
             
             logger.info(f"📅 Follow-ups programados manualmente para {user_id}")
+            
+            # 🔓 Liberar lock después de programación exitosa
+            await self._release_recovery_lock(user_id)
             return True
             
         except Exception as e:
+            # 🔓 Liberar lock en caso de error también
+            await self._release_recovery_lock(user_id)
             logger.error(f"❌ Error programando follow-ups manuales: {e}")
             return False
     
@@ -879,6 +895,21 @@ class FollowUpScheduler:
                     
                     for job in failed_jobs:
                         try:
+                            user_id = job['user_id']
+                            stage = job['stage']
+                            
+                            # 🛡️ Validar rate limit antes de recuperar
+                            can_recover = await self._check_daily_rate_limit(user_id)
+                            if not can_recover:
+                                logger.info(f"🚫 [RECOVERY] Usuario {user_id} excedió rate limit, saltando recuperación")
+                                continue
+                            
+                            # 🔒 Obtener lock específico para recovery
+                            lock_acquired = await self._acquire_recovery_lock(user_id, 'critical_recovery', 15)
+                            if not lock_acquired:
+                                logger.info(f"🔒 [RECOVERY] No se pudo obtener lock para {user_id}, saltando")
+                                continue
+                            
                             # Resetear job para reintento
                             cursor.execute("""
                                 UPDATE follow_up_jobs 
@@ -894,7 +925,13 @@ class FollowUpScheduler:
                             
                             logger.info(f"✅ [RECOVERY] Job recuperado: {job['user_id']} stage {job['stage']}")
                             
+                            # 🔓 Liberar lock después de recovery exitoso
+                            await self._release_recovery_lock(user_id)
+                            
                         except Exception as e:
+                            # 🔓 Liberar lock en caso de error
+                            if 'user_id' in locals():
+                                await self._release_recovery_lock(user_id)
                             logger.error(f"❌ [RECOVERY] Error recuperando job {job['user_id']}: {e}")
                     
                     conn.commit()
