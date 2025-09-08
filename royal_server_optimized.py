@@ -3078,6 +3078,242 @@ async def get_business_info():
         logger.error(f"❌ Failed to get business info: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+# 🔹 FOLLOW-UP DASHBOARD ENDPOINTS
+
+@app.get("/api/admin/followup-dashboard")
+async def get_followup_dashboard():
+    """📊 Dashboard completo de follow-ups - usuarios, estados, logs"""
+    try:
+        if not advanced_queue.pg_pool:
+            raise HTTPException(status_code=503, detail="Database not available")
+        
+        conn = advanced_queue.pg_pool.getconn()
+        try:
+            with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+                # Obtener todos los usuarios con contexto y estado de follow-up
+                cursor.execute("""
+                    SELECT 
+                        cc.user_id,
+                        CASE WHEN cc.user_id LIKE 'whatsapp_%' THEN 
+                            REPLACE(cc.user_id, 'whatsapp_', '') 
+                        ELSE cc.user_id END as phone,
+                        cc.last_interaction,
+                        cc.current_state,
+                        jsonb_array_length(cc.context_data->'interaction_history') as msg_count,
+                        -- Follow-up status
+                        (SELECT COUNT(*) FROM follow_up_jobs fj 
+                         WHERE fj.user_id = cc.user_id AND fj.status = 'pending') as pending_jobs,
+                        (SELECT MIN(fj.stage) FROM follow_up_jobs fj 
+                         WHERE fj.user_id = cc.user_id AND fj.status = 'pending') as current_stage,
+                        (SELECT MIN(fj.scheduled_for) FROM follow_up_jobs fj 
+                         WHERE fj.user_id = cc.user_id AND fj.status = 'pending') as next_scheduled,
+                        -- Blacklist status
+                        (SELECT COUNT(*) FROM follow_up_blacklist bl 
+                         WHERE bl.user_id = cc.user_id) > 0 as is_blacklisted,
+                        -- History
+                        (SELECT COUNT(*) FROM follow_up_history fh 
+                         WHERE fh.user_id = cc.user_id) as total_sent,
+                        (SELECT COUNT(*) FROM follow_up_history fh 
+                         WHERE fh.user_id = cc.user_id AND fh.user_responded = true) as responded_count
+                    FROM conversation_contexts cc
+                    ORDER BY cc.last_interaction DESC
+                """)
+                
+                users = []
+                for row in cursor.fetchall():
+                    user_data = dict(row)
+                    # Determinar estado del follow-up
+                    if user_data['is_blacklisted']:
+                        user_data['followup_status'] = 'blacklisted'
+                    elif user_data['pending_jobs'] > 0:
+                        user_data['followup_status'] = 'active'
+                    elif user_data['total_sent'] > 0:
+                        user_data['followup_status'] = 'completed'
+                    else:
+                        user_data['followup_status'] = 'none'
+                    
+                    users.append(user_data)
+                
+                # Estadísticas generales
+                cursor.execute("""
+                    SELECT 
+                        COUNT(*) as total_users,
+                        SUM(CASE WHEN EXISTS(SELECT 1 FROM follow_up_jobs fj WHERE fj.user_id = cc.user_id AND fj.status = 'pending') THEN 1 ELSE 0 END) as users_with_active_followups,
+                        (SELECT COUNT(*) FROM follow_up_blacklist) as blacklisted_users,
+                        (SELECT COUNT(*) FROM follow_up_jobs WHERE status = 'pending') as total_pending_jobs,
+                        (SELECT COUNT(*) FROM follow_up_history WHERE sent_at > NOW() - INTERVAL '24 hours') as sent_last_24h
+                    FROM conversation_contexts cc
+                """)
+                
+                stats = dict(cursor.fetchone())
+                
+                return {
+                    "users": users,
+                    "stats": stats,
+                    "generated_at": datetime.now().isoformat()
+                }
+                
+        finally:
+            advanced_queue.pg_pool.putconn(conn)
+            
+    except Exception as e:
+        logger.error(f"❌ Error obteniendo dashboard de follow-ups: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/admin/followup-action")
+async def followup_manual_action(request: Request):
+    """⚡ Acciones manuales de follow-up: blacklist, reactivar, enviar"""
+    try:
+        data = await request.json()
+        action = data.get("action")
+        user_id = data.get("user_id")
+        
+        if not action or not user_id:
+            raise HTTPException(status_code=400, detail="action and user_id required")
+        
+        if not followup_manager:
+            raise HTTPException(status_code=503, detail="Follow-up system not available")
+        
+        conn = advanced_queue.pg_pool.getconn()
+        try:
+            with conn.cursor() as cursor:
+                if action == "blacklist":
+                    # Agregar a blacklist y cancelar follow-ups pendientes
+                    phone = data.get("phone", "")
+                    reason = data.get("reason", "manual_admin")
+                    await followup_manager.add_user_to_blacklist(user_id, phone, reason)
+                    return {"success": True, "message": f"Usuario {user_id} agregado a blacklist"}
+                
+                elif action == "remove_blacklist":
+                    # Remover de blacklist
+                    cursor.execute("DELETE FROM follow_up_blacklist WHERE user_id = %s", (user_id,))
+                    conn.commit()
+                    return {"success": True, "message": f"Usuario {user_id} removido de blacklist"}
+                
+                elif action == "restart_followup":
+                    # Cancelar follow-ups existentes y reprogramar desde inicio
+                    cursor.execute("""
+                        UPDATE follow_up_jobs 
+                        SET status = 'cancelled', processed_at = CURRENT_TIMESTAMP
+                        WHERE user_id = %s AND status = 'pending'
+                    """, (user_id,))
+                    
+                    # Programar nuevos follow-ups
+                    if followup_scheduler:
+                        # Obtener contexto del usuario
+                        cursor.execute("""
+                            SELECT context_data, last_interaction 
+                            FROM conversation_contexts 
+                            WHERE user_id = %s
+                        """, (user_id,))
+                        
+                        user_context = cursor.fetchone()
+                        if user_context:
+                            context_data, last_interaction = user_context
+                            user_data = {
+                                'user_id': user_id,
+                                'context_data': context_data,
+                                'last_interaction': last_interaction
+                            }
+                            await followup_scheduler._schedule_user_followups(user_data)
+                    
+                    conn.commit()
+                    return {"success": True, "message": f"Follow-up reiniciado para {user_id}"}
+                
+                elif action == "send_stage":
+                    # Enviar etapa específica manualmente
+                    stage = data.get("stage", 1)
+                    success = await followup_manager.send_followup_message(user_id, stage)
+                    if success:
+                        # Marcar como completado
+                        cursor.execute("""
+                            UPDATE follow_up_jobs 
+                            SET status = 'completed', processed_at = CURRENT_TIMESTAMP
+                            WHERE user_id = %s AND stage = %s
+                        """, (user_id, stage))
+                        conn.commit()
+                        return {"success": True, "message": f"Etapa {stage} enviada a {user_id}"}
+                    else:
+                        return {"success": False, "message": f"Falló envío de etapa {stage} a {user_id}"}
+                
+                else:
+                    raise HTTPException(status_code=400, detail=f"Acción no válida: {action}")
+        
+        finally:
+            advanced_queue.pg_pool.putconn(conn)
+            
+    except Exception as e:
+        logger.error(f"❌ Error en acción manual de follow-up: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/admin/followup-bulk")
+async def followup_bulk_action(request: Request):
+    """📤 Acciones masivas de follow-up"""
+    try:
+        data = await request.json()
+        action = data.get("action")
+        user_ids = data.get("user_ids", [])
+        
+        if not action:
+            raise HTTPException(status_code=400, detail="action required")
+        
+        if not followup_manager:
+            raise HTTPException(status_code=503, detail="Follow-up system not available")
+        
+        results = {"success": 0, "failed": 0, "details": []}
+        
+        conn = advanced_queue.pg_pool.getconn()
+        try:
+            with conn.cursor() as cursor:
+                for user_id in user_ids:
+                    try:
+                        if action == "blacklist_bulk":
+                            await followup_manager.add_user_to_blacklist(user_id, "", "bulk_admin")
+                            results["success"] += 1
+                            results["details"].append(f"✅ {user_id} agregado a blacklist")
+                        
+                        elif action == "send_failed":
+                            # Enviar etapas fallidas
+                            cursor.execute("""
+                                SELECT stage FROM follow_up_jobs 
+                                WHERE user_id = %s AND status = 'failed'
+                                ORDER BY stage ASC
+                            """, (user_id,))
+                            
+                            failed_stages = [row[0] for row in cursor.fetchall()]
+                            
+                            for stage in failed_stages:
+                                success = await followup_manager.send_followup_message(user_id, stage)
+                                if success:
+                                    cursor.execute("""
+                                        UPDATE follow_up_jobs 
+                                        SET status = 'completed', processed_at = CURRENT_TIMESTAMP
+                                        WHERE user_id = %s AND stage = %s
+                                    """, (user_id, stage))
+                            
+                            results["success"] += 1
+                            results["details"].append(f"✅ {user_id} etapas fallidas reenviadas")
+                        
+                        conn.commit()
+                        
+                    except Exception as e:
+                        results["failed"] += 1
+                        results["details"].append(f"❌ {user_id}: {str(e)}")
+                        logger.error(f"❌ Error en acción bulk para {user_id}: {e}")
+        
+        finally:
+            advanced_queue.pg_pool.putconn(conn)
+        
+        return {
+            "success": results["success"] > 0,
+            "processed": len(user_ids),
+            "results": results
+        }
+            
+    except Exception as e:
+        logger.error(f"❌ Error en acción masiva de follow-up: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.get("/admin", response_class=HTMLResponse)
 async def admin_panel():
     """Serve admin panel HTML"""

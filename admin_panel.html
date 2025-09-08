@@ -347,6 +347,98 @@
         .tabs {
             scroll-behavior: smooth;
         }
+        
+        /* Follow-up Dashboard Styles */
+        .followup-table {
+            width: 100%;
+            background: white;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        
+        .followup-table table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        
+        .followup-table th {
+            background: linear-gradient(135deg, #3498db, #2980b9);
+            color: white;
+            padding: 15px 10px;
+            text-align: left;
+            font-weight: 600;
+            font-size: 0.9em;
+        }
+        
+        .followup-table td {
+            padding: 12px 10px;
+            border-bottom: 1px solid #eee;
+            font-size: 0.9em;
+        }
+        
+        .followup-table tr:hover {
+            background: #f8f9fa;
+        }
+        
+        .status-badge {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 12px;
+            font-size: 0.8em;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+        
+        .status-active { background: #d4edda; color: #155724; }
+        .status-blacklisted { background: #f8d7da; color: #721c24; }
+        .status-completed { background: #cce5ff; color: #004085; }
+        .status-none { background: #e2e3e5; color: #6c757d; }
+        
+        .action-btn {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 6px 12px;
+            border-radius: 5px;
+            font-size: 0.8em;
+            cursor: pointer;
+            margin: 2px;
+        }
+        
+        .action-btn.danger { background: #dc3545; }
+        .action-btn.success { background: #28a745; }
+        .action-btn.warning { background: #ffc107; color: #212529; }
+        
+        .action-btn:hover {
+            opacity: 0.8;
+        }
+        
+        .user-checkbox {
+            margin: 0;
+            transform: scale(1.2);
+        }
+        
+        @media (max-width: 768px) {
+            .followup-table {
+                overflow-x: auto;
+            }
+            
+            .followup-table table {
+                min-width: 800px;
+            }
+            
+            .followup-table th,
+            .followup-table td {
+                padding: 8px 6px;
+                font-size: 0.8em;
+            }
+            
+            .action-btn {
+                padding: 4px 8px;
+                font-size: 0.75em;
+            }
+        }
     </style>
 </head>
 <body>
@@ -360,6 +452,7 @@
             <button class="tab active" onclick="showTab('knowledge')">📚 Info</button>
             <button class="tab" onclick="showTab('examples')">💬 Ejemplos</button>
             <button class="tab" onclick="showTab('constraints')">🚫 Límites</button>
+            <button class="tab" onclick="showTab('followups')">🔔 Follow-ups</button>
             <button class="tab" onclick="showTab('stats')">📊 Stats</button>
         </div>
         
@@ -495,6 +588,80 @@
                 </div>
             </div>
             
+            <!-- Tab: Follow-ups -->
+            <div id="followups" class="tab-content">
+                <h2>🔔 Dashboard de Follow-ups</h2>
+                
+                <!-- Stats Cards -->
+                <div class="stats">
+                    <div class="stat-card">
+                        <div class="stat-number" id="totalUsers">-</div>
+                        <div class="stat-label">Usuarios Total</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-number" id="activeFollowups">-</div>
+                        <div class="stat-label">Con Follow-ups</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-number" id="blacklistedUsers">-</div>
+                        <div class="stat-label">Bloqueados</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-number" id="sentLast24h">-</div>
+                        <div class="stat-label">Enviados 24h</div>
+                    </div>
+                </div>
+                
+                <!-- Filters -->
+                <div style="background: #f8f9fa; padding: 20px; border-radius: 12px; margin: 20px 0;">
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; align-items: end;">
+                        <div>
+                            <label for="statusFilter">Estado:</label>
+                            <select id="statusFilter" onchange="filterUsers()">
+                                <option value="">Todos</option>
+                                <option value="active">Activos</option>
+                                <option value="blacklisted">Bloqueados</option>
+                                <option value="completed">Completados</option>
+                                <option value="none">Sin Follow-up</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label for="searchUser">Buscar:</label>
+                            <input type="text" id="searchUser" placeholder="ID o teléfono..." oninput="filterUsers()">
+                        </div>
+                        <div>
+                            <button class="btn" onclick="loadFollowupDashboard()" style="width: auto; padding: 10px 20px;">
+                                🔄 Actualizar
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Bulk Actions -->
+                <div style="background: #fff3cd; padding: 15px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #ffc107;">
+                    <strong>⚡ Acciones Masivas:</strong>
+                    <div style="display: flex; gap: 10px; margin-top: 10px; flex-wrap: wrap;">
+                        <button class="btn" onclick="bulkAction('blacklist_bulk')" style="background: #dc3545; width: auto; padding: 8px 16px; font-size: 0.9em;">
+                            🚫 Bloquear Seleccionados
+                        </button>
+                        <button class="btn" onclick="bulkAction('send_failed')" style="background: #28a745; width: auto; padding: 8px 16px; font-size: 0.9em;">
+                            📤 Reenviar Fallidos
+                        </button>
+                        <span id="selectedCount" style="padding: 8px 12px; background: #e9ecef; border-radius: 5px; font-size: 0.9em;">
+                            0 seleccionados
+                        </span>
+                    </div>
+                </div>
+                
+                <!-- Users Table -->
+                <div id="followupTableContainer" style="margin: 20px 0;">
+                    <div class="loading" id="followupLoading">Cargando usuarios...</div>
+                </div>
+                
+                <div id="followupSuccess" class="success"></div>
+                <div id="followupError" class="error"></div>
+            </div>
+            
             <!-- Tab: Estadísticas -->
             <div id="stats" class="tab-content">
                 <h2>📊 Estadísticas</h2>
@@ -555,6 +722,8 @@
                 loadStats();
             } else if (tabName === 'constraints') {
                 loadConstraints();
+            } else if (tabName === 'followups') {
+                loadFollowupDashboard();
             }
         }
         
@@ -782,6 +951,267 @@
                 e.preventDefault();
                 e.target.blur(); // Hide mobile keyboard
             }
+        });
+        
+        // 🔔 FOLLOW-UP DASHBOARD FUNCTIONS
+        let followupData = [];
+        let filteredData = [];
+        let selectedUsers = new Set();
+        
+        // Load Follow-up Dashboard
+        async function loadFollowupDashboard() {
+            try {
+                document.getElementById('followupLoading').style.display = 'block';
+                document.getElementById('followupTableContainer').innerHTML = '<div class="loading" id="followupLoading">Cargando usuarios...</div>';
+                
+                const response = await fetch(`${API_BASE}/api/admin/followup-dashboard`);
+                const data = await response.json();
+                
+                if (response.ok) {
+                    followupData = data.users;
+                    filteredData = [...followupData];
+                    
+                    // Update stats
+                    document.getElementById('totalUsers').textContent = data.stats.total_users || 0;
+                    document.getElementById('activeFollowups').textContent = data.stats.users_with_active_followups || 0;
+                    document.getElementById('blacklistedUsers').textContent = data.stats.blacklisted_users || 0;
+                    document.getElementById('sentLast24h').textContent = data.stats.sent_last_24h || 0;
+                    
+                    renderFollowupTable();
+                } else {
+                    showMessage('followupError', 'Error cargando dashboard: ' + data.detail);
+                }
+            } catch (error) {
+                showMessage('followupError', 'Error de conexión al cargar dashboard');
+                console.error('Error loading followup dashboard:', error);
+            }
+        }
+        
+        // Render Follow-up Table
+        function renderFollowupTable() {
+            const container = document.getElementById('followupTableContainer');
+            
+            if (filteredData.length === 0) {
+                container.innerHTML = '<p style="text-align: center; padding: 40px; color: #666;">No hay usuarios para mostrar</p>';
+                return;
+            }
+            
+            const table = `
+                <div class="followup-table">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>
+                                    <input type="checkbox" onchange="selectAll(this)" class="user-checkbox">
+                                </th>
+                                <th>Usuario</th>
+                                <th>Teléfono</th>
+                                <th>Última Interacción</th>
+                                <th>Mensajes</th>
+                                <th>Estado Follow-up</th>
+                                <th>Etapa Actual</th>
+                                <th>Próximo Envío</th>
+                                <th>Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${filteredData.map(user => `
+                                <tr>
+                                    <td>
+                                        <input type="checkbox" value="${user.user_id}" 
+                                               onchange="updateSelected(this)" class="user-checkbox"
+                                               ${selectedUsers.has(user.user_id) ? 'checked' : ''}>
+                                    </td>
+                                    <td title="${user.user_id}">${user.user_id.substring(0, 20)}${user.user_id.length > 20 ? '...' : ''}</td>
+                                    <td>${user.phone || 'N/A'}</td>
+                                    <td>${formatDate(user.last_interaction)}</td>
+                                    <td style="text-align: center;">${user.msg_count || 0}</td>
+                                    <td>
+                                        <span class="status-badge status-${user.followup_status}">
+                                            ${getStatusText(user.followup_status)}
+                                        </span>
+                                    </td>
+                                    <td style="text-align: center;">${user.current_stage || '-'}</td>
+                                    <td>${user.next_scheduled ? formatDate(user.next_scheduled) : '-'}</td>
+                                    <td>
+                                        ${generateActionButtons(user)}
+                                    </td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                </div>
+            `;
+            
+            container.innerHTML = table;
+            updateSelectedCount();
+        }
+        
+        // Generate Action Buttons
+        function generateActionButtons(user) {
+            let buttons = [];
+            
+            if (user.followup_status === 'blacklisted') {
+                buttons.push(`<button class="action-btn success" onclick="userAction('${user.user_id}', 'remove_blacklist')">✅ Desbloquear</button>`);
+            } else {
+                buttons.push(`<button class="action-btn danger" onclick="userAction('${user.user_id}', 'blacklist')">🚫 Bloquear</button>`);
+            }
+            
+            if (user.followup_status === 'active' && user.current_stage) {
+                buttons.push(`<button class="action-btn" onclick="userAction('${user.user_id}', 'send_stage', ${user.current_stage})">📤 Enviar Etapa ${user.current_stage}</button>`);
+            }
+            
+            if (user.followup_status !== 'active') {
+                buttons.push(`<button class="action-btn warning" onclick="userAction('${user.user_id}', 'restart_followup')">🔄 Reiniciar</button>`);
+            }
+            
+            return buttons.join('');
+        }
+        
+        // User Action
+        async function userAction(userId, action, stage = null) {
+            try {
+                const payload = { action, user_id: userId };
+                if (stage) payload.stage = stage;
+                
+                const response = await fetch(`${API_BASE}/api/admin/followup-action`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(payload)
+                });
+                
+                const result = await response.json();
+                
+                if (response.ok) {
+                    showMessage('followupSuccess', result.message);
+                    loadFollowupDashboard(); // Reload data
+                } else {
+                    showMessage('followupError', 'Error: ' + result.detail);
+                }
+            } catch (error) {
+                showMessage('followupError', 'Error de conexión');
+                console.error('Error in user action:', error);
+            }
+        }
+        
+        // Bulk Action
+        async function bulkAction(action) {
+            if (selectedUsers.size === 0) {
+                showMessage('followupError', 'Selecciona al menos un usuario');
+                return;
+            }
+            
+            if (!confirm(`¿Confirmas ${action} para ${selectedUsers.size} usuarios?`)) {
+                return;
+            }
+            
+            try {
+                const response = await fetch(`${API_BASE}/api/admin/followup-bulk`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        action: action,
+                        user_ids: Array.from(selectedUsers)
+                    })
+                });
+                
+                const result = await response.json();
+                
+                if (response.ok) {
+                    showMessage('followupSuccess', `Procesados: ${result.results.success} exitosos, ${result.results.failed} fallidos`);
+                    selectedUsers.clear();
+                    loadFollowupDashboard(); // Reload data
+                } else {
+                    showMessage('followupError', 'Error: ' + result.detail);
+                }
+            } catch (error) {
+                showMessage('followupError', 'Error de conexión');
+                console.error('Error in bulk action:', error);
+            }
+        }
+        
+        // Filter Users
+        function filterUsers() {
+            const statusFilter = document.getElementById('statusFilter').value;
+            const searchText = document.getElementById('searchUser').value.toLowerCase();
+            
+            filteredData = followupData.filter(user => {
+                const matchesStatus = !statusFilter || user.followup_status === statusFilter;
+                const matchesSearch = !searchText || 
+                    user.user_id.toLowerCase().includes(searchText) || 
+                    (user.phone && user.phone.includes(searchText));
+                
+                return matchesStatus && matchesSearch;
+            });
+            
+            renderFollowupTable();
+        }
+        
+        // Selection Functions
+        function selectAll(checkbox) {
+            const checkboxes = document.querySelectorAll('input[type="checkbox"][value]');
+            checkboxes.forEach(cb => {
+                cb.checked = checkbox.checked;
+                if (checkbox.checked) {
+                    selectedUsers.add(cb.value);
+                } else {
+                    selectedUsers.delete(cb.value);
+                }
+            });
+            updateSelectedCount();
+        }
+        
+        function updateSelected(checkbox) {
+            if (checkbox.checked) {
+                selectedUsers.add(checkbox.value);
+            } else {
+                selectedUsers.delete(checkbox.value);
+            }
+            updateSelectedCount();
+        }
+        
+        function updateSelectedCount() {
+            document.getElementById('selectedCount').textContent = `${selectedUsers.size} seleccionados`;
+        }
+        
+        // Utility Functions
+        function getStatusText(status) {
+            const statusMap = {
+                'active': 'Activo',
+                'blacklisted': 'Bloqueado',
+                'completed': 'Completado',
+                'none': 'Sin Follow-up'
+            };
+            return statusMap[status] || status;
+        }
+        
+        function formatDate(dateString) {
+            if (!dateString) return '-';
+            const date = new Date(dateString);
+            return date.toLocaleString('es-ES', {
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+        }
+        
+        // Auto-refresh every 30 seconds when on follow-ups tab
+        let followupRefreshInterval = null;
+        
+        function startFollowupAutoRefresh() {
+            if (followupRefreshInterval) clearInterval(followupRefreshInterval);
+            followupRefreshInterval = setInterval(() => {
+                if (document.getElementById('followups').classList.contains('active')) {
+                    loadFollowupDashboard();
+                }
+            }, 30000); // 30 seconds
+        }
+        
+        // Start auto-refresh when page loads
+        document.addEventListener('DOMContentLoaded', () => {
+            startFollowupAutoRefresh();
         });
     </script>
 </body>
