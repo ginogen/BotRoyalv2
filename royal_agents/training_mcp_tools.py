@@ -219,7 +219,7 @@ async def get_faq_response(question_topic: str) -> str:
     Obtiene respuesta de FAQ según el tema de la pregunta
     
     Args:
-        question_topic: tema de la pregunta (ej: "minimo", "envio", "catalogo", "pago", etc.)
+        question_topic: tema de la pregunta (ej: "minimo", "envio", "catalogo", "pago", "pagos" etc.)
     """
     
     logger.info(f"❓ GET_FAQ_RESPONSE llamada:")
@@ -430,7 +430,7 @@ async def get_basic_company_info(info_type: str) -> str:
             "links": []
         },
         "pago": {
-            "response": "Sí. Podés pagar con tarjeta de crédito o débito. También transferencia bancaria sin recargo. Además, te acompaño en el proceso de venta: si querés te puedo ayudar a armar promos según los métodos de pago que elijan tus clientas, para que aproveches al máximo cada venta. ¿Ya tenés armado tu catálogo personalizado para vender?",
+            "response": "Sí. Podés pagar con tarjeta de crédito en 1 cuota sin interés o débito. También transferencia bancaria sin recargo. Además, te acompaño en el proceso de venta: si querés te puedo ayudar a armar promos según los métodos de pago que elijan tus clientas, para que aproveches al máximo cada venta. ¿Ya tenés armado tu catálogo personalizado para vender?",
             "links": []
         },
         "confiabilidad": {

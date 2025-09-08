@@ -517,10 +517,24 @@ class FollowUpScheduler:
             
             with psycopg2.connect(self.database_url) as conn:
                 with conn.cursor() as cursor:
-                    # Obtener el teléfono del contexto
-                    phone = enriched_context.get('phone', 'unknown')
-                    if phone == 'unknown' and user_id.startswith('whatsapp_'):
+                    # 🚨 CORREGIDO: Obtener el teléfono del contexto con lógica robusta
+                    phone = enriched_context.get('phone')
+                    if not phone and user_id.startswith('whatsapp_'):
+                        # Extraer teléfono del user_id
                         phone = user_id.replace('whatsapp_', '')
+                        logger.info(f"📞 [PHONE] Extraído de user_id: {phone}")
+                    elif phone:
+                        logger.info(f"📞 [PHONE] Obtenido del contexto: {phone}")
+                    
+                    # Validación final para evitar NULL y casos edge
+                    if not phone or phone in ['null', 'None', '', 'undefined', '0']:
+                        logger.error(f"❌ [PHONE] Teléfono inválido para {user_id}: '{phone}', saltando follow-up")
+                        return  # No crear follow-up sin teléfono válido
+                    
+                    # Validar formato básico de teléfono (solo números, mínimo 10 dígitos)
+                    if not phone.isdigit() or len(phone) < 10:
+                        logger.error(f"❌ [PHONE] Formato de teléfono inválido para {user_id}: '{phone}', saltando follow-up")
+                        return
                     
                     # TEMPORAL: Para diagnóstico
                     logger.info(f"🔍 [DEBUG] Creando follow-up job: user_id={user_id}, stage={stage}, scheduled_for={scheduled_for}, phone={phone}")
