@@ -3221,7 +3221,7 @@ async def get_followup_dashboard():
         with psycopg2.connect(database_url) as conn:
             cursor = conn.cursor()
             
-            # Obtener todos los usuarios con contexto y estado de follow-up
+            # Obtener usuarios relevantes para follow-ups (no todos)
             cursor.execute("""
                 SELECT 
                     cc.user_id,
@@ -3245,9 +3245,31 @@ async def get_followup_dashboard():
                     (SELECT COUNT(*) FROM follow_up_history fh 
                      WHERE fh.user_id = cc.user_id) as total_sent,
                     (SELECT COUNT(*) FROM follow_up_history fh 
-                     WHERE fh.user_id = cc.user_id AND fh.user_responded = true) as responded_count
+                     WHERE fh.user_id = cc.user_id AND fh.user_responded = true) as responded_count,
+                    -- Tiempo inactivo en horas
+                    EXTRACT(EPOCH FROM (NOW() - cc.last_interaction)) / 3600 as inactive_hours
                 FROM conversation_contexts cc
-                ORDER BY cc.last_interaction DESC
+                WHERE (
+                    -- Usuarios con follow-ups activos
+                    EXISTS (SELECT 1 FROM follow_up_jobs fj WHERE fj.user_id = cc.user_id AND fj.status = 'pending')
+                    OR
+                    -- Usuarios en blacklist
+                    EXISTS (SELECT 1 FROM follow_up_blacklist bl WHERE bl.user_id = cc.user_id)
+                    OR
+                    -- Usuarios con historial de follow-ups
+                    EXISTS (SELECT 1 FROM follow_up_history fh WHERE fh.user_id = cc.user_id)
+                    OR
+                    -- Usuarios con jobs fallidos
+                    EXISTS (SELECT 1 FROM follow_up_jobs fj WHERE fj.user_id = cc.user_id AND fj.status = 'failed')
+                    OR
+                    -- Usuarios inactivos por más de 2 horas (candidatos para follow-up)
+                    cc.last_interaction < NOW() - INTERVAL '2 hours'
+                )
+                ORDER BY 
+                    -- Primero usuarios con follow-ups activos
+                    (SELECT COUNT(*) FROM follow_up_jobs fj WHERE fj.user_id = cc.user_id AND fj.status = 'pending') DESC,
+                    -- Luego por inactividad
+                    cc.last_interaction DESC
             """)
             
             users = []
@@ -3262,6 +3284,8 @@ async def get_followup_dashboard():
                     user_data['followup_status'] = 'active'
                 elif user_data['total_sent'] > 0:
                     user_data['followup_status'] = 'completed'
+                elif user_data.get('inactive_hours', 0) > 2:
+                    user_data['followup_status'] = 'candidate'
                 else:
                     user_data['followup_status'] = 'none'
                 

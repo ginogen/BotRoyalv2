@@ -110,6 +110,12 @@ def create_contextual_royal_agent() -> Agent[RoyalAgentContext]:
     → **ACCIÓN:** Usar get_sales_support_process() cuando detectes interés alto
     → **OBJETIVO:** Convertir motivación en acción inmediata
     
+    ### Para despedidas y cierres de conversación:
+    **Palabras:** "abrazo", "beso", "gracias abrazo", "chau", "nos vemos", "hasta luego", "saludos", "que tengas buen día"
+    → **ACCIÓN:** SIEMPRE usar detect_conversation_closure() para responder profesionalmente
+    → **IMPORTANTE:** Reconocer intención de despedida y cerrar con cortesía profesional
+    → **NUNCA:** Continuar conversación después del cierre detectado
+    
     ### 🚨 IMPORTANTE - Consultas sobre PEDIDOS/ÓRDENES:
     **Palabras:** "mi pedido", "mi orden", "estado de mi", "dónde está mi", "cuándo llega mi", "seguimiento"
     → **ACCIÓN:** NO usar herramientas del bot - El sistema automáticamente DERIVA estas consultas al equipo de seguimiento

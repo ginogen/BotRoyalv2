@@ -40,28 +40,24 @@ async def detect_user_frustration(wrapper: RunContextWrapper[RoyalAgentContext],
     frustration_indicators = [
         # Enojo directo
         'no funciona', 'no sirve', 'terrible', 'pésimo', 'horrible', 'malísimo',
-        'una porquería', 'una mierda', 'no anda', 'roto', 'falla',
+        'roto', 'falla',
         
-        # Frustración y descontento - NUEVAS
+        # Frustración y descontento
         'no me gusta', 'no me gustan', 'no me convence', 'no me sirve', 
         'no me ayuda', 'confundido', 'perdido', 'desastre', 'son un desastre',
         'es un desastre', 'qué desastre', 'no entiendo', 'no logro', 'no puedo',
         
-        # Expresiones de disconformidad - NUEVAS
-        'me molesta', 'me fastidia', 'me cansa', 'estoy harto', 'estoy cansado',
-        'esto no va', 'no me gusta esto', 'esto es horrible', 'esto es terrible',
+        # Expresiones de disconformidad
+        'me molesta', 'me cansa', 'estoy descontento', 'estoy cansado',
+        'no me gusta esto', 'esto es horrible', 'esto es terrible',
         
         # Quejas
         'siempre lo mismo', 'otra vez', 'de nuevo', 'nunca funciona',
-        'hartos', 'cansado', 'aburrido', 'fastidio', 'imposible', 'complicado',
+        'descontentos', 'cansado', 'aburrido', 'molestia', 'imposible', 'complicado',
         
         # Problemas urgentes
         'urgente', 'rápido', 'ya', 'inmediatamente', 'problema grave',
-        'error', 'falla', 'no me llega', 'perdí', 'se perdió',
-        
-        # Expresiones argentinas de disconformidad
-        'qué quilombo', 'qué bardo', 'no da', 'una garompa', 'un desastre',
-        'no va', 'está roto', 'no me anda', 'qué embole', 'es un bodrio'
+        'error', 'falla', 'no me llega', 'perdí', 'se perdió', 'está roto'
     ]
     
     message_lower = user_message.lower()
@@ -1334,6 +1330,90 @@ async def should_ask_about_experience(wrapper: RunContextWrapper[RoyalAgentConte
     logger.info(response)
     return response
 
+@function_tool
+async def detect_conversation_closure(
+    wrapper: RunContextWrapper[RoyalAgentContext], 
+    user_message: str
+) -> str:
+    """
+    Detecta cuando el usuario quiere finalizar la conversación y responde de manera profesional.
+    Útil para despedidas como 'abrazo', 'gracias', 'nos vemos', etc.
+    
+    Args:
+        user_message: Mensaje del usuario que podría ser una despedida
+    """
+    
+    context = wrapper.context
+    conversation = context.conversation
+    user_id = context.user_id
+    
+    logger.info(f"💬 DETECT_CONVERSATION_CLOSURE para usuario: {user_id}")
+    logger.info(f"   Mensaje: {user_message}")
+    
+    # Patrones de despedida/cierre
+    closure_patterns = [
+        # Despedidas simples
+        'abrazo', 'abrazos', 'beso', 'besos',
+        'chau', 'chao', 'adiós', 'adios', 
+        'nos vemos', 'hasta luego', 'hasta pronto',
+        'hasta la vista', 'nos hablamos', 'hablamos',
+        
+        # Agradecimientos finales
+        'gracias abrazo', 'gracias beso', 'gracias chau',
+        'muchas gracias abrazo', 'mil gracias abrazo',
+        'gracias nos vemos', 'gracias hasta luego',
+        
+        # Cierres corteses
+        'que tengas buen día', 'buen día', 'buenas tardes',
+        'que esté bien', 'que andes bien', 'saludos',
+        'cuídate', 'cuidate', 'que tengas linda tarde'
+    ]
+    
+    message_lower = user_message.lower().strip()
+    
+    # Verificar si es un mensaje de cierre
+    is_closure = False
+    
+    # Mensaje exacto en patrones
+    if message_lower in closure_patterns:
+        is_closure = True
+    
+    # Mensaje corto (menos de 15 palabras) con patrón de cierre
+    elif len(message_lower.split()) <= 15:
+        for pattern in closure_patterns:
+            if pattern in message_lower:
+                is_closure = True
+                break
+    
+    if not is_closure:
+        return "Este mensaje no parece ser una despedida."
+    
+    logger.info(f"✅ Cierre de conversación detectado para: {user_id}")
+    
+    # Marcar conversación como finalizada
+    conversation.add_interaction("system", "Conversación finalizada por el usuario")
+    conversation.current_state = "conversation_closed"
+    
+    # Seleccionar respuesta profesional de cierre
+    import random
+    professional_closures = [
+        "Gracias por contactarte con Royal. ¡Que tengas un excelente día!",
+        "Fue un placer ayudarte. ¡Hasta pronto!",
+        "Cualquier consulta, no dudes en contactarnos. ¡Saludos!",
+        "Gracias por elegir Royal. ¡Que andes muy bien!",
+        "Perfecto. Cualquier cosa que necesites, acá estamos. ¡Que tengas linda tarde!",
+        "Excelente. Nos vemos pronto. ¡Gracias por contactarte!"
+    ]
+    
+    closure_response = random.choice(professional_closures)
+    
+    # Registrar el cierre en el contexto
+    conversation.add_interaction("assistant", f"Conversación cerrada profesionalmente: {closure_response}")
+    
+    logger.info(f"💬 Respuesta de cierre enviada: {closure_response[:50]}...")
+    
+    return closure_response
+
 def create_contextual_tools():
     """Crea todas las herramientas contextuales"""
     
@@ -1358,7 +1438,10 @@ def create_contextual_tools():
         should_ask_about_experience,
         
         # Búsqueda de categorías
-        search_categories_by_query
+        search_categories_by_query,
+        
+        # Cierre de conversación
+        detect_conversation_closure
     ]
     
     logger.info(f"✅ Contextual Tools creadas: {len(tools)} herramientas disponibles (HITL + Categorías habilitado)")

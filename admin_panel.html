@@ -618,11 +618,13 @@
                         <div>
                             <label for="statusFilter">Estado:</label>
                             <select id="statusFilter" onchange="filterUsers()">
-                                <option value="">Todos</option>
-                                <option value="active">Activos</option>
-                                <option value="blacklisted">Bloqueados</option>
-                                <option value="completed">Completados</option>
-                                <option value="none">Sin Follow-up</option>
+                                <option value="">Todos los relevantes</option>
+                                <option value="active">🟢 Follow-up Activo</option>
+                                <option value="candidate">🟡 Candidatos (Inactivos +2h)</option>
+                                <option value="completed">✅ Completados</option>
+                                <option value="blacklisted">🚫 Bloqueados</option>
+                                <option value="failed">❌ Con Fallos</option>
+                                <option value="none">⚪ Sin Follow-up</option>
                             </select>
                         </div>
                         <div>
@@ -630,10 +632,24 @@
                             <input type="text" id="searchUser" placeholder="ID o teléfono..." oninput="filterUsers()">
                         </div>
                         <div>
+                            <label for="inactiveHours">Inactividad mínima:</label>
+                            <select id="inactiveHours" onchange="filterUsers()">
+                                <option value="0">Sin filtro</option>
+                                <option value="2">+2 horas</option>
+                                <option value="6">+6 horas</option>
+                                <option value="12">+12 horas</option>
+                                <option value="24">+24 horas</option>
+                            </select>
+                        </div>
+                        <div>
                             <button class="btn" onclick="loadFollowupDashboard()" style="width: auto; padding: 10px 20px;">
                                 🔄 Actualizar
                             </button>
                         </div>
+                    </div>
+                    <div style="margin-top: 15px; font-size: 0.9em; color: #666;">
+                        <strong>Mostrando:</strong> <span id="showingCount">0</span> usuarios de <span id="totalFilteredCount">0</span> relevantes
+                    </div>
                     </div>
                 </div>
                 
@@ -1158,15 +1174,32 @@
         function filterUsers() {
             const statusFilter = document.getElementById('statusFilter').value;
             const searchText = document.getElementById('searchUser').value.toLowerCase();
+            const inactiveHoursFilter = parseInt(document.getElementById('inactiveHours').value);
             
-            filteredData = followupData.filter(user => {
-                const matchesStatus = !statusFilter || user.followup_status === statusFilter;
+            // Handle special case for failed status
+            let dataToFilter = followupData;
+            if (statusFilter === 'failed') {
+                // For failed status, look for users with failed jobs
+                dataToFilter = followupData.filter(user => {
+                    return user.pending_jobs === 0 && user.total_sent === 0 && user.followup_status !== 'blacklisted';
+                });
+            }
+            
+            filteredData = dataToFilter.filter(user => {
+                const matchesStatus = !statusFilter || 
+                    (statusFilter === 'failed' ? true : user.followup_status === statusFilter);
                 const matchesSearch = !searchText || 
                     user.user_id.toLowerCase().includes(searchText) || 
                     (user.phone && user.phone.includes(searchText));
+                const matchesInactivity = !inactiveHoursFilter || 
+                    (user.inactive_hours && user.inactive_hours >= inactiveHoursFilter);
                 
-                return matchesStatus && matchesSearch;
+                return matchesStatus && matchesSearch && matchesInactivity;
             });
+            
+            // Update counters
+            document.getElementById('showingCount').textContent = filteredData.length;
+            document.getElementById('totalFilteredCount').textContent = followupData.length;
             
             renderFollowupTable();
         }

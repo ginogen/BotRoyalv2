@@ -124,11 +124,24 @@ class FollowUpScheduler:
         return emergency_timestamp
     
     def _has_real_conversation(self, context_data: dict) -> bool:
-        """🚨 NUEVO: Verificar si el usuario tiene conversación real"""
+        """🚨 NUEVO: Verificar si el usuario tiene conversación real o estado válido para follow-up"""
         try:
             interaction_history = context_data.get('interaction_history', [])
+            current_state = context_data.get('current_state', 'browsing')
             
+            # NUEVA LÓGICA: Usuarios con estados válidos pueden recibir follow-ups aunque no tengan historial
+            valid_states_for_followup = [
+                'browsing', 'selecting', 'purchasing', 'needs_assistance', 
+                'escalated_to_human', 'pending_human_assistance'
+            ]
+            
+            if current_state in valid_states_for_followup:
+                logger.debug(f"📊 Usuario en estado válido '{current_state}', follow-up permitido")
+                return True
+            
+            # FALLBACK: Si no tiene estado válido, verificar conversación real por historial
             if not interaction_history:
+                logger.debug(f"📊 Usuario sin historial y estado '{current_state}' no válido para follow-up")
                 return False
             
             # Contar mensajes reales (user/assistant, no system internos)
@@ -152,7 +165,9 @@ class FollowUpScheduler:
             
         except Exception as e:
             logger.error(f"❌ Error verificando conversación real: {e}")
-            return False
+            # FALLBACK DE SEGURIDAD: En caso de error, permitir follow-up
+            logger.warning(f"⚠️ Fallback de seguridad activado - permitiendo follow-up")
+            return True
     
     def _check_migration_mode(self):
         """Verificar si el modo migración está activo"""
@@ -395,22 +410,32 @@ class FollowUpScheduler:
         """🚨 PROGRAMAR FOLLOW-UPS: Solo usuarios con conversación real + validación integral"""
         try:
             user_id = user_data['user_id']
+            logger.info(f"🔍 [SCHEDULE_START] Iniciando programación de follow-ups para {user_id}")
+            
+            # DEBUG: Logging del contexto del usuario
+            context_data = user_data.get('context_data', {})
+            current_state = context_data.get('current_state', 'unknown')
+            interaction_history = context_data.get('interaction_history', [])
+            last_interaction = user_data.get('last_interaction', 'unknown')
+            
+            logger.info(f"📊 [DEBUG] {user_id} - Estado: '{current_state}', Historial: {len(interaction_history)} msgs, Última interacción: {last_interaction}")
             
             # 🛡️ VALIDACIÓN INTEGRAL ANTI-SPAM
             validation = await self._comprehensive_followup_validation(user_id)
             if not validation['can_schedule']:
                 logger.warning(f"🚫 [BLOCKED] {user_id} falló validación: {validation['reasons']}")
                 return
+            logger.info(f"✅ [VALIDATION_PASSED] {user_id} pasó validación anti-spam")
             
             # 🔍 VALIDACIÓN CRÍTICA: Solo follow-ups para usuarios con conversación real
-            context_data = user_data.get('context_data', {})
-            if not self._has_real_conversation(context_data):
+            has_real_conversation = self._has_real_conversation(context_data)
+            if not has_real_conversation:
                 logger.info(f"⏭️ [SKIP] {user_id} sin conversación real, omitiendo follow-ups")
                 # Liberar lock si no hay conversación real
                 await self._release_recovery_lock(user_id)
                 return
             
-            logger.info(f"✅ [VALID] {user_id} tiene conversación real, programando follow-ups")
+            logger.info(f"✅ [CONVERSATION_VALID] {user_id} tiene conversación/estado válido, programando follow-ups")
             
             # 🚨 SISTEMA DE FALLBACK TRIPLE para timestamp base
             last_interaction = None
@@ -482,10 +507,11 @@ class FollowUpScheduler:
                     last_user_message=last_msg['message'] if last_msg else None
                 )
             
-            logger.info(f"📅 Follow-ups programados para usuario {user_id}")
+            logger.info(f"✅ [SCHEDULE_SUCCESS] Follow-ups programados para usuario {user_id} - {len(self.follow_up_stages)} stages creados")
             
             # 🔓 Liberar lock después de programación exitosa
             await self._release_recovery_lock(user_id)
+            logger.info(f"🔓 [LOCK_RELEASED] Lock liberado para usuario {user_id}")
             
         except Exception as e:
             # 🔓 Liberar lock en caso de error también
@@ -550,8 +576,8 @@ class FollowUpScheduler:
                         return
                     
                     # TEMPORAL: Para diagnóstico
-                    logger.info(f"🔍 [DEBUG] Creando follow-up job: user_id={user_id}, stage={stage}, scheduled_for={scheduled_for}, phone={phone}")
-                    logger.info(f"🔍 [DEBUG] Context snapshot incluye {len(enriched_context.get('interaction_history', []))} interacciones")
+                    logger.info(f"📝 [CREATE_JOB] Creando follow-up job: user_id={user_id}, stage={stage}, scheduled_for={scheduled_for}, phone={phone}")
+                    logger.info(f"📊 [CONTEXT_SIZE] Context snapshot incluye {len(enriched_context.get('interaction_history', []))} interacciones")
                     
                     cursor.execute("""
                         INSERT INTO follow_up_jobs 
@@ -564,7 +590,7 @@ class FollowUpScheduler:
                     """, (user_id, phone, stage, scheduled_for, 
                           Json(enriched_context), last_user_message))
                     
-                    logger.debug(f"📋 Follow-up programado en BD: usuario {user_id} etapa {stage} para {scheduled_for}")
+                    logger.info(f"✅ [JOB_CREATED] Follow-up programado en BD: usuario {user_id} etapa {stage} para {scheduled_for}")
                     
         except Exception as e:
             logger.error(f"❌ Error creando job de follow-up: {e}")
