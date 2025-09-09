@@ -1,0 +1,15 @@
+
+🚫 SISTEMA DE FOLLOW-UPS DESACTIVADO
+
+Fecha de desactivación: $(date)
+Motivo: Limpieza y desactivación temporal por problemas técnicos
+
+Para reactivar:
+1. Eliminar este archivo
+2. Descomentar código en royal_server_optimized.py
+3. Reiniciar servidor
+
+Estado actual:
+- Todos los datos de follow-ups eliminados
+- Scheduler desactivado
+- Sistema completamente inactivo

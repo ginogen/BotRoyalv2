@@ -3921,7 +3921,8 @@ async def startup_event():
             logger.info("⚡ Ejecutando migración crítica de timezone...")
             await _run_timezone_migration(database_url)
             
-            followup_scheduler = FollowUpScheduler(
+            # FOLLOW-UPS DESACTIVADOS TEMPORALMENTE
+    # followup_scheduler = FollowUpScheduler(
                 database_url=database_url,
                 evolution_api_url=EVOLUTION_API_URL,
                 evolution_token=EVOLUTION_API_TOKEN,
@@ -3929,7 +3930,7 @@ async def startup_event():
                 openai_api_key=os.getenv("OPENAI_API_KEY")
             )
             await followup_scheduler.initialize()
-            followup_scheduler.start()
+            # followup_scheduler.start()  # DESACTIVADO
             
             followup_manager = FollowUpManager(
                 database_url=database_url,
