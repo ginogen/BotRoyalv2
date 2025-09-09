@@ -507,7 +507,7 @@ class FollowUpScheduler:
                     last_user_message=last_msg['message'] if last_msg else None
                 )
             
-            logger.info(f"✅ [SCHEDULE_SUCCESS] Follow-ups programados para usuario {user_id} - {len(self.follow_up_stages)} stages creados")
+            logger.info(f"✅ [SCHEDULE_SUCCESS] Follow-ups programados para usuario {user_id} - {len(self.stage_delays)} stages creados")
             
             # 🔓 Liberar lock después de programación exitosa
             await self._release_recovery_lock(user_id)
@@ -598,9 +598,22 @@ class FollowUpScheduler:
     async def _enrich_context_with_interactions(self, user_id: str, context_snapshot: Dict) -> Dict:
         """Enriquecer context snapshot con historial completo de interacciones"""
         try:
+            # Crear copia del contexto original
+            enriched = dict(context_snapshot)
+            existing_history = enriched.get('interaction_history', [])
+            
+            logger.info(f"📊 [ENRICH] User {user_id}: contexto original tiene {len(existing_history)} interacciones")
+            
+            # Si ya tiene historial, usarlo
+            if existing_history:
+                logger.info(f"✅ [ENRICH] Usando historial existente: {len(existing_history)} interacciones")
+                return enriched
+            
+            # Si no tiene historial, buscar en BD
+            logger.info(f"🔍 [ENRICH] Buscando historial en BD para {user_id}")
             with psycopg2.connect(self.database_url) as conn:
                 with conn.cursor(cursor_factory=RealDictCursor) as cursor:
-                    # Obtener últimas 20 interacciones
+                    # Obtener últimas 20 interacciones de user_interactions
                     cursor.execute("""
                         SELECT role, message, created_at, metadata
                         FROM user_interactions 
@@ -609,18 +622,37 @@ class FollowUpScheduler:
                         LIMIT 20
                     """, (user_id,))
                     
-                    interactions = [dict(row) for row in cursor.fetchall()]
-                    interactions.reverse()  # Orden cronológico
+                    interactions_from_db = [dict(row) for row in cursor.fetchall()]
                     
-                    # Enriquecer contexto
-                    enriched = dict(context_snapshot)
-                    enriched['interaction_history'] = interactions
+                    if interactions_from_db:
+                        interactions_from_db.reverse()  # Orden cronológico
+                        enriched['interaction_history'] = interactions_from_db
+                        logger.info(f"✅ [ENRICH] Historial de BD agregado: {len(interactions_from_db)} interacciones")
+                    else:
+                        # Buscar también en conversation_contexts por si hay datos ahí
+                        cursor.execute("""
+                            SELECT context_data
+                            FROM conversation_contexts 
+                            WHERE user_id = %s
+                        """, (user_id,))
+                        
+                        context_row = cursor.fetchone()
+                        if context_row and context_row['context_data']:
+                            context_data = context_row['context_data']
+                            if isinstance(context_data, dict):
+                                db_history = context_data.get('interaction_history', [])
+                                if db_history:
+                                    enriched['interaction_history'] = db_history
+                                    logger.info(f"✅ [ENRICH] Historial de conversation_contexts: {len(db_history)} interacciones")
+                                else:
+                                    logger.warning(f"⚠️ [ENRICH] No se encontró historial para {user_id}")
+                        else:
+                            logger.warning(f"⚠️ [ENRICH] Usuario {user_id} no tiene datos de contexto en BD")
                     
-                    logger.debug(f"✅ Context enriched: {len(interactions)} interacciones agregadas")
                     return enriched
                     
         except Exception as e:
-            logger.error(f"❌ Error enriching context: {e}")
+            logger.error(f"❌ [ENRICH] Error enriqueciendo contexto para {user_id}: {e}")
             return context_snapshot
     
     def _get_stage_description(self, stage: int) -> str:

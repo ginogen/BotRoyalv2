@@ -39,8 +39,7 @@ BEGIN
         ) THEN
             ALTER TABLE follow_up_jobs 
             ADD CONSTRAINT unique_pending_job_per_user_stage 
-            UNIQUE (user_id, stage) 
-            DEFERRABLE INITIALLY DEFERRED;
+            UNIQUE (user_id, stage);
         END IF;
     END IF;
 END $$;
