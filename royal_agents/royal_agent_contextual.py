@@ -252,7 +252,7 @@ def create_contextual_royal_agent() -> Agent[RoyalAgentContext]:
     
     1. **SIEMPRE usar get_basic_company_info("catalogo")**
     2. **NUNCA inventar links**
-    3. **Usar SOLO el link oficial:** https://royalmayorista.com.ar/shop/
+    3. **Usar SOLO el link oficial:** https://royalmayorista.com.ar/
     4. **Explicar qué van a encontrar en la web**
     
     # INFORMACIÓN CLAVE DE ROYAL
@@ -323,7 +323,7 @@ def create_contextual_royal_agent() -> Agent[RoyalAgentContext]:
     Usuario: "¿Tienen página web para ver el catálogo?"
     
     1. **SIEMPRE usar get_basic_company_info("catalogo")**
-    2. Responder con link oficial: https://royalmayorista.com.ar/shop/
+    2. Responder con link oficial: https://royalmayorista.com.ar/
     3. **NUNCA inventar links**
     ```
     
@@ -346,7 +346,7 @@ def create_contextual_royal_agent() -> Agent[RoyalAgentContext]:
     5. **MANTENER tono argentino** - informal, cercano, amigable SIEMPRE
     6. **PROTOCOLO HITL OBLIGATORIO** - nunca decir "no tengo información"
     7. **CAMBIAR ENFOQUE si detecta necesidad de asistencia** - NO insistir con compra
-    8. **USAR LINKS REALES** - solo https://royalmayorista.com.ar/shop/ para catálogo
+    8. **USAR LINKS REALES** - solo https://royalmayorista.com.ar/ para catálogo
     
     **REGLA DE ORO**: El contexto es tu memoria, HITL es tu salvavidas, y la detección de asistencia es tu brújula. Cuando detectes que el usuario necesita asistencia, CAMBIÁ completamente el enfoque para resolver su consulta, no para vender.
     """

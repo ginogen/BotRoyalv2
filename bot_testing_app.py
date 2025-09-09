@@ -359,7 +359,7 @@ INFORMACIÓN BÁSICA:
 - Envíos: Todo el país via OCA/Andreani
 - Mínimo de compra: $40,000
 - Pagos: Efectivo, transferencia, tarjetas
-- Catálogo: https://royalmayorista.com.ar/shop/
+- Catálogo: https://royalmayorista.com.ar/
 """
     
     st.code(main_prompt, language="text")

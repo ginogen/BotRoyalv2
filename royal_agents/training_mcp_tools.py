@@ -418,8 +418,8 @@ async def get_basic_company_info(info_type: str) -> str:
     # Información básica con enlaces específicos según el entrenamiento
     basic_info = {
         "catalogo": {
-            "response": "Te paso nuestro catálogo mayorista https://royalmayorista.com.ar/shop/ En Royal vas a encontrar joyas, relojes, lentes, bijouterie, maquillaje e indumentaria, todo al por mayor para que tengas más variedad y más ventas. Además, te acompaño como mentora para ayudarte a organizarte, armar promociones o lo que necesites en tu emprendimiento. Contame un poco de vos, ¿ya tenés experiencia revendiendo o estás por empezar tu emprendimiento?",
-            "links": ["https://royalmayorista.com.ar/shop/"]
+            "response": "Te paso nuestro catálogo mayorista https://royalmayorista.com.ar/ En Royal vas a encontrar joyas, relojes, lentes, bijouterie, maquillaje e indumentaria, todo al por mayor para que tengas más variedad y más ventas. Además, te acompaño como mentora para ayudarte a organizarte, armar promociones o lo que necesites en tu emprendimiento. Contame un poco de vos, ¿ya tenés experiencia revendiendo o estás por empezar tu emprendimiento?",
+            "links": ["https://royalmayorista.com.ar/"]
         },
         "minimo": {
             "response": "El mínimo es de $40.000, y con compras desde $100.000 te hacemos el envío gratis. Además, cuando comprás en Royal no solo accedés a productos de calidad a precios mayoristas, sino que te acompaño como mentora para ayudarte a hacer crecer tu emprendimiento: desde ideas de publicaciones hasta planificación de ventas. ¿Ya estás vendiendo o estás por arrancar tu negocio?",
@@ -442,8 +442,8 @@ async def get_basic_company_info(info_type: str) -> str:
             "links": []
         },
         "catalogo_sin_logo": {
-            "response": "Sí. Te paso el enlace con el catálogo sin logo para que puedas ofrecer los productos a tus clientas: https://royalmayorista.com.ar/shop/ Si querés te puedo dar ideas de textos o historias para que vendas más con esas fotos. ¿Ya estás vendiendo por WhatsApp, Instagram o recién arrancás?",
-            "links": ["https://royalmayorista.com.ar/shop/"]
+            "response": "Sí. Te paso el enlace con el catálogo sin logo para que puedas ofrecer los productos a tus clientas: https://royalmayorista.com.ar/ Si querés te puedo dar ideas de textos o historias para que vendas más con esas fotos. ¿Ya estás vendiendo por WhatsApp, Instagram o recién arrancás?",
+            "links": ["https://royalmayorista.com.ar/"]
         },
         "joyas_plata": {
             "response": "Te paso la categoría de joyas de plata 925: https://royalmayorista.com.ar/categoria-producto/royal-joyas/ Allí encontrarás aros, anillos, dijes, cadenas y pulseras, todos con certificado de autenticidad de Royal. Como mentora, también puedo ayudarte a planificar cómo presentar estas piezas, armar promociones o definir precios. ¿Ya vendés joyas por tu cuenta o estás armando tu emprendimiento?",
@@ -473,7 +473,7 @@ async def get_basic_company_info(info_type: str) -> str:
             # Información general si no encuentra tipo específico
             general_response = "En Royal tenemos productos al por mayor: joyas, relojes, maquillaje, indumentaria y más. "
             general_response += "Mínimo $40.000, envío gratis desde $100.000. "
-            general_response += "Catálogo completo: https://royalmayorista.com.ar/shop/ "
+            general_response += "Catálogo completo: https://royalmayorista.com.ar/ "
             general_response += "¿En qué te puedo ayudar específicamente?"
             
             logger.info(f"✅ Basic company info general enviada")
@@ -481,7 +481,7 @@ async def get_basic_company_info(info_type: str) -> str:
             
     except Exception as e:
         logger.error(f"❌ Error en get_basic_company_info: {str(e)}")
-        return "Hubo un problema obteniendo la información. Te recomiendo visitar https://royalmayorista.com.ar/shop/ para ver nuestro catálogo completo."
+        return "Hubo un problema obteniendo la información. Te recomiendo visitar https://royalmayorista.com.ar/ para ver nuestro catálogo completo."
 
 @function_tool
 async def search_training_content(query: str) -> str:

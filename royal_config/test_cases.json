@@ -214,7 +214,7 @@
       "id": "web_001",
       "name": "Official catalog link only",
       "input": "¿Tienen catálogo online?",
-      "expected_elements": ["https://royalmayorista.com.ar/shop/"],
+      "expected_elements": ["https://royalmayorista.com.ar/"],
       "forbidden_elements": ["invented_links", "other_urls"],
       "check_type": "link_validation"
     }
