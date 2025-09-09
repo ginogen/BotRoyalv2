@@ -198,7 +198,7 @@ async def process_royal_message(user_id: str, message: str, message_data: Option
         
         # 📅 FOLLOW-UP: Cancelar follow-ups cuando el usuario responde
         try:
-            if followup_manager and message_data:
+            if followup_manager and message_data and not globals().get('FOLLOWUPS_DISABLED', False):
                 # Los mensajes de usuarios vienen de evolution o chatwoot (no system)
                 source_str = str(message_data.source).lower() if hasattr(message_data, 'source') else ''
                 if source_str in ['evolution', 'chatwoot', 'messagesource.evolution', 'messagesource.chatwoot']:
@@ -3922,38 +3922,45 @@ async def startup_event():
             await _run_timezone_migration(database_url)
             
             # FOLLOW-UPS DESACTIVADOS TEMPORALMENTE
-    # followup_scheduler = FollowUpScheduler(
-                database_url=database_url,
-                evolution_api_url=EVOLUTION_API_URL,
-                evolution_token=EVOLUTION_API_TOKEN,
-                instance_name=INSTANCE_NAME,
-                openai_api_key=os.getenv("OPENAI_API_KEY")
-            )
-            await followup_scheduler.initialize()
+            # followup_scheduler = FollowUpScheduler(
+            #     database_url=database_url,
+            #     evolution_api_url=EVOLUTION_API_URL,
+            #     evolution_token=EVOLUTION_API_TOKEN,
+            #     instance_name=INSTANCE_NAME,
+            #     openai_api_key=os.getenv("OPENAI_API_KEY")
+            # )
+            # await followup_scheduler.initialize()
             # followup_scheduler.start()  # DESACTIVADO
             
-            followup_manager = FollowUpManager(
-                database_url=database_url,
-                evolution_api_url=EVOLUTION_API_URL,
-                evolution_token=EVOLUTION_API_TOKEN,
-                instance_name=INSTANCE_NAME,
-                openai_api_key=os.getenv("OPENAI_API_KEY")
-            )
+            # followup_manager = FollowUpManager(
+            #     database_url=database_url,
+            #     evolution_api_url=EVOLUTION_API_URL,
+            #     evolution_token=EVOLUTION_API_TOKEN,
+            #     instance_name=INSTANCE_NAME,
+            #     openai_api_key=os.getenv("OPENAI_API_KEY")
+            # )
             
-            followup_tracker = FollowUpTracker(database_url)
+            # followup_tracker = FollowUpTracker(database_url)
             
-            logger.info("✅ Follow-up system initialized successfully")
+            logger.info("✅ Follow-up system DISABLED (commented out)")
         except Exception as e:
             logger.error(f"❌ Error initializing follow-up system: {e}")
             logger.warning("⚠️ Follow-up system disabled due to initialization error")
-            followup_scheduler = None
-            followup_manager = None
-            followup_tracker = None
+            # followup_scheduler = None
+            # followup_manager = None
+            # followup_tracker = None
     else:
         logger.info("📅 Follow-up system disabled")
-        followup_scheduler = None
-        followup_manager = None  
-        followup_tracker = None
+        pass
+    
+    # Asegurar que todas las variables están definidas como None (follow-ups desactivados)
+    followup_scheduler = None
+    followup_manager = None  
+    followup_tracker = None
+    
+    # Variable global para indicar que follow-ups están desactivados
+    FOLLOWUPS_DISABLED = True
+    logger.info("🚫 Follow-up system completely disabled")
 
     # Start background tasks
     logger.info("📡 Starting background tasks...")
